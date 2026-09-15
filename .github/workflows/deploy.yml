@@ -20,7 +20,7 @@ jobs:
           # Note: Legend123 is the FTP username — password is stored in GitHub Secrets
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
-          server-dir: /htdocs/wheb-crm
+          server-dir: /htdocs/whebcrm
           protocol: ftps
           port: 21
           exclude: |
