@@ -3,15 +3,18 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Building2, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Users, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 
-type Company = {
+type Person = {
   id: string
   name: string
   status: 'prospect' | 'active' | 'inactive'
-  industry: string | null
-  website: string | null
+  email: string | null
   phone: string | null
+  date_of_birth: string | null
+  ni_number: string | null
+  employer_id: string | null
+  employer: { id: string; name: string } | null
   account_manager: { full_name: string | null; email: string } | null
 }
 
@@ -21,7 +24,7 @@ const statusBadge = {
   inactive: 'bg-slate-100 text-slate-500',
 }
 
-type SortKey = 'name' | 'industry' | 'status' | 'account_manager'
+type SortKey = 'name' | 'employer' | 'status' | 'account_manager'
 type SortDir = 'asc' | 'desc'
 
 function SortIcon({ col, sort }: { col: SortKey; sort: { key: SortKey; dir: SortDir } }) {
@@ -29,40 +32,57 @@ function SortIcon({ col, sort }: { col: SortKey; sort: { key: SortKey; dir: Sort
   return sort.dir === 'asc' ? <ChevronUp size={13} className="text-blue-600" /> : <ChevronDown size={13} className="text-blue-600" />
 }
 
-export default function CompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>([])
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+export default function PeoplePage() {
+  const [people, setPeople] = useState<Person[]>([])
+  const [employers, setEmployers] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'prospect' | 'inactive'>('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    createClient()
-      .from('clients')
-      .select('id, name, status, industry, website, phone, account_manager:profiles!clients_account_manager_id_fkey(full_name, email)')
-      .eq('type', 'corporate')
-      .order('name')
-      .then(({ data }) => {
-        setCompanies((data ?? []) as Company[])
-        setLoading(false)
-      })
+    const supabase = createClient()
+    Promise.all([
+      supabase
+        .from('clients')
+        .select('id, name, status, email, phone, date_of_birth, ni_number, employer_id, account_manager:profiles!clients_account_manager_id_fkey(full_name, email)')
+        .eq('type', 'individual')
+        .order('name'),
+      supabase.from('clients').select('id, name').eq('type', 'corporate'),
+    ]).then(([{ data: peopleData }, { data: corpData }]) => {
+      const empMap = Object.fromEntries((corpData ?? []).map(c => [c.id, c.name]))
+      setEmployers(empMap)
+      setPeople((peopleData ?? []).map((p: any) => ({
+        ...p,
+        employer: p.employer_id ? { id: p.employer_id, name: empMap[p.employer_id] ?? 'Unknown' } : null,
+      })) as Person[])
+      setLoading(false)
+    })
   }, [])
 
   function toggleSort(key: SortKey) {
     setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
   }
 
-  const filtered = companies
-    .filter(c => {
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false
-      if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
-          !(c.industry ?? '').toLowerCase().includes(search.toLowerCase())) return false
+  const filtered = people
+    .filter(p => {
+      if (statusFilter !== 'all' && p.status !== statusFilter) return false
+      if (search) {
+        const q = search.toLowerCase()
+        if (!p.name.toLowerCase().includes(q) &&
+            !(p.employer?.name ?? '').toLowerCase().includes(q) &&
+            !(p.email ?? '').toLowerCase().includes(q)) return false
+      }
       return true
     })
     .sort((a, b) => {
       let av = '', bv = ''
       if (sort.key === 'name') { av = a.name; bv = b.name }
-      else if (sort.key === 'industry') { av = a.industry ?? ''; bv = b.industry ?? '' }
+      else if (sort.key === 'employer') { av = a.employer?.name ?? ''; bv = b.employer?.name ?? '' }
       else if (sort.key === 'status') { av = a.status; bv = b.status }
       else if (sort.key === 'account_manager') {
         av = a.account_manager?.full_name ?? a.account_manager?.email ?? ''
@@ -72,10 +92,10 @@ export default function CompaniesPage() {
     })
 
   const counts = {
-    all: companies.length,
-    active: companies.filter(c => c.status === 'active').length,
-    prospect: companies.filter(c => c.status === 'prospect').length,
-    inactive: companies.filter(c => c.status === 'inactive').length,
+    all: people.length,
+    active: people.filter(p => p.status === 'active').length,
+    prospect: people.filter(p => p.status === 'prospect').length,
+    inactive: people.filter(p => p.status === 'inactive').length,
   }
 
   const thCls = 'px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-700 select-none'
@@ -85,15 +105,15 @@ export default function CompaniesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Companies</h1>
+          <h1 className="text-2xl font-bold text-slate-900">People</h1>
           <p className="text-sm text-slate-500 mt-0.5">{counts.active} active · {counts.prospect} prospects · {counts.inactive} inactive</p>
         </div>
         <div className="flex gap-2">
           <Link href="/clients/bulk-upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
             <Upload size={15} />Bulk import
           </Link>
-          <Link href="/clients/new" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-            <Plus size={15} />Add company
+          <Link href="/clients/new?type=individual" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+            <Plus size={15} />Add person
           </Link>
         </div>
       </div>
@@ -112,7 +132,7 @@ export default function CompaniesPage() {
         </div>
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, employer, email…"
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
@@ -123,8 +143,8 @@ export default function CompaniesPage() {
           <div className="py-20 text-center text-slate-400 text-sm">Loading…</div>
         ) : !filtered.length ? (
           <div className="py-20 text-center">
-            <Building2 size={36} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 text-sm font-medium">No companies found</p>
+            <Users size={36} className="mx-auto text-slate-300 mb-3" />
+            <p className="text-slate-500 text-sm font-medium">No people found</p>
             <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filter</p>
           </div>
         ) : (
@@ -132,45 +152,47 @@ export default function CompaniesPage() {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className={thCls} onClick={() => toggleSort('name')}>
-                  <span className="flex items-center gap-1">Company <SortIcon col="name" sort={sort} /></span>
+                  <span className="flex items-center gap-1">Name <SortIcon col="name" sort={sort} /></span>
                 </th>
-                <th className={thCls} onClick={() => toggleSort('industry')}>
-                  <span className="flex items-center gap-1">Industry <SortIcon col="industry" sort={sort} /></span>
+                <th className={thCls} onClick={() => toggleSort('employer')}>
+                  <span className="flex items-center gap-1">Employer <SortIcon col="employer" sort={sort} /></span>
                 </th>
                 <th className={thCls} onClick={() => toggleSort('status')}>
                   <span className="flex items-center gap-1">Status <SortIcon col="status" sort={sort} /></span>
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Email</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Phone</th>
                 <th className={thCls} onClick={() => toggleSort('account_manager')}>
                   <span className="flex items-center gap-1">Account Manager <SortIcon col="account_manager" sort={sort} /></span>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Website</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Phone</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map(c => (
-                <tr key={c.id} className="hover:bg-blue-50/40 transition-colors group">
+              {filtered.map(p => (
+                <tr key={p.id} className="hover:bg-purple-50/40 transition-colors group">
                   <td className="px-4 py-3">
-                    <Link href={`/clients/${c.id}`} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-sm font-bold text-slate-600 group-hover:text-blue-700 transition-colors shrink-0">
-                        {c.name.charAt(0).toUpperCase()}
+                    <Link href={`/clients/${p.id}`} className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center text-xs font-bold text-purple-700 shrink-0 transition-colors">
+                        {initials(p.name)}
                       </div>
-                      <span className="font-medium text-slate-900 group-hover:text-blue-700 transition-colors text-sm">{c.name}</span>
+                      <span className="font-medium text-slate-900 group-hover:text-purple-700 transition-colors text-sm">{p.name}</span>
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{c.industry ?? <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[c.status]}`}>{c.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {c.account_manager?.full_name ?? c.account_manager?.email ?? <span className="text-slate-300">—</span>}
-                  </td>
                   <td className="px-4 py-3 text-sm">
-                    {c.website
-                      ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate max-w-[140px] block" onClick={e => e.stopPropagation()}>{c.website.replace(/^https?:\/\//, '')}</a>
+                    {p.employer
+                      ? <Link href={`/clients/${p.employer.id}`} className="text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.employer.name}</Link>
                       : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{c.phone ?? <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[p.status]}`}>{p.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {p.email ? <a href={`mailto:${p.email}`} className="hover:text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.email}</a> : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{p.phone ?? <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {p.account_manager?.full_name ?? p.account_manager?.email ?? <span className="text-slate-300">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -178,7 +200,7 @@ export default function CompaniesPage() {
         )}
         {!loading && filtered.length > 0 && (
           <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-            {filtered.length} of {companies.length} companies
+            {filtered.length} of {people.length} people
           </div>
         )}
       </div>

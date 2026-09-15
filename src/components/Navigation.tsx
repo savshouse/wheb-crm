@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Building2,
+  Users,
   ChevronRight,
   LayoutTemplate,
 } from 'lucide-react'
@@ -16,7 +17,8 @@ import GlobalSearch from './GlobalSearch'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/clients', label: 'Clients & People', icon: Building2 },
+  { href: '/clients', label: 'Companies', icon: Building2 },
+  { href: '/people', label: 'People', icon: Users },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
 ]
