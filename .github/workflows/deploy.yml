@@ -1,0 +1,54 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      # Supabase public keys are safe in the build environment.
+      # Add them as GitHub Secrets: Settings → Secrets → Actions → New secret
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      # ── FTP deploy ─────────────────────────────────────────────────────────
+      # Uploads the static export output to Fasthosts.
+      # Requires next.config.ts to have: output: 'export', basePath: '/wheb-crm'
+      # The 'out/' folder is the generated static site.
+      #
+      # Required GitHub Secrets (Settings → Secrets → Actions):
+      #   FTP_SERVER   — e.g. ftp.warren-house.co.uk  (from Fasthosts control panel)
+      #   FTP_USERNAME — your Fasthosts FTP username
+      #   FTP_PASSWORD — your Fasthosts FTP password
+      #
+      # server-dir: adjust to match where /wheb-crm lives on your host,
+      # typically /public_html/wheb-crm/ on cPanel or /httpdocs/wheb-crm/ on Plesk.
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./out/
+          server-dir: /public_html/wheb-crm/
+          # Only upload files that have actually changed (fast incremental deploys)
+          dangerous-clean-slate: false
