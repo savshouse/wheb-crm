@@ -3,7 +3,8 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Building2, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Building2, Search, Upload } from 'lucide-react'
+import DataTable, { ColumnDef } from '@/components/DataTable'
 
 type Company = {
   id: string
@@ -21,19 +22,82 @@ const statusBadge = {
   inactive: 'bg-slate-100 text-slate-500',
 }
 
-type SortKey = 'name' | 'industry' | 'status' | 'account_manager'
-type SortDir = 'asc' | 'desc'
-
-function SortIcon({ col, sort }: { col: SortKey; sort: { key: SortKey; dir: SortDir } }) {
-  if (sort.key !== col) return <ChevronsUpDown size={13} className="text-slate-400" />
-  return sort.dir === 'asc' ? <ChevronUp size={13} className="text-blue-600" /> : <ChevronDown size={13} className="text-blue-600" />
-}
+const columns: ColumnDef<Company>[] = [
+  {
+    key: 'name',
+    label: 'Company',
+    sortable: true,
+    sortValue: c => c.name,
+    filterable: false,
+    render: c => (
+      <Link href={`/clients/${c.id}`} className="flex items-center gap-3 group/cell">
+        <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover/cell:bg-blue-100 flex items-center justify-center text-sm font-bold text-slate-600 group-hover/cell:text-blue-700 transition-colors shrink-0">
+          {c.name.charAt(0).toUpperCase()}
+        </div>
+        <span className="font-medium text-slate-900 group-hover/cell:text-blue-700 transition-colors">{c.name}</span>
+      </Link>
+    ),
+  },
+  {
+    key: 'industry',
+    label: 'Industry',
+    sortable: true,
+    sortValue: c => c.industry ?? '',
+    filterable: true,
+    filterValue: c => c.industry ?? '',
+    render: c => <span className="text-slate-600">{c.industry ?? <span className="text-slate-300">—</span>}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    sortValue: c => c.status,
+    filterable: true,
+    filterValue: c => c.status,
+    filterOptions: ['active', 'prospect', 'inactive'],
+    render: c => (
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[c.status]}`}>{c.status}</span>
+    ),
+  },
+  {
+    key: 'account_manager',
+    label: 'Account Manager',
+    sortable: true,
+    sortValue: c => c.account_manager?.full_name ?? c.account_manager?.email ?? '',
+    filterable: true,
+    filterValue: c => c.account_manager?.full_name ?? c.account_manager?.email ?? '',
+    render: c => (
+      <span className="text-slate-600">
+        {c.account_manager?.full_name ?? c.account_manager?.email ?? <span className="text-slate-300">—</span>}
+      </span>
+    ),
+  },
+  {
+    key: 'website',
+    label: 'Website',
+    sortable: false,
+    filterable: false,
+    render: c => c.website
+      ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer"
+           className="text-blue-600 hover:underline truncate max-w-[140px] block"
+           onClick={e => e.stopPropagation()}>
+          {c.website.replace(/^https?:\/\//, '')}
+        </a>
+      : <span className="text-slate-300">—</span>,
+  },
+  {
+    key: 'phone',
+    label: 'Phone',
+    sortable: false,
+    filterable: false,
+    render: c => <span className="text-slate-600">{c.phone ?? <span className="text-slate-300">—</span>}</span>,
+  },
+]
 
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'prospect' | 'inactive'>('all')
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -48,29 +112,6 @@ export default function CompaniesPage() {
       })
   }, [])
 
-  function toggleSort(key: SortKey) {
-    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
-  }
-
-  const filtered = companies
-    .filter(c => {
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false
-      if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
-          !(c.industry ?? '').toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-    .sort((a, b) => {
-      let av = '', bv = ''
-      if (sort.key === 'name') { av = a.name; bv = b.name }
-      else if (sort.key === 'industry') { av = a.industry ?? ''; bv = b.industry ?? '' }
-      else if (sort.key === 'status') { av = a.status; bv = b.status }
-      else if (sort.key === 'account_manager') {
-        av = a.account_manager?.full_name ?? a.account_manager?.email ?? ''
-        bv = b.account_manager?.full_name ?? b.account_manager?.email ?? ''
-      }
-      return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-    })
-
   const counts = {
     all: companies.length,
     active: companies.filter(c => c.status === 'active').length,
@@ -78,11 +119,15 @@ export default function CompaniesPage() {
     inactive: companies.filter(c => c.status === 'inactive').length,
   }
 
-  const thCls = 'px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-700 select-none'
+  const filtered = companies.filter(c => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
+        !(c.industry ?? '').toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Companies</h1>
@@ -98,7 +143,6 @@ export default function CompaniesPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex bg-slate-100 rounded-lg p-0.5 shrink-0">
           {(['all', 'active', 'prospect', 'inactive'] as const).map(s => (
@@ -112,76 +156,20 @@ export default function CompaniesPage() {
         </div>
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies…"
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {loading ? (
-          <div className="py-20 text-center text-slate-400 text-sm">Loading…</div>
-        ) : !filtered.length ? (
-          <div className="py-20 text-center">
-            <Building2 size={36} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 text-sm font-medium">No companies found</p>
-            <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filter</p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className={thCls} onClick={() => toggleSort('name')}>
-                  <span className="flex items-center gap-1">Company <SortIcon col="name" sort={sort} /></span>
-                </th>
-                <th className={thCls} onClick={() => toggleSort('industry')}>
-                  <span className="flex items-center gap-1">Industry <SortIcon col="industry" sort={sort} /></span>
-                </th>
-                <th className={thCls} onClick={() => toggleSort('status')}>
-                  <span className="flex items-center gap-1">Status <SortIcon col="status" sort={sort} /></span>
-                </th>
-                <th className={thCls} onClick={() => toggleSort('account_manager')}>
-                  <span className="flex items-center gap-1">Account Manager <SortIcon col="account_manager" sort={sort} /></span>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Website</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Phone</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map(c => (
-                <tr key={c.id} className="hover:bg-blue-50/40 transition-colors group">
-                  <td className="px-4 py-3">
-                    <Link href={`/clients/${c.id}`} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-sm font-bold text-slate-600 group-hover:text-blue-700 transition-colors shrink-0">
-                        {c.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-medium text-slate-900 group-hover:text-blue-700 transition-colors text-sm">{c.name}</span>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{c.industry ?? <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[c.status]}`}>{c.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {c.account_manager?.full_name ?? c.account_manager?.email ?? <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {c.website
-                      ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate max-w-[140px] block" onClick={e => e.stopPropagation()}>{c.website.replace(/^https?:\/\//, '')}</a>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{c.phone ?? <span className="text-slate-300">—</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && filtered.length > 0 && (
-          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-            {filtered.length} of {companies.length} companies
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={filtered}
+        rowKey={c => c.id}
+        storageKey="companies"
+        loading={loading}
+        emptyIcon={<Building2 size={36} />}
+        emptyText="No companies found"
+      />
     </div>
   )
 }

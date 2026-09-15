@@ -3,7 +3,8 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Users, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Users, Search, Upload } from 'lucide-react'
+import DataTable, { ColumnDef } from '@/components/DataTable'
 
 type Person = {
   id: string
@@ -24,24 +25,85 @@ const statusBadge = {
   inactive: 'bg-slate-100 text-slate-500',
 }
 
-type SortKey = 'name' | 'employer' | 'status' | 'account_manager'
-type SortDir = 'asc' | 'desc'
-
-function SortIcon({ col, sort }: { col: SortKey; sort: { key: SortKey; dir: SortDir } }) {
-  if (sort.key !== col) return <ChevronsUpDown size={13} className="text-slate-400" />
-  return sort.dir === 'asc' ? <ChevronUp size={13} className="text-blue-600" /> : <ChevronDown size={13} className="text-blue-600" />
-}
-
 function initials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
+const columns: ColumnDef<Person>[] = [
+  {
+    key: 'name',
+    label: 'Name',
+    sortable: true,
+    sortValue: p => p.name,
+    filterable: false,
+    render: p => (
+      <Link href={`/clients/${p.id}`} className="flex items-center gap-3 group/cell">
+        <div className="w-8 h-8 rounded-full bg-purple-100 group-hover/cell:bg-purple-200 flex items-center justify-center text-xs font-bold text-purple-700 shrink-0 transition-colors">
+          {initials(p.name)}
+        </div>
+        <span className="font-medium text-slate-900 group-hover/cell:text-purple-700 transition-colors">{p.name}</span>
+      </Link>
+    ),
+  },
+  {
+    key: 'employer',
+    label: 'Employer',
+    sortable: true,
+    sortValue: p => p.employer?.name ?? '',
+    filterable: true,
+    filterValue: p => p.employer?.name ?? '',
+    render: p => p.employer
+      ? <Link href={`/clients/${p.employer.id}`} className="text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.employer.name}</Link>
+      : <span className="text-slate-300">—</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    sortValue: p => p.status,
+    filterable: true,
+    filterValue: p => p.status,
+    filterOptions: ['active', 'prospect', 'inactive'],
+    render: p => (
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[p.status]}`}>{p.status}</span>
+    ),
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    sortable: true,
+    sortValue: p => p.email ?? '',
+    filterable: false,
+    render: p => p.email
+      ? <a href={`mailto:${p.email}`} className="text-slate-600 hover:text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.email}</a>
+      : <span className="text-slate-300">—</span>,
+  },
+  {
+    key: 'phone',
+    label: 'Phone',
+    sortable: false,
+    filterable: false,
+    render: p => <span className="text-slate-600">{p.phone ?? <span className="text-slate-300">—</span>}</span>,
+  },
+  {
+    key: 'account_manager',
+    label: 'Account Manager',
+    sortable: true,
+    sortValue: p => p.account_manager?.full_name ?? p.account_manager?.email ?? '',
+    filterable: true,
+    filterValue: p => p.account_manager?.full_name ?? p.account_manager?.email ?? '',
+    render: p => (
+      <span className="text-slate-600">
+        {p.account_manager?.full_name ?? p.account_manager?.email ?? <span className="text-slate-300">—</span>}
+      </span>
+    ),
+  },
+]
+
 export default function PeoplePage() {
   const [people, setPeople] = useState<Person[]>([])
-  const [employers, setEmployers] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'prospect' | 'inactive'>('all')
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -55,7 +117,6 @@ export default function PeoplePage() {
       supabase.from('clients').select('id, name').eq('type', 'corporate'),
     ]).then(([{ data: peopleData }, { data: corpData }]) => {
       const empMap = Object.fromEntries((corpData ?? []).map(c => [c.id, c.name]))
-      setEmployers(empMap)
       setPeople((peopleData ?? []).map((p: any) => ({
         ...p,
         employer: p.employer_id ? { id: p.employer_id, name: empMap[p.employer_id] ?? 'Unknown' } : null,
@@ -64,33 +125,6 @@ export default function PeoplePage() {
     })
   }, [])
 
-  function toggleSort(key: SortKey) {
-    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
-  }
-
-  const filtered = people
-    .filter(p => {
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false
-      if (search) {
-        const q = search.toLowerCase()
-        if (!p.name.toLowerCase().includes(q) &&
-            !(p.employer?.name ?? '').toLowerCase().includes(q) &&
-            !(p.email ?? '').toLowerCase().includes(q)) return false
-      }
-      return true
-    })
-    .sort((a, b) => {
-      let av = '', bv = ''
-      if (sort.key === 'name') { av = a.name; bv = b.name }
-      else if (sort.key === 'employer') { av = a.employer?.name ?? ''; bv = b.employer?.name ?? '' }
-      else if (sort.key === 'status') { av = a.status; bv = b.status }
-      else if (sort.key === 'account_manager') {
-        av = a.account_manager?.full_name ?? a.account_manager?.email ?? ''
-        bv = b.account_manager?.full_name ?? b.account_manager?.email ?? ''
-      }
-      return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-    })
-
   const counts = {
     all: people.length,
     active: people.filter(p => p.status === 'active').length,
@@ -98,11 +132,19 @@ export default function PeoplePage() {
     inactive: people.filter(p => p.status === 'inactive').length,
   }
 
-  const thCls = 'px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-700 select-none'
+  const filtered = people.filter(p => {
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!p.name.toLowerCase().includes(q) &&
+          !(p.employer?.name ?? '').toLowerCase().includes(q) &&
+          !(p.email ?? '').toLowerCase().includes(q)) return false
+    }
+    return true
+  })
 
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">People</h1>
@@ -118,7 +160,6 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex bg-slate-100 rounded-lg p-0.5 shrink-0">
           {(['all', 'active', 'prospect', 'inactive'] as const).map(s => (
@@ -137,73 +178,15 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {loading ? (
-          <div className="py-20 text-center text-slate-400 text-sm">Loading…</div>
-        ) : !filtered.length ? (
-          <div className="py-20 text-center">
-            <Users size={36} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 text-sm font-medium">No people found</p>
-            <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filter</p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className={thCls} onClick={() => toggleSort('name')}>
-                  <span className="flex items-center gap-1">Name <SortIcon col="name" sort={sort} /></span>
-                </th>
-                <th className={thCls} onClick={() => toggleSort('employer')}>
-                  <span className="flex items-center gap-1">Employer <SortIcon col="employer" sort={sort} /></span>
-                </th>
-                <th className={thCls} onClick={() => toggleSort('status')}>
-                  <span className="flex items-center gap-1">Status <SortIcon col="status" sort={sort} /></span>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Phone</th>
-                <th className={thCls} onClick={() => toggleSort('account_manager')}>
-                  <span className="flex items-center gap-1">Account Manager <SortIcon col="account_manager" sort={sort} /></span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map(p => (
-                <tr key={p.id} className="hover:bg-purple-50/40 transition-colors group">
-                  <td className="px-4 py-3">
-                    <Link href={`/clients/${p.id}`} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center text-xs font-bold text-purple-700 shrink-0 transition-colors">
-                        {initials(p.name)}
-                      </div>
-                      <span className="font-medium text-slate-900 group-hover:text-purple-700 transition-colors text-sm">{p.name}</span>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {p.employer
-                      ? <Link href={`/clients/${p.employer.id}`} className="text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.employer.name}</Link>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge[p.status]}`}>{p.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {p.email ? <a href={`mailto:${p.email}`} className="hover:text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{p.email}</a> : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{p.phone ?? <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {p.account_manager?.full_name ?? p.account_manager?.email ?? <span className="text-slate-300">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && filtered.length > 0 && (
-          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-            {filtered.length} of {people.length} people
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={filtered}
+        rowKey={p => p.id}
+        storageKey="people"
+        loading={loading}
+        emptyIcon={<Users size={36} />}
+        emptyText="No people found"
+      />
     </div>
   )
 }
