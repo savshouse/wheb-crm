@@ -59,7 +59,7 @@ export default function PeoplePage() {
       setPeople((peopleData ?? []).map((p: any) => ({
         ...p,
         employer: p.employer_id ? { id: p.employer_id, name: empMap[p.employer_id] ?? 'Unknown' } : null,
-      })) as Person[])
+      })) as unknown as Person[])
       setLoading(false)
     })
   }, [])

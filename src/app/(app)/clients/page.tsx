@@ -43,7 +43,7 @@ export default function CompaniesPage() {
       .eq('type', 'corporate')
       .order('name')
       .then(({ data }) => {
-        setCompanies((data ?? []) as Company[])
+        setCompanies((data ?? []) as unknown as Company[])
         setLoading(false)
       })
   }, [])
