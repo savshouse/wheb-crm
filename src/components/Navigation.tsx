@@ -5,18 +5,20 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard,
-  Users,
   CheckSquare,
   Settings,
   LogOut,
   Building2,
   ChevronRight,
+  LayoutTemplate,
 } from 'lucide-react'
+import GlobalSearch from './GlobalSearch'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/clients', label: 'Clients', icon: Building2 },
+  { href: '/clients', label: 'Clients & People', icon: Building2 },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
 ]
 
 type Props = {
@@ -55,6 +57,9 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Global search */}
+      <GlobalSearch />
 
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
@@ -98,7 +103,7 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
 
       {/* User / Sign out */}
       <div className="px-3 py-3 border-t border-slate-800">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800">
+        <Link href="/profile" className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
             {(userName || userEmail).charAt(0).toUpperCase()}
           </div>
@@ -106,9 +111,9 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
             <div className="text-sm font-medium text-white truncate">
               {userName || userEmail.split('@')[0]}
             </div>
-            <div className="text-xs text-slate-400 truncate">{userEmail}</div>
+            <div className="text-xs text-slate-400 truncate">Edit profile</div>
           </div>
-        </div>
+        </Link>
         <button
           onClick={handleSignOut}
           className="mt-1.5 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"

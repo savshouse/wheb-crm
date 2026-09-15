@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
-import { CheckSquare, Building2, Clock, AlertCircle, Plus } from 'lucide-react'
+import { CheckSquare, Building2, Clock, AlertCircle, Plus, Upload } from 'lucide-react'
 import type { Task } from '@/lib/types'
-
-type ClientRow = { id: string; name: string; status: string; industry: string | null; updated_at: string }
+import RecentlyViewed from '@/components/RecentlyViewed'
+import TeamTasks from '@/components/TeamTasks'
+import PriorityModal from '@/components/PriorityModal'
 
 function dueDateLabel(dateStr: string | null) {
   if (!dateStr) return null
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  const [{ data: myTasks }, { data: recentClients }, { data: allOpenTasks }] = await Promise.all([
+  const [{ data: myTasks }, { data: allOpenTasks }] = await Promise.all([
     supabase
       .from('tasks')
       .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
@@ -47,12 +48,6 @@ export default async function DashboardPage() {
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(10),
-    supabase
-      .from('clients')
-      .select('id, name, status, industry, updated_at')
-      .eq('status', 'active')
-      .order('updated_at', { ascending: false })
-      .limit(6),
     supabase
       .from('tasks')
       .select('id, status')
@@ -76,13 +71,16 @@ export default async function DashboardPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {greeting()}, {displayName}
-        </h1>
-        <p className="text-slate-500 mt-0.5 text-sm">
-          {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {greeting()}, {displayName}
+          </h1>
+          <p className="text-slate-500 mt-0.5 text-sm">
+            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        </div>
+        <PriorityModal currentUserId={user.id} />
       </div>
 
       {/* Stats row */}
@@ -176,58 +174,32 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Recent clients */}
-        <div className="col-span-2">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Active Clients</h2>
-            <Link href="/clients/new" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-              <Plus size={12} />
-              Add
+        {/* Right column: recently viewed + team tasks */}
+        <div className="col-span-2 space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Recently Viewed</h2>
+              <div className="flex items-center gap-2">
+                <Link href="/clients/bulk-upload" className="text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1">
+                  <Upload size={11} />Bulk import
+                </Link>
+                <Link href="/clients/new" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                  <Plus size={12} />Add
+                </Link>
+              </div>
+            </div>
+            <RecentlyViewed />
+            <Link href="/clients" className="block text-center text-xs text-slate-500 hover:text-slate-700 pt-2 mt-1">
+              View all clients →
             </Link>
           </div>
 
-          {!recentClients?.length ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
-              <Building2 size={28} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-slate-500 text-sm mb-3">No clients yet</p>
-              <Link
-                href="/clients/new"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                <Plus size={14} />
-                Add first client
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {recentClients.map((client: ClientRow) => (
-                <Link
-                  key={client.id}
-                  href={`/clients/${client.id}`}
-                  className="block bg-white rounded-xl border border-slate-200 p-3.5 hover:border-blue-300 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
-                      {client.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">{client.name}</p>
-                      {client.industry && (
-                        <p className="text-xs text-slate-500 truncate">{client.industry}</p>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-              <Link
-                href="/clients"
-                className="block text-center text-xs text-slate-500 hover:text-slate-700 pt-1"
-              >
-                View all clients →
-              </Link>
-            </div>
-          )}
         </div>
+      </div>
+
+      {/* Team tasks — full width */}
+      <div className="mt-6 bg-white rounded-xl border border-slate-200 p-4">
+        <TeamTasks currentUserId={user.id} />
       </div>
     </div>
   )

@@ -4,15 +4,19 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Plus, Trash2, CheckSquare } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate } from 'lucide-react'
+
 type TaskDraft = {
   id: string
   title: string
   assigned_to: string
   due_date: string
   priority: 'low' | 'medium' | 'high'
+  fromTemplate?: string
 }
 
+type TemplateItem = { id: string; title: string; priority: string; order_index: number; relative_due_days: number | null }
+type Template = { id: string; name: string; items: TemplateItem[] }
 type ProfileOption = { id: string; full_name: string | null; email: string }
 
 type Props = {
@@ -20,13 +24,15 @@ type Props = {
   clientName: string
   profiles: ProfileOption[]
   currentUserId: string
+  templates: Template[]
 }
 
-export default function NewMeetingForm({ clientId, clientName, profiles, currentUserId }: Props) {
+export default function NewMeetingForm({ clientId, clientName, profiles, currentUserId, templates }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [tasks, setTasks] = useState<TaskDraft[]>([])
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false)
 
   function addTask() {
     setTasks(prev => [...prev, {
@@ -36,6 +42,33 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
       due_date: '',
       priority: 'medium',
     }])
+  }
+
+  function applyTemplate(template: Template) {
+    const meetingDate = (document.querySelector('input[name="meeting_date"]') as HTMLInputElement)?.value
+    const base = meetingDate ? new Date(meetingDate) : new Date()
+
+    const newTasks: TaskDraft[] = [...template.items]
+      .sort((a, b) => a.order_index - b.order_index)
+      .map(item => {
+        let dueDate = ''
+        if (item.relative_due_days != null) {
+          const d = new Date(base)
+          d.setDate(d.getDate() + item.relative_due_days)
+          dueDate = d.toISOString().split('T')[0]
+        }
+        return {
+          id: crypto.randomUUID(),
+          title: item.title,
+          assigned_to: currentUserId,
+          due_date: dueDate,
+          priority: item.priority as 'low' | 'medium' | 'high',
+          fromTemplate: template.name,
+        }
+      })
+
+    setTasks(prev => [...prev, ...newTasks])
+    setShowTemplateMenu(false)
   }
 
   function removeTask(id: string) {
@@ -169,14 +202,43 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
               <h2 className="text-sm font-semibold text-slate-700">Follow-up tasks</h2>
               <p className="text-xs text-slate-500 mt-0.5">Create tasks from this meeting and assign them now</p>
             </div>
-            <button
-              type="button"
-              onClick={addTask}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors border border-blue-200"
-            >
-              <Plus size={14} />
-              Add task
-            </button>
+            <div className="flex items-center gap-2">
+              {templates.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplateMenu(p => !p)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition-colors border border-purple-200"
+                  >
+                    <LayoutTemplate size={14} />
+                    From template
+                  </button>
+                  {showTemplateMenu && (
+                    <div className="absolute right-0 top-full mt-1 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-48">
+                      {templates.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => applyTemplate(t)}
+                          className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between gap-3"
+                        >
+                          <span>{t.name}</span>
+                          <span className="text-xs text-slate-400">{t.items.length} steps</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={addTask}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors border border-blue-200"
+              >
+                <Plus size={14} />
+                Add task
+              </button>
+            </div>
           </div>
 
           {tasks.length === 0 ? (
@@ -193,6 +255,9 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
                 <div key={task.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-slate-500 shrink-0">Task {i + 1}</span>
+                    {task.fromTemplate && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 shrink-0">{task.fromTemplate}</span>
+                    )}
                     <input
                       value={task.title}
                       onChange={e => updateTask(task.id, 'title', e.target.value)}

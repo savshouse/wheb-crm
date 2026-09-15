@@ -7,7 +7,7 @@ export type Profile = {
   updated_at: string
 }
 
-// Subset returned by join queries (select id, full_name, email)
+// Subset returned by join queries
 export type BasicProfile = {
   id: string
   email: string
@@ -17,17 +17,34 @@ export type BasicProfile = {
 export type Client = {
   id: string
   name: string
+  type: 'corporate' | 'individual'
   industry: string | null
   status: 'prospect' | 'active' | 'inactive'
   notes: string | null
   website: string | null
   phone: string | null
   address: string | null
+  email: string | null
+  employer_id: string | null
+  date_of_birth: string | null
+  ni_number: string | null
   account_manager_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
   account_manager?: BasicProfile | null
+  employer?: { id: string; name: string } | null
+}
+
+export type Relationship = {
+  id: string
+  individual_id: string
+  related_id: string
+  relationship_type: string
+  notes: string | null
+  created_at: string
+  related?: { id: string; name: string; type: string } | null
+  individual?: { id: string; name: string; type: string } | null
 }
 
 export type Contact = {
@@ -62,6 +79,7 @@ export type Task = {
   description: string | null
   client_id: string
   meeting_id: string | null
+  parent_task_id: string | null
   assigned_to: string | null
   created_by: string | null
   due_date: string | null
@@ -74,6 +92,7 @@ export type Task = {
   creator?: BasicProfile | null
   client?: { id: string; name: string } | null
   meeting?: { id: string; title: string } | null
+  sub_tasks?: Task[]
 }
 
 export type TaskHistoryEntry = {
@@ -90,4 +109,24 @@ export type TaskHistoryEntry = {
   performer?: BasicProfile | null
   from_user?: BasicProfile | null
   to_user?: BasicProfile | null
+}
+
+export type TaskTemplate = {
+  id: string
+  name: string
+  description: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  items?: TaskTemplateItem[]
+}
+
+export type TaskTemplateItem = {
+  id: string
+  template_id: string
+  title: string
+  description: string | null
+  priority: 'low' | 'medium' | 'high'
+  order_index: number
+  relative_due_days: number | null
 }

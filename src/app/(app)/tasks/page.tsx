@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
 import { CheckSquare, Clock, Building2, User } from 'lucide-react'
 import TaskStatusButton from './TaskStatusButton'
+import AddTaskButton from './AddTaskButton'
 import type { Task, Profile } from '@/lib/types'
 
 const priorityColour = {
@@ -50,11 +51,14 @@ export default async function TasksPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
-        <p className="text-sm text-slate-500 mt-0.5">
-          {myTasks?.length ?? 0} assigned to you · {teamTasks?.length ?? 0} assigned to others
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {myTasks?.length ?? 0} assigned to you · {teamTasks?.length ?? 0} assigned to others
+          </p>
+        </div>
+        <AddTaskButton currentUserId={user.id} />
       </div>
 
       {/* My tasks */}
