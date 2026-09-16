@@ -211,6 +211,15 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                     <ExternalLink size={11} />Papercloud
                   </a>
                 )}
+                {(client as any).vnext_id && (
+                  <a
+                    href={`https://vnext.tpinside.com/ClientFiles/ClientOverview?ClientId=${(client as any).vnext_id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-blue-600 text-blue-500"
+                  >
+                    <ExternalLink size={11} />vNext
+                  </a>
+                )}
                 {client.account_manager && (
                   <span className="flex items-center gap-1">
                     <User size={11} />

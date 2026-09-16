@@ -55,6 +55,7 @@ export async function updateClient(
   }
 
   updates.papercloud_id = (formData.get('papercloud_id') as string) || null
+  updates.vnext_id = (formData.get('vnext_id') as string) || null
 
   if (type === 'corporate') {
     updates.industry = (formData.get('industry') as string) || null
@@ -76,7 +77,7 @@ export async function updateClient(
     name: 'Name', status: 'Status', phone: 'Phone', address: 'Address',
     notes: 'Notes', industry: 'Industry', website: 'Website',
     email: 'Email', date_of_birth: 'Date of birth', ni_number: 'NI number',
-    papercloud_id: 'Papercloud ID', salary: 'Salary',
+    papercloud_id: 'Papercloud ID', vnext_id: 'vNext ID', salary: 'Salary',
   }
   const activityRows: any[] = []
 

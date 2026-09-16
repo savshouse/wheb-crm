@@ -25,6 +25,7 @@ type Props = {
     date_of_birth: string | null
     ni_number: string | null
     papercloud_id: string | null
+    vnext_id: string | null
     salary: number | null
   }
   corporates: Corporate[]
@@ -148,6 +149,12 @@ export default function EditClientForm({ client, corporates }: Props) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Papercloud ID</label>
             <input name="papercloud_id" defaultValue={client.papercloud_id ?? ''} className={inputClass} placeholder="e.g. 1856" />
             <p className="text-xs text-slate-400 mt-1">Last digits of the Papercloud URL</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">vNext Client ID</label>
+            <input name="vnext_id" defaultValue={client.vnext_id ?? ''} className={inputClass} placeholder="e.g. 12345" />
+            <p className="text-xs text-slate-400 mt-1">ClientId from the vNext URL</p>
           </div>
 
           {isIndividual && (
