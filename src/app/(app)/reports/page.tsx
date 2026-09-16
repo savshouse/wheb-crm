@@ -7,17 +7,18 @@ import { BarChart2, Calendar, CheckSquare, AlertCircle, Download, Search, X, Clo
 import Link from 'next/link'
 import SearchableSelect from '@/components/SearchableSelect'
 
-type ClientRow = { id: string; name: string; type: 'corporate' | 'individual' }
+type ClientRow = { id: string; name: string; type: 'corporate' | 'individual'; employer_id: string | null }
 type Meeting = {
   id: string; title: string; meeting_date: string; notes: string | null
   creator: { full_name: string | null; email: string } | null
+  client: { id: string; name: string; type: string; employer_id: string | null } | null
   tasks: { id: string; title: string; status: string; priority: string; due_date: string | null; assignee: { full_name: string | null; email: string } | null }[]
 }
 type Task = {
   id: string; title: string; status: string; priority: string; due_date: string | null; description: string | null
   assignee: { full_name: string | null; email: string } | null
   meeting: { title: string } | null
-  client: { id: string; name: string } | null
+  client: { id: string; name: string; type: string; employer_id: string | null } | null
 }
 
 const PRIO_COLOUR: Record<string, string> = {
@@ -71,7 +72,7 @@ export default function ReportsPage() {
   useEffect(() => {
     createClient()
       .from('clients')
-      .select('id, name, type')
+      .select('id, name, type, employer_id')
       .order('name')
       .then(({ data }) => setAllClients((data ?? []) as ClientRow[]))
   }, [])
@@ -92,14 +93,14 @@ export default function ReportsPage() {
 
     const meetingQ = supabase
       .from('meetings')
-      .select('id, title, meeting_date, notes, creator:profiles!meetings_created_by_fkey(full_name, email), tasks(id, title, status, priority, due_date, assignee:profiles!tasks_assigned_to_fkey(full_name, email))')
+      .select('id, title, meeting_date, notes, creator:profiles!meetings_created_by_fkey(full_name, email), client:clients(id, name, type, employer_id), tasks(id, title, status, priority, due_date, assignee:profiles!tasks_assigned_to_fkey(full_name, email))')
       .gte('meeting_date', dateFrom)
       .lte('meeting_date', dateTo)
       .order('meeting_date', { ascending: false })
 
     const taskQ = supabase
       .from('tasks')
-      .select('id, title, status, priority, due_date, description, assignee:profiles!tasks_assigned_to_fkey(full_name, email), meeting:meetings(title), client:clients(id, name)')
+      .select('id, title, status, priority, due_date, description, assignee:profiles!tasks_assigned_to_fkey(full_name, email), meeting:meetings(title), client:clients(id, name, type, employer_id)')
       .is('parent_task_id', null)
       .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -140,33 +141,51 @@ export default function ReportsPage() {
     { key: 'custom', label: 'Custom' },
   ]
 
+  function resolvePersonCompany(client: { name: string; type: string; employer_id: string | null } | null): [string, string] {
+    if (!client) return ['', '']
+    if (client.type === 'individual') {
+      const employer = allClients.find(c => c.id === client.employer_id)
+      return [client.name, employer?.name ?? '']
+    }
+    return ['', client.name]
+  }
+
   function exportMeetingsCSV() {
     exportCSV(
       `meetings-${dateFrom}-to-${dateTo}.csv`,
-      ['Date', 'Title', 'Notes', 'Tasks created', 'Logged by'],
-      meetings.map(m => [
-        format(parseISO(m.meeting_date), 'd MMM yyyy'),
-        m.title,
-        m.notes ?? '',
-        String(m.tasks?.length ?? 0),
-        m.creator?.full_name ?? m.creator?.email ?? '',
-      ])
+      ['Date', 'Title', 'Person', 'Company', 'Notes', 'Tasks created', 'Logged by'],
+      meetings.map(m => {
+        const [person, company] = resolvePersonCompany(m.client)
+        return [
+          format(parseISO(m.meeting_date), 'd MMM yyyy'),
+          m.title,
+          person,
+          company,
+          m.notes ?? '',
+          String(m.tasks?.length ?? 0),
+          m.creator?.full_name ?? m.creator?.email ?? '',
+        ]
+      })
     )
   }
 
   function exportTasksCSV() {
     exportCSV(
       `tasks-${dateFrom}-to-${dateTo}.csv`,
-      ['Title', 'Client', 'Status', 'Priority', 'Due date', 'Assignee', 'From meeting'],
-      filteredTasks.map(t => [
-        t.title,
-        t.client?.name ?? '',
-        t.status,
-        t.priority,
-        t.due_date ? format(parseISO(t.due_date), 'd MMM yyyy') : '',
-        t.assignee?.full_name ?? t.assignee?.email ?? '',
-        t.meeting?.title ?? '',
-      ])
+      ['Title', 'Person', 'Company', 'Status', 'Priority', 'Due date', 'Assignee', 'From meeting'],
+      filteredTasks.map(t => {
+        const [person, company] = resolvePersonCompany(t.client)
+        return [
+          t.title,
+          person,
+          company,
+          t.status,
+          t.priority,
+          t.due_date ? format(parseISO(t.due_date), 'd MMM yyyy') : '',
+          t.assignee?.full_name ?? t.assignee?.email ?? '',
+          t.meeting?.title ?? '',
+        ]
+      })
     )
   }
 
