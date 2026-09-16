@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 export type { SchemeType } from '@/lib/benefit-types'
+import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 
 // ─── Schemes ──────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,35 @@ export async function deleteMembership(membershipId: string, clientId: string): 
   if (!user) return { error: 'Unauthorized' }
 
   const { error } = await supabase.from('benefit_memberships').delete().eq('id', membershipId)
+  if (error) return { error: error.message }
+  revalidatePath(`/clients/${clientId}`)
+  return { error: null }
+}
+
+export async function removeMembership(
+  membershipId: string,
+  clientId: string,
+  { reason, date, notes }: { reason: string; date: string; notes: string }
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const reasonLabel = REMOVAL_REASON_LABELS[reason] ?? reason
+  const changeReason = notes ? `Removed: ${reasonLabel} — ${notes}` : `Removed: ${reasonLabel}`
+
+  await supabase.from('benefit_contribution_changes').insert({
+    membership_id: membershipId,
+    effective_date: date,
+    change_reason: changeReason,
+    created_by: user.id,
+  })
+
+  const { error } = await supabase
+    .from('benefit_memberships')
+    .update({ ended_date: date, end_reason: reason, updated_at: new Date().toISOString() })
+    .eq('id', membershipId)
+
   if (error) return { error: error.message }
   revalidatePath(`/clients/${clientId}`)
   return { error: null }

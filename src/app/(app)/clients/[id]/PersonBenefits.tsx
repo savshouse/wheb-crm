@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SCHEME_TYPES } from '@/lib/benefit-types'
+import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 import {
-  createMembership, updateMembership, deleteMembership, addContributionChange,
+  createMembership, updateMembership, removeMembership, addContributionChange,
   type MembershipPayload,
 } from '@/app/actions-benefits'
+import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import {
   Shield, Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
-  History, ExternalLink, AlertCircle, CheckCircle, Clock,
+  History, AlertCircle, CheckCircle,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -45,6 +46,8 @@ type Membership = {
   cover_level: string | null
   notes: string | null
   created_at: string
+  ended_date: string | null
+  end_reason: string | null
   scheme: {
     scheme_name: string; provider: string | null; salary_definition: string | null
     cover_level: string | null
@@ -66,6 +69,34 @@ const SCHEME_COLOUR: Record<string, string> = {
 
 const inputClass = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
+// ─── Scheme-type field visibility ─────────────────────────────────────────────
+
+type FieldConfig = {
+  showContributions: boolean
+  showEnrolmentType: boolean
+  showOptedOut: boolean
+  showCoverLevel: boolean
+}
+
+function getFieldConfig(schemeType: string): FieldConfig {
+  switch (schemeType) {
+    case 'pension':
+      return { showContributions: true,  showEnrolmentType: true,  showOptedOut: true,  showCoverLevel: false }
+    case 'death_in_service':
+      return { showContributions: false, showEnrolmentType: false, showOptedOut: false, showCoverLevel: true  }
+    case 'critical_illness':
+      return { showContributions: false, showEnrolmentType: false, showOptedOut: false, showCoverLevel: true  }
+    case 'pmi':
+      return { showContributions: true,  showEnrolmentType: false, showOptedOut: false, showCoverLevel: true  }
+    case 'income_protection':
+      return { showContributions: true,  showEnrolmentType: false, showOptedOut: false, showCoverLevel: true  }
+    default:
+      return { showContributions: true,  showEnrolmentType: true,  showOptedOut: true,  showCoverLevel: true  }
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function fmtContrib(pct: number | null, gbp: number | null): string {
   if (pct != null) return `${pct}%`
   if (gbp != null) return `£${gbp.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -79,10 +110,9 @@ function calcPct(gbp: number, salary: number): number {
   return Math.round(gbp / salary * 100 * 10000) / 10000
 }
 
-type ContribField = {
-  mode: 'pct' | 'gbp'
-  value: string
-}
+type ContribField = { mode: 'pct' | 'gbp'; value: string }
+
+// ─── Form helpers ─────────────────────────────────────────────────────────────
 
 type FormState = {
   membershipType: 'scheme' | 'personal'
@@ -168,6 +198,8 @@ function buildPayload(form: FormState, salary: number | null): MembershipPayload
   }
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function PersonBenefits({
   clientId, salary, employerId,
 }: {
@@ -175,16 +207,17 @@ export default function PersonBenefits({
   salary: number | null
   employerId: string | null
 }) {
-  const [memberships, setMemberships]     = useState<Membership[]>([])
-  const [employerSchemes, setEmpSchemes]  = useState<EmployerScheme[]>([])
-  const [expanded, setExpanded]           = useState<Set<string>>(new Set())
-  const [showModal, setShowModal]         = useState(false)
-  const [editing, setEditing]             = useState<Membership | null>(null)
-  const [form, setForm]                   = useState<FormState>(emptyForm())
-  const [confirmDel, setConfirmDel]       = useState<Membership | null>(null)
+  const [memberships, setMemberships]           = useState<Membership[]>([])
+  const [employerSchemes, setEmpSchemes]        = useState<EmployerScheme[]>([])
+  const [expanded, setExpanded]                 = useState<Set<string>>(new Set())
+  const [showModal, setShowModal]               = useState(false)
+  const [editing, setEditing]                   = useState<Membership | null>(null)
+  const [form, setForm]                         = useState<FormState>(emptyForm())
+  const [removeModal, setRemoveModal]           = useState<Membership | null>(null)
   const [showContribModal, setShowContribModal] = useState<Membership | null>(null)
-  const [isPending, startTransition]      = useTransition()
-  const [error, setError]                 = useState<string | null>(null)
+  const [showFormer, setShowFormer]             = useState(false)
+  const [isPending, startTransition]            = useTransition()
+  const [error, setError]                       = useState<string | null>(null)
 
   async function fetchData() {
     const supabase = createClient()
@@ -198,6 +231,7 @@ export default function PersonBenefits({
           employer_contribution_pct, employer_contribution_gbp,
           employee_contribution_pct, employee_contribution_gbp,
           salary_at_calculation, cover_level, notes, created_at,
+          ended_date, end_reason,
           scheme:benefit_schemes(scheme_name, provider, salary_definition, cover_level),
           contribution_changes:benefit_contribution_changes(
             id, effective_date, employer_contribution_pct, employer_contribution_gbp,
@@ -234,8 +268,8 @@ export default function PersonBenefits({
 
   function handleSave() {
     if (!form.scheme_type) { setError('Scheme type required'); return }
-    if (!editing && form.scheme_id && memberships.some(m => m.scheme_id === form.scheme_id)) {
-      setError('This person already has a membership for that scheme')
+    if (!editing && form.scheme_id && memberships.some(m => m.scheme_id === form.scheme_id && !m.ended_date)) {
+      setError('This person already has an active membership for that scheme')
       return
     }
     setError(null)
@@ -260,10 +294,11 @@ export default function PersonBenefits({
     })
   }
 
-  function handleDelete(m: Membership) {
+  function handleRemove(reason: string, date: string, notes: string) {
+    if (!removeModal) return
     startTransition(async () => {
-      await deleteMembership(m.id, clientId)
-      setConfirmDel(null)
+      await removeMembership(removeModal.id, clientId, { reason, date, notes })
+      setRemoveModal(null)
       await fetchData()
     })
   }
@@ -274,121 +309,81 @@ export default function PersonBenefits({
 
   const setF = (k: keyof FormState, v: any) => setForm(p => ({ ...p, [k]: v }))
 
-  // When scheme is picked from employer list, auto-fill type/name/provider
   function pickScheme(schemeId: string) {
     const s = employerSchemes.find(s => s.id === schemeId)
     if (s) setForm(p => ({ ...p, scheme_id: schemeId, scheme_type: s.scheme_type, scheme_name: s.scheme_name, provider: s.provider ?? '' }))
     else setF('scheme_id', schemeId)
   }
 
+  const activeMemberships = memberships.filter(m => !m.ended_date)
+  const formerMemberships = memberships.filter(m => !!m.ended_date)
+
   return (
     <div className="mb-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-          <Shield size={13} />Benefits ({memberships.length})
+          <Shield size={13} />Benefits ({activeMemberships.length})
         </h2>
         <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
           <Plus size={12} />Add benefit
         </button>
       </div>
 
-      {memberships.length === 0 ? (
+      {activeMemberships.length === 0 && formerMemberships.length === 0 ? (
         <div className="bg-white border border-dashed border-slate-300 rounded-xl px-4 py-6 text-center">
           <p className="text-sm text-slate-400">No benefits recorded</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {memberships.map(m => {
-            const isOpen = expanded.has(m.id)
-            const hasHistory = m.contribution_changes.length > 0
-            const schemeName = m.scheme?.scheme_name ?? m.scheme_name ?? '—'
-            const provider   = m.scheme?.provider ?? m.provider
+          {activeMemberships.map(m => (
+            <MembershipCard
+              key={m.id}
+              m={m}
+              isOpen={expanded.has(m.id)}
+              onToggle={() => toggleExpand(m.id)}
+              onEdit={() => openEdit(m)}
+              onRemove={() => setRemoveModal(m)}
+              onContrib={() => setShowContribModal(m)}
+            />
+          ))}
 
-            return (
-              <div key={m.id} className={`bg-white border rounded-xl overflow-hidden ${m.opted_out ? 'opacity-70 border-slate-200' : 'border-slate-200'}`}>
-                {/* Header */}
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${SCHEME_COLOUR[m.scheme_type] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {SCHEME_LABEL[m.scheme_type] ?? m.scheme_type}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-slate-900 truncate">{schemeName}</p>
-                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5 flex-wrap">
-                      {provider && <span>{provider}</span>}
-                      {m.policy_reference && <span>Ref: {m.policy_reference}</span>}
-                      {m.enrolled_date && <span>Enrolled: {format(parseISO(m.enrolled_date), 'd MMM yyyy')}</span>}
-                      {m.opted_out
-                        ? <span className="text-red-500 font-medium flex items-center gap-0.5"><X size={10} />Opted out{m.opted_out_date ? ` ${format(parseISO(m.opted_out_date), 'd MMM yyyy')}` : ''}</span>
-                        : <span className="text-green-600 flex items-center gap-0.5"><CheckCircle size={10} />Active</span>}
-                    </div>
-                    <div className="flex items-center gap-4 mt-1 text-xs">
-                      <span className="text-slate-500">Employer: <span className="font-medium text-slate-700">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</span></span>
-                      <span className="text-slate-500">Employee: <span className="font-medium text-slate-700">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</span></span>
-                      {m.salary_at_calculation && <span className="text-slate-400">on £{m.salary_at_calculation.toLocaleString('en-GB')}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {hasHistory && (
-                      <span className="text-xs text-slate-400 flex items-center gap-0.5 mr-1"><History size={11} />{m.contribution_changes.length}</span>
-                    )}
-                    <button onClick={() => setShowContribModal(m)} className="px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 font-medium transition-colors" title="Record contribution change">
-                      + Change
-                    </button>
-                    <button onClick={() => openEdit(m)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => setConfirmDel(m)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                    {(hasHistory || m.cover_level || m.notes) && (
-                      <button onClick={() => toggleExpand(m.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
-                        {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expanded detail */}
-                {isOpen && (
-                  <div className="border-t border-slate-100 px-4 py-3 space-y-3">
-                    {(m.cover_level || m.scheme?.cover_level) && (
-                      <p className="text-xs text-slate-600"><span className="font-medium">Cover: </span>{m.cover_level ?? m.scheme?.cover_level}</p>
-                    )}
-                    {m.scheme?.salary_definition && (
-                      <p className="text-xs text-slate-600"><span className="font-medium">Salary definition: </span>{m.scheme.salary_definition}</p>
-                    )}
-                    {m.notes && <p className="text-xs text-slate-600"><span className="font-medium">Notes: </span>{m.notes}</p>}
-
-                    {hasHistory && (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Contribution history</p>
-                        <div className="space-y-1.5">
-                          {[...m.contribution_changes]
-                            .sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())
-                            .map(c => (
-                              <div key={c.id} className="flex items-start gap-3 text-xs bg-slate-50 rounded-lg px-3 py-2">
-                                <span className="text-slate-400 w-24 shrink-0">{format(parseISO(c.effective_date), 'd MMM yyyy')}</span>
-                                <div className="flex-1">
-                                  <span className="text-slate-700">Employer: <strong>{fmtContrib(c.employer_contribution_pct, c.employer_contribution_gbp)}</strong></span>
-                                  <span className="text-slate-400 mx-2">·</span>
-                                  <span className="text-slate-700">Employee: <strong>{fmtContrib(c.employee_contribution_pct, c.employee_contribution_gbp)}</strong></span>
-                                  {c.salary_at_calculation && <span className="text-slate-400 ml-2">on £{c.salary_at_calculation.toLocaleString('en-GB')}</span>}
-                                  {c.change_reason && <span className="text-slate-500 ml-2">— {c.change_reason}</span>}
-                                </div>
-                              </div>
-                            ))}
+          {formerMemberships.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowFormer(v => !v)}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 mt-2 mb-1 transition-colors"
+              >
+                {showFormer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {formerMemberships.length} former benefit{formerMemberships.length !== 1 ? 's' : ''}
+              </button>
+              {showFormer && (
+                <div className="space-y-2">
+                  {formerMemberships.map(m => (
+                    <div key={m.id} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 opacity-70">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${SCHEME_COLOUR[m.scheme_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                          {SCHEME_LABEL[m.scheme_type] ?? m.scheme_type}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-slate-700 truncate">
+                            {m.scheme?.scheme_name ?? m.scheme_name ?? '—'}
+                          </p>
+                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5 flex-wrap">
+                            {m.end_reason && <span>{REMOVAL_REASON_LABELS[m.end_reason] ?? m.end_reason}</span>}
+                            {m.ended_date && <span>Ended {format(parseISO(m.ended_date), 'd MMM yyyy')}</span>}
+                          </div>
                         </div>
+                        <span className="text-xs text-slate-400 font-medium shrink-0 bg-slate-200 px-2 py-0.5 rounded-full">Former</span>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Add / edit membership modal */}
       {showModal && (
         <MembershipModal
           form={form} setForm={setForm} setF={setF}
@@ -399,7 +394,6 @@ export default function PersonBenefits({
         />
       )}
 
-      {/* Contribution change modal */}
       {showContribModal && (
         <ContribChangeModal
           membership={showContribModal}
@@ -416,36 +410,129 @@ export default function PersonBenefits({
         />
       )}
 
-      {/* Delete confirm */}
-      {confirmDel && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmDel(null)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <Trash2 size={18} className="text-red-600" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Remove benefit?</h3>
-              <p className="text-sm text-slate-600 mt-1.5">
-                This will remove <strong>{confirmDel.scheme_name ?? SCHEME_LABEL[confirmDel.scheme_type]}</strong> and all contribution history for this person.
-              </p>
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => handleDelete(confirmDel)} disabled={isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
-                  {isPending ? 'Removing…' : 'Yes, remove'}
-                </button>
-                <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
+      {removeModal && (
+        <BenefitRemovalModal
+          memberName={removeModal.scheme?.scheme_name ?? removeModal.scheme_name ?? SCHEME_LABEL[removeModal.scheme_type] ?? removeModal.scheme_type}
+          onConfirm={handleRemove}
+          onClose={() => setRemoveModal(null)}
+          isPending={isPending}
+        />
       )}
     </div>
   )
 }
 
-// ─── Membership modal ─────────────────────────────────────────────────────────
+// ─── Membership card ──────────────────────────────────────────────────────────
+
+function MembershipCard({ m, isOpen, onToggle, onEdit, onRemove, onContrib }: {
+  m: Membership
+  isOpen: boolean
+  onToggle: () => void
+  onEdit: () => void
+  onRemove: () => void
+  onContrib: () => void
+}) {
+  const fields     = getFieldConfig(m.scheme_type)
+  const hasHistory = m.contribution_changes.length > 0
+  const schemeName = m.scheme?.scheme_name ?? m.scheme_name ?? '—'
+  const provider   = m.scheme?.provider ?? m.provider
+  const hasDetail  = hasHistory || !!m.cover_level || !!m.scheme?.cover_level || !!m.notes
+
+  return (
+    <div className={`bg-white border rounded-xl overflow-hidden ${m.opted_out ? 'opacity-70 border-slate-200' : 'border-slate-200'}`}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${SCHEME_COLOUR[m.scheme_type] ?? 'bg-slate-100 text-slate-600'}`}>
+          {SCHEME_LABEL[m.scheme_type] ?? m.scheme_type}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-slate-900 truncate">{schemeName}</p>
+          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5 flex-wrap">
+            {provider && <span>{provider}</span>}
+            {m.policy_reference && <span>Ref: {m.policy_reference}</span>}
+            {m.enrolled_date && <span>Enrolled: {format(parseISO(m.enrolled_date), 'd MMM yyyy')}</span>}
+            {m.opted_out
+              ? <span className="text-red-500 font-medium flex items-center gap-0.5"><X size={10} />Opted out{m.opted_out_date ? ` ${format(parseISO(m.opted_out_date), 'd MMM yyyy')}` : ''}</span>
+              : <span className="text-green-600 flex items-center gap-0.5"><CheckCircle size={10} />Active</span>}
+          </div>
+          {fields.showContributions && (
+            <div className="flex items-center gap-4 mt-1 text-xs">
+              <span className="text-slate-500">Employer: <span className="font-medium text-slate-700">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</span></span>
+              <span className="text-slate-500">Employee: <span className="font-medium text-slate-700">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</span></span>
+              {m.salary_at_calculation && <span className="text-slate-400">on £{m.salary_at_calculation.toLocaleString('en-GB')}</span>}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {hasHistory && (
+            <span className="text-xs text-slate-400 flex items-center gap-0.5 mr-1"><History size={11} />{m.contribution_changes.length}</span>
+          )}
+          {fields.showContributions && (
+            <button onClick={onContrib} className="px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 font-medium transition-colors" title="Record contribution change">
+              + Change
+            </button>
+          )}
+          <button onClick={onEdit} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+            <Pencil size={13} />
+          </button>
+          <button onClick={onRemove} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Remove benefit">
+            <Trash2 size={13} />
+          </button>
+          {hasDetail && (
+            <button onClick={onToggle} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+              {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="border-t border-slate-100 px-4 py-3 space-y-3">
+          {(m.cover_level || m.scheme?.cover_level) && (
+            <p className="text-xs text-slate-600"><span className="font-medium">Cover: </span>{m.cover_level ?? m.scheme?.cover_level}</p>
+          )}
+          {m.scheme?.salary_definition && (
+            <p className="text-xs text-slate-600"><span className="font-medium">Salary definition: </span>{m.scheme.salary_definition}</p>
+          )}
+          {m.notes && <p className="text-xs text-slate-600"><span className="font-medium">Notes: </span>{m.notes}</p>}
+
+          {hasHistory && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Change history</p>
+              <div className="space-y-1.5">
+                {[...m.contribution_changes]
+                  .sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())
+                  .map(c => {
+                    const hasContribs = c.employer_contribution_pct != null || c.employer_contribution_gbp != null ||
+                                        c.employee_contribution_pct != null || c.employee_contribution_gbp != null
+                    return (
+                      <div key={c.id} className="flex items-start gap-3 text-xs bg-slate-50 rounded-lg px-3 py-2">
+                        <span className="text-slate-400 w-24 shrink-0">{format(parseISO(c.effective_date), 'd MMM yyyy')}</span>
+                        <div className="flex-1">
+                          {hasContribs && (
+                            <>
+                              <span className="text-slate-700">Employer: <strong>{fmtContrib(c.employer_contribution_pct, c.employer_contribution_gbp)}</strong></span>
+                              <span className="text-slate-400 mx-2">·</span>
+                              <span className="text-slate-700">Employee: <strong>{fmtContrib(c.employee_contribution_pct, c.employee_contribution_gbp)}</strong></span>
+                              {c.salary_at_calculation && <span className="text-slate-400 ml-2">on £{c.salary_at_calculation.toLocaleString('en-GB')}</span>}
+                            </>
+                          )}
+                          {c.change_reason && (
+                            <span className="text-slate-500 ml-2">{hasContribs ? '— ' : ''}{c.change_reason}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ContribInput ─────────────────────────────────────────────────────────────
 
 function ContribInput({ label, field, onChange, salary }: {
   label: string
@@ -486,6 +573,8 @@ function ContribInput({ label, field, onChange, salary }: {
   )
 }
 
+// ─── Membership modal ─────────────────────────────────────────────────────────
+
 function MembershipModal({ form, setForm, setF, employerSchemes, pickScheme, salary, onSave, onClose, isEdit, isPending, error }: {
   form: FormState
   setForm: React.Dispatch<React.SetStateAction<FormState>>
@@ -499,6 +588,8 @@ function MembershipModal({ form, setForm, setF, employerSchemes, pickScheme, sal
   isPending: boolean
   error: string | null
 }) {
+  const fields = getFieldConfig(form.scheme_type)
+
   const inp = (k: 'scheme_name' | 'provider' | 'policy_reference' | 'enrolled_date' | 'membership_start_date' | 'opted_out_date' | 'cover_level' | 'notes', label: string, type = 'text') => (
     <div>
       <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
@@ -553,46 +644,45 @@ function MembershipModal({ form, setForm, setF, employerSchemes, pickScheme, sal
 
             {inp('policy_reference', 'Member / policy reference')}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Enrolment type</label>
-              <select value={form.enrolment_type} onChange={e => setF('enrolment_type', e.target.value)} className={inputClass}>
-                <option value="automatic">Automatic enrolment</option>
-                <option value="opt_in">Opted in</option>
-                <option value="personal">Personal policy</option>
-              </select>
-            </div>
+            {fields.showEnrolmentType && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Enrolment type</label>
+                <select value={form.enrolment_type} onChange={e => setF('enrolment_type', e.target.value)} className={inputClass}>
+                  <option value="automatic">Automatic enrolment</option>
+                  <option value="opt_in">Opted in</option>
+                  <option value="personal">Personal policy</option>
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               {inp('enrolled_date', 'Enrolled date', 'date')}
               {inp('membership_start_date', 'Cover start date', 'date')}
             </div>
 
-            <ContribInput
-              label="Employer contribution"
-              field={form.employer}
-              onChange={f => setF('employer', f)}
-              salary={salary}
-            />
-            <ContribInput
-              label="Employee contribution"
-              field={form.employee}
-              onChange={f => setF('employee', f)}
-              salary={salary}
-            />
+            {fields.showCoverLevel && inp('cover_level', 'Cover level')}
 
-            {salary == null && (
-              <p className="text-xs text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-lg px-3 py-2">
-                <AlertCircle size={12} />No salary on record — add salary in Edit profile to auto-calculate the other contribution value.
-              </p>
+            {fields.showContributions && (
+              <>
+                <ContribInput label="Employer contribution" field={form.employer} onChange={f => setF('employer', f)} salary={salary} />
+                <ContribInput label="Employee contribution" field={form.employee} onChange={f => setF('employee', f)} salary={salary} />
+                {salary == null && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-lg px-3 py-2">
+                    <AlertCircle size={12} />No salary on record — add salary in Edit profile to auto-calculate the other value.
+                  </p>
+                )}
+              </>
             )}
 
-            {inp('cover_level', 'Cover level', 'text')}
-
-            <div className="flex items-center gap-3 pt-1">
-              <input type="checkbox" id="opted_out" checked={form.opted_out} onChange={e => setF('opted_out', e.target.checked)} className="w-4 h-4 rounded" />
-              <label htmlFor="opted_out" className="text-sm text-slate-700">Opted out</label>
-            </div>
-            {form.opted_out && inp('opted_out_date', 'Opted-out date', 'date')}
+            {fields.showOptedOut && (
+              <>
+                <div className="flex items-center gap-3 pt-1">
+                  <input type="checkbox" id="opted_out" checked={form.opted_out} onChange={e => setF('opted_out', e.target.checked)} className="w-4 h-4 rounded" />
+                  <label htmlFor="opted_out" className="text-sm text-slate-700">Opted out</label>
+                </div>
+                {form.opted_out && inp('opted_out_date', 'Opted-out date', 'date')}
+              </>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
@@ -613,7 +703,7 @@ function MembershipModal({ form, setForm, setF, employerSchemes, pickScheme, sal
   )
 }
 
-// ─── Log a contribution change ────────────────────────────────────────────────
+// ─── Contribution change modal ────────────────────────────────────────────────
 
 function ContribChangeModal({ membership, salary, onSave, onClose, isPending }: {
   membership: Membership

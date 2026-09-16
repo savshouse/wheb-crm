@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SCHEME_TYPES } from '@/lib/benefit-types'
-import { createScheme, updateScheme, deleteScheme, deleteMembership } from '@/app/actions-benefits'
-import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
+import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
+import { createScheme, updateScheme, deleteScheme, removeMembership } from '@/app/actions-benefits'
+import BenefitRemovalModal from '@/components/BenefitRemovalModal'
+import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 
@@ -18,6 +19,8 @@ type Member = {
   employer_contribution_gbp: number | null
   employee_contribution_pct: number | null
   employee_contribution_gbp: number | null
+  ended_date: string | null
+  end_reason: string | null
   client: { id: string; name: string } | null
 }
 
@@ -77,10 +80,10 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   const [showModal, setShowModal]   = useState(false)
   const [editScheme, setEditScheme] = useState<Scheme | null>(null)
   const [form, setForm]             = useState<FormState>(emptyForm())
-  const [confirmDel, setConfirmDel]       = useState<Scheme | null>(null)
-  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ memberId: string; clientId: string; name: string } | null>(null)
-  const [isPending, startTransition] = useTransition()
-  const [error, setError]           = useState<string | null>(null)
+  const [confirmDel, setConfirmDel]     = useState<Scheme | null>(null)
+  const [removeModal, setRemoveModal]   = useState<{ memberId: string; clientId: string; name: string } | null>(null)
+  const [isPending, startTransition]    = useTransition()
+  const [error, setError]               = useState<string | null>(null)
 
   async function fetchSchemes() {
     const { data } = await createClient()
@@ -92,6 +95,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
           id, client_id, enrolment_type, enrolled_date, opted_out,
           employer_contribution_pct, employer_contribution_gbp,
           employee_contribution_pct, employee_contribution_gbp,
+          ended_date, end_reason,
           client:clients(id, name)
         )
       `)
@@ -152,11 +156,11 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
     })
   }
 
-  function handleRemoveMember() {
-    if (!confirmRemoveMember) return
+  function handleRemoveMember(reason: string, date: string, notes: string) {
+    if (!removeModal) return
     startTransition(async () => {
-      await deleteMembership(confirmRemoveMember.memberId, confirmRemoveMember.clientId)
-      setConfirmRemoveMember(null)
+      await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
+      setRemoveModal(null)
       await fetchSchemes()
     })
   }
@@ -197,12 +201,14 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
 
       <div className="space-y-2">
         {schemes.map(s => {
-          const isOpen = expanded.has(s.id)
-          const active = s.memberships.filter(m => !m.opted_out)
-          const optedOut = s.memberships.filter(m => m.opted_out)
+          const isOpen  = expanded.has(s.id)
+          const current = s.memberships.filter(m => !m.ended_date)
+          const former  = s.memberships.filter(m => !!m.ended_date)
+          const active  = current.filter(m => !m.opted_out)
+
           return (
             <div key={s.id} className={`bg-white border rounded-xl overflow-hidden ${s.is_active ? 'border-slate-200' : 'border-slate-200 opacity-60'}`}>
-              {/* Scheme header row */}
+              {/* Scheme header */}
               <div className="flex items-center gap-3 px-4 py-3">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${SCHEME_COLOUR[s.scheme_type] ?? 'bg-slate-100 text-slate-600'}`}>
                   {SCHEME_LABEL[s.scheme_type] ?? s.scheme_type}
@@ -223,7 +229,8 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs text-slate-400 flex items-center gap-1">
-                    <Users size={11} />{active.length} member{active.length !== 1 ? 's' : ''}
+                    <Users size={11} />
+                    {active.length} active{former.length > 0 ? ` · ${former.length} former` : ''}
                   </span>
                   <button onClick={() => openEdit(s)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit scheme">
                     <Pencil size={13} />
@@ -240,53 +247,86 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
               {/* Members panel */}
               {isOpen && (
                 <div className="border-t border-slate-100">
-                  {s.memberships.length === 0 ? (
+                  {current.length === 0 && former.length === 0 ? (
                     <p className="px-4 py-4 text-sm text-slate-400 text-center">No members enrolled</p>
                   ) : (
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-100">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Member</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolment</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolled</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employer %/£</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employee %/£</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Status</th>
-                          <th className="px-4 py-2" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {s.memberships.map(m => (
-                          <tr key={m.id} className={m.opted_out ? 'opacity-50' : ''}>
-                            <td className="px-4 py-2.5">
-                              {m.client
-                                ? <Link href={`/clients/${m.client.id}`} className="text-blue-600 hover:underline font-medium">{m.client.name}</Link>
-                                : <span className="text-slate-400">Unknown</span>}
-                            </td>
-                            <td className="px-4 py-2.5 text-slate-600 capitalize">{m.enrolment_type.replace('_', ' ')}</td>
-                            <td className="px-4 py-2.5 text-slate-500 text-xs">
-                              {m.enrolled_date ? format(parseISO(m.enrolled_date), 'd MMM yyyy') : '—'}
-                            </td>
-                            <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</td>
-                            <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</td>
-                            <td className="px-4 py-2.5">
-                              {m.opted_out
-                                ? <span className="flex items-center gap-1 text-xs text-red-500"><X size={10} />Opted out</span>
-                                : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle size={10} />Active</span>}
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <button
-                                onClick={() => setConfirmRemoveMember({ memberId: m.id, clientId: m.client_id, name: m.client?.name ?? 'this member' })}
-                                className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Remove from scheme"
-                              >
-                                <X size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <>
+                      {/* Current members */}
+                      {current.length > 0 && (
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Member</th>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolment</th>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolled</th>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employer %/£</th>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employee %/£</th>
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Status</th>
+                              <th className="px-4 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {current.map(m => (
+                              <tr key={m.id} className={m.opted_out ? 'opacity-50' : ''}>
+                                <td className="px-4 py-2.5">
+                                  {m.client
+                                    ? <Link href={`/clients/${m.client.id}`} className="text-blue-600 hover:underline font-medium">{m.client.name}</Link>
+                                    : <span className="text-slate-400">Unknown</span>}
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-600 capitalize">{m.enrolment_type.replace('_', ' ')}</td>
+                                <td className="px-4 py-2.5 text-slate-500 text-xs">
+                                  {m.enrolled_date ? format(parseISO(m.enrolled_date), 'd MMM yyyy') : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</td>
+                                <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</td>
+                                <td className="px-4 py-2.5">
+                                  {m.opted_out
+                                    ? <span className="flex items-center gap-1 text-xs text-red-500"><X size={10} />Opted out</span>
+                                    : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle size={10} />Active</span>}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <button
+                                    onClick={() => setRemoveModal({ memberId: m.id, clientId: m.client_id, name: m.client?.name ?? 'this member' })}
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    title="Remove from scheme"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {/* Former members */}
+                      {former.length > 0 && (
+                        <div className={current.length > 0 ? 'border-t border-slate-100' : ''}>
+                          <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-100">
+                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Former members</span>
+                          </div>
+                          <table className="w-full text-sm">
+                            <tbody className="divide-y divide-slate-100">
+                              {former.map(m => (
+                                <tr key={m.id} className="opacity-60">
+                                  <td className="px-4 py-2.5 w-48">
+                                    {m.client
+                                      ? <Link href={`/clients/${m.client.id}`} className="text-blue-600 hover:underline font-medium">{m.client.name}</Link>
+                                      : <span className="text-slate-400">Unknown</span>}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-slate-500 text-xs">
+                                    {m.end_reason ? (REMOVAL_REASON_LABELS[m.end_reason] ?? m.end_reason) : '—'}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-slate-400 text-xs">
+                                    {m.ended_date ? format(parseISO(m.ended_date), 'd MMM yyyy') : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -306,29 +346,13 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
         />
       )}
 
-      {confirmRemoveMember && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmRemoveMember(null)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <Trash2 size={18} className="text-red-600" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Remove member?</h3>
-              <p className="text-sm text-slate-600 mt-1.5">
-                This will remove <strong>{confirmRemoveMember.name}</strong> from this scheme and delete their contribution history for it.
-              </p>
-              <div className="flex gap-3 mt-5">
-                <button onClick={handleRemoveMember} disabled={isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
-                  {isPending ? 'Removing…' : 'Yes, remove'}
-                </button>
-                <button onClick={() => setConfirmRemoveMember(null)} className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
+      {removeModal && (
+        <BenefitRemovalModal
+          memberName={removeModal.name}
+          onConfirm={handleRemoveMember}
+          onClose={() => setRemoveModal(null)}
+          isPending={isPending}
+        />
       )}
 
       {confirmDel && (
@@ -341,7 +365,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
               </div>
               <h3 className="text-base font-bold text-slate-900">Delete scheme?</h3>
               <p className="text-sm text-slate-600 mt-1.5">
-                <strong>{confirmDel.scheme_name}</strong> will be removed. Members will keep their personal records but will lose the scheme link.
+                <strong>{confirmDel.scheme_name}</strong> will be permanently removed along with all member records.
               </p>
               <div className="flex gap-3 mt-5">
                 <button onClick={() => handleDelete(confirmDel)} disabled={isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">

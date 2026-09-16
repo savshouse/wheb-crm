@@ -129,7 +129,7 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
                     <li>Paste the URL and tap <span className="font-medium">Subscribe</span></li>
                   </ol>
                 </div>
-                <p className="text-xs text-slate-400">Updates hourly. Events appear at 09:00 with a reminder. Click any event title to open the task directly in WHEB CRM.</p>
+                <p className="text-xs text-slate-400">Updates hourly. Events appear at 09:00. Note: Outlook does not fire reminders for subscribed Internet Calendars — events will appear but won&apos;t pop up. Click any event to open the task in WHEB CRM.</p>
               </div>
             </div>
           </div>

@@ -25,7 +25,7 @@ export async function GET(
 
   const { data: tasks } = await adminClient
     .from('tasks')
-    .select('id, title, description, due_date, priority, status, assigned_to, client:clients(name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
+    .select('id, title, description, due_date, priority, status, assigned_to, created_at, updated_at, client:clients(name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
     .eq('assigned_to', uid)
     .is('parent_task_id', null)
     .in('status', ['open', 'in_progress'])
@@ -48,7 +48,6 @@ export async function GET(
     subsByParent[sub.parent_task_id].push(sub)
   }
 
-    const now = format(new Date(), "yyyyMMdd'T'HHmmss'Z'")
   const calName = `WHEB Tasks – ${profile.full_name ?? profile.email}`
 
   const lines: string[] = [
@@ -93,12 +92,16 @@ export async function GET(
     }
     descParts.push('', `Open in WHEB CRM: ${deepLink}`)
 
-    const summary = client ? `[${client}] ${task.title}` : task.title
+    const summary  = client ? `[${client}] ${task.title}` : task.title
+    const dtstamp  = toIcalUtc(task.updated_at as string ?? task.created_at as string ?? new Date().toISOString())
+    const lastMod  = dtstamp
 
     lines.push(
       'BEGIN:VEVENT',
       `UID:wheb-task-${task.id}@wheb-crm.vercel.app`,
-      `DTSTAMP:${now}`,
+      `DTSTAMP:${dtstamp}`,
+      `LAST-MODIFIED:${lastMod}`,
+      `SEQUENCE:0`,
       `DTSTART:${dtStart}`,
       `DTEND:${dtEnd}`,
       `SUMMARY:${esc(summary)}`,
@@ -106,9 +109,8 @@ export async function GET(
       `PRIORITY:${prio}`,
       `URL:${deepLink}`,
       'STATUS:CONFIRMED',
-      // Reminder fires at 09:00 — same time as the event start
       'BEGIN:VALARM',
-      'TRIGGER:PT0S',
+      'TRIGGER:-PT0M',
       'ACTION:DISPLAY',
       `DESCRIPTION:Task due: ${esc(task.title as string)}`,
       'END:VALARM',
@@ -124,6 +126,12 @@ export async function GET(
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   })
+}
+
+// Convert an ISO timestamp to iCal UTC format (yyyyMMddTHHmmssZ)
+function toIcalUtc(iso: string): string {
+  const d = new Date(iso)
+  return format(d, "yyyyMMdd'T'HHmmss'Z'")
 }
 
 // Convert a Europe/London local time to a UTC Z-suffix iCal timestamp.
