@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard,
@@ -33,6 +34,21 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [viewedClientType, setViewedClientType] = useState<string | null>(null)
+
+  // When viewing a client detail page, read the cached type so we highlight the correct nav item
+  useEffect(() => {
+    const match = pathname.match(/^\/clients\/([^/]+)/)
+    if (match) {
+      try {
+        setViewedClientType(sessionStorage.getItem(`wheb_clientType:${match[1]}`))
+      } catch {
+        setViewedClientType(null)
+      }
+    } else {
+      setViewedClientType(null)
+    }
+  }, [pathname])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -42,6 +58,11 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
 
   function isActive(href: string) {
     if (href === '/') return pathname === '/'
+    // When on a client detail page, use the cached type to determine which section is active
+    if (pathname.startsWith('/clients/')) {
+      if (href === '/clients') return viewedClientType !== 'individual'
+      if (href === '/people')  return viewedClientType === 'individual'
+    }
     return pathname.startsWith(href)
   }
 

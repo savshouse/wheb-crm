@@ -11,6 +11,7 @@ import RelatedParties from './RelatedParties'
 import ViewTracker from './ViewTracker'
 import CompletedTaskCard from './CompletedTaskCard'
 import MeetingHistoryToggle from './MeetingHistoryToggle'
+import ClientActivityLog from './ClientActivityLog'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -92,7 +93,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
   const taskIds = (tasks ?? []).map((t: any) => t.id)
   const meetingIds = (meetings ?? []).map((m: any) => m.id)
 
-  const [{ data: taskHistory }, { data: meetingHistory }] = await Promise.all([
+  const [{ data: taskHistory }, { data: meetingHistory }, { data: clientActivity }] = await Promise.all([
     taskIds.length > 0
       ? supabase
           .from('task_history')
@@ -107,6 +108,13 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
           .in('meeting_id', meetingIds)
           .order('created_at', { ascending: true })
       : Promise.resolve({ data: [] }),
+    supabase
+      .from('activity_log')
+      .select('id, action, field, old_value, new_value, note, created_at, performer:profiles!activity_log_performed_by_fkey(full_name, email)')
+      .eq('entity_type', 'client')
+      .eq('entity_id', id)
+      .order('created_at', { ascending: false })
+      .limit(100),
   ])
 
   // Resolve employer from allCorporates (avoids self-referential FK join)
@@ -236,6 +244,9 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             allIndividuals={(allIndividuals ?? []) as any[]}
             allCorporates={(allCorporates ?? []) as any[]}
           />
+
+          {/* Profile change audit log */}
+          <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
 
           {/* Contacts strip */}
           {contacts && contacts.length > 0 && (

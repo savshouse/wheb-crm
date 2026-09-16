@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Building2, User } from 'lucide-react'
 import { updateClient } from '@/app/actions'
+import SearchableSelect from '@/components/SearchableSelect'
 
 type Corporate = { id: string; name: string }
 
@@ -31,6 +32,7 @@ export default function EditClientForm({ client, corporates }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [employerId, setEmployerId] = useState(client.employer_id ?? '')
 
   const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -101,12 +103,14 @@ export default function EditClientForm({ client, corporates }: Props) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Employer</label>
-                <select name="employer_id" defaultValue={client.employer_id ?? ''} className={inputClass}>
-                  <option value="">— None —</option>
-                  {corporates.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <input type="hidden" name="employer_id" value={employerId} />
+                <SearchableSelect
+                  options={corporates.map(c => ({ id: c.id, label: c.name }))}
+                  value={employerId}
+                  onChange={setEmployerId}
+                  placeholder="Search companies…"
+                  emptyOption="— None —"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Date of birth</label>

@@ -43,7 +43,7 @@ export async function updateClient(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  const { data: existing } = await supabase.from('clients').select('type').eq('id', clientId).single()
+  const { data: existing } = await supabase.from('clients').select('*').eq('id', clientId).single()
   const type = existing?.type ?? 'corporate'
 
   const updates: Record<string, unknown> = {
@@ -66,6 +66,53 @@ export async function updateClient(
 
   const { error } = await supabase.from('clients').update(updates).eq('id', clientId)
   if (error) return { error: error.message }
+
+  // Build audit log rows for every changed field
+  const LABELS: Record<string, string> = {
+    name: 'Name', status: 'Status', phone: 'Phone', address: 'Address',
+    notes: 'Notes', industry: 'Industry', website: 'Website',
+    email: 'Email', date_of_birth: 'Date of birth', ni_number: 'NI number',
+  }
+  const activityRows: any[] = []
+
+  for (const [field, newVal] of Object.entries(updates)) {
+    if (field === 'employer_id') continue  // handled separately below
+    const oldVal = existing?.[field] ?? null
+    if (String(oldVal ?? '') !== String(newVal ?? '')) {
+      activityRows.push({
+        entity_type: 'client', entity_id: clientId,
+        action: 'field_updated',
+        field: LABELS[field] ?? field,
+        old_value: oldVal != null ? String(oldVal) : null,
+        new_value: newVal != null ? String(newVal) : null,
+        performed_by: user.id,
+      })
+    }
+  }
+
+  // Employer change within the edit form
+  if ('employer_id' in updates && existing) {
+    const oldEmpId = existing.employer_id as string | null
+    const newEmpId = (updates.employer_id as string | null) || null
+    if (oldEmpId !== newEmpId) {
+      const [{ data: oldEmp }, { data: newEmp }] = await Promise.all([
+        oldEmpId ? supabase.from('clients').select('name').eq('id', oldEmpId).single() : Promise.resolve({ data: null }),
+        newEmpId ? supabase.from('clients').select('name').eq('id', newEmpId).single() : Promise.resolve({ data: null }),
+      ])
+      activityRows.push({
+        entity_type: 'client', entity_id: clientId,
+        action: newEmpId ? 'employer_set' : 'employer_removed',
+        field: 'Employer',
+        old_value: (oldEmp as any)?.name ?? null,
+        new_value: (newEmp as any)?.name ?? null,
+        performed_by: user.id,
+      })
+    }
+  }
+
+  if (activityRows.length > 0) {
+    await supabase.from('activity_log').insert(activityRows)
+  }
 
   revalidatePath(`/clients/${clientId}`)
   revalidatePath('/clients')
@@ -93,6 +140,26 @@ export async function addRelationship(
 
   if (error) return { error: error.message }
 
+  // Audit: fetch both names then log for each party
+  const [{ data: indiv }, { data: related }] = await Promise.all([
+    supabase.from('clients').select('name').eq('id', individualId).single(),
+    supabase.from('clients').select('name').eq('id', relatedId).single(),
+  ])
+  await supabase.from('activity_log').insert([
+    {
+      entity_type: 'client', entity_id: individualId,
+      action: 'relationship_added', field: 'Related person',
+      new_value: (related as any)?.name ?? relatedId,
+      note: relationshipType, performed_by: user.id,
+    },
+    {
+      entity_type: 'client', entity_id: relatedId,
+      action: 'relationship_added', field: 'Related person',
+      new_value: (indiv as any)?.name ?? individualId,
+      note: relationshipType, performed_by: user.id,
+    },
+  ])
+
   revalidatePath(`/clients/${individualId}`)
   revalidatePath(`/clients/${relatedId}`)
   return { error: null }
@@ -108,7 +175,7 @@ export async function removeRelationship(
 
   const { data: rel } = await supabase
     .from('relationships')
-    .select('individual_id, related_id')
+    .select('individual_id, related_id, relationship_type, individual:clients!relationships_individual_id_fkey(name), related:clients!relationships_related_id_fkey(name)')
     .eq('id', relationshipId)
     .single()
 
@@ -120,6 +187,20 @@ export async function removeRelationship(
   if (error) return { error: error.message }
 
   if (rel) {
+    const indivName  = (rel.individual as any)?.name ?? rel.individual_id
+    const relatedName = (rel.related as any)?.name ?? rel.related_id
+    await supabase.from('activity_log').insert([
+      {
+        entity_type: 'client', entity_id: rel.individual_id,
+        action: 'relationship_removed', field: 'Related person',
+        old_value: relatedName, note: rel.relationship_type, performed_by: user.id,
+      },
+      {
+        entity_type: 'client', entity_id: rel.related_id,
+        action: 'relationship_removed', field: 'Related person',
+        old_value: indivName, note: rel.relationship_type, performed_by: user.id,
+      },
+    ])
     revalidatePath(`/clients/${rel.individual_id}`)
     revalidatePath(`/clients/${rel.related_id}`)
   }
@@ -134,12 +215,30 @@ export async function updateEmployer(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
+  const { data: existing } = await supabase.from('clients').select('employer_id').eq('id', clientId).single()
+  const oldEmpId = existing?.employer_id ?? null
+
   const { error } = await supabase
     .from('clients')
     .update({ employer_id: employerId })
     .eq('id', clientId)
 
   if (error) return { error: error.message }
+
+  if (oldEmpId !== employerId) {
+    const [{ data: oldEmp }, { data: newEmp }] = await Promise.all([
+      oldEmpId ? supabase.from('clients').select('name').eq('id', oldEmpId).single() : Promise.resolve({ data: null }),
+      employerId ? supabase.from('clients').select('name').eq('id', employerId).single() : Promise.resolve({ data: null }),
+    ])
+    await supabase.from('activity_log').insert({
+      entity_type: 'client', entity_id: clientId,
+      action: employerId ? 'employer_set' : 'employer_removed',
+      field: 'Employer',
+      old_value: (oldEmp as any)?.name ?? null,
+      new_value: (newEmp as any)?.name ?? null,
+      performed_by: user.id,
+    })
+  }
 
   revalidatePath(`/clients/${clientId}`)
   return { error: null }
