@@ -35,23 +35,44 @@
         <span class="label-sm">Assigned to</span>
         <span id="assignee-name" class="assignee-name"></span>
       </div>
-
       <!-- Status actions -->
       <div id="actions" class="actions"></div>
     </div>
 
-    <div id="description-section" class="section hidden">
-      <div class="section-label">Notes</div>
-      <p id="description" class="description"></p>
+    <!-- Notes -->
+    <div id="description-section" class="section">
+      <div class="section-header">
+        <div class="section-label">Notes</div>
+        <button id="notes-edit-btn" class="edit-icon-btn" title="Edit notes">✏</button>
+      </div>
+      <p id="description" class="description empty-hint">No notes — click ✏ to add</p>
+      <div id="notes-edit" class="notes-edit hidden">
+        <textarea id="notes-textarea" rows="4" placeholder="Add notes…"></textarea>
+        <div class="notes-actions">
+          <button id="notes-save" class="btn-save">Save</button>
+          <button id="notes-cancel" class="btn-cancel">Cancel</button>
+        </div>
+      </div>
     </div>
 
+    <!-- Sub-tasks -->
     <div id="subtasks-section" class="section hidden">
       <div class="section-label">Sub-tasks</div>
       <div id="subtask-list"></div>
     </div>
+
+    <!-- Comments -->
+    <div id="comments-section" class="section">
+      <div class="section-label">Comments</div>
+      <div class="comment-input-area">
+        <textarea id="comment-input" rows="2" placeholder="Leave a comment… (Ctrl+Enter to send)"></textarea>
+        <button id="comment-submit" class="btn-submit">Add</button>
+      </div>
+      <div id="comment-list" class="comment-list"></div>
+    </div>
   </div>
 
-  <!-- Fallback: task list (when opened directly without a selected task) -->
+  <!-- Fallback: opened directly without a selected task -->
   <div id="task-list-view" class="hidden">
     <div class="center-state">
       <p class="hint">Click a task in the popup to view it here.</p>

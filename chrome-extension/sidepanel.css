@@ -109,6 +109,128 @@ body {
 .client-name:hover { text-decoration: underline; }
 .assignee-name { font-size: 13px; color: #475569; }
 
+/* Section header with edit button */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.section-header .section-label { margin-bottom: 0; }
+.edit-icon-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.edit-icon-btn:hover { color: #2563eb; background: #f1f5f9; }
+
+/* Notes editing */
+.description.empty-hint { color: #94a3b8; font-style: italic; }
+.notes-edit { margin-top: 6px; }
+.notes-edit textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+  color: #334155;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.notes-edit textarea:focus { outline: none; border-color: #2563eb; }
+.notes-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.btn-save {
+  background: #2563eb; color: white; border: none;
+  padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.btn-save:hover { background: #1d4ed8; }
+.btn-save:disabled { opacity: 0.5; cursor: default; }
+.btn-cancel {
+  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+  padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.btn-cancel:hover { border-color: #cbd5e1; }
+
+/* Sub-task status button */
+.subtask-status-btn {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1;
+  cursor: pointer; flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+  padding: 0;
+}
+.subtask-status-btn:disabled { opacity: 0.5; cursor: default; }
+.subtask-status-open      { border-color: #cbd5e1; color: transparent; }
+.subtask-status-open:hover { border-color: #2563eb; }
+.subtask-status-in_progress { border-color: #3b82f6; background: #dbeafe; color: #1e40af; }
+.subtask-status-completed   { border-color: #22c55e; background: #22c55e; color: white; }
+.subtask-status-cancelled   { border-color: #94a3b8; background: #f1f5f9; color: #94a3b8; }
+
+/* Comments section */
+.comment-input-area {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: flex-end;
+}
+.comment-input-area textarea {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  color: #334155;
+  resize: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+.comment-input-area textarea:focus { outline: none; border-color: #2563eb; }
+.btn-submit {
+  background: #2563eb; color: white; border: none;
+  padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+}
+.btn-submit:hover { background: #1d4ed8; }
+.btn-submit:disabled { opacity: 0.5; cursor: default; }
+
+.comment-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comment-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 9px 11px;
+  transition: background 0.3s;
+}
+.comment-item--new { background: #eff6ff; border-color: #bfdbfe; }
+.comment-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+.comment-author { font-size: 12px; font-weight: 600; color: #1e293b; }
+.comment-time   { font-size: 11px; color: #94a3b8; }
+.comment-content { font-size: 13px; color: #334155; line-height: 1.5; white-space: pre-wrap; }
+.no-comments { font-size: 13px; color: #94a3b8; font-style: italic; }
+
 /* Actions */
 .actions {
   display: flex;
