@@ -93,7 +93,7 @@ export async function GET(
     descParts.push('', `Open in WHEB CRM: ${deepLink}`)
 
     const summary  = client ? `[${client}] ${task.title}` : task.title
-    const dtstamp  = toIcalUtc(task.updated_at as string ?? task.created_at as string ?? new Date().toISOString())
+    const dtstamp  = toIcalUtc((task.updated_at ?? task.created_at ?? new Date().toISOString()) as string)
     const lastMod  = dtstamp
 
     lines.push(

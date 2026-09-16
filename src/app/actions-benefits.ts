@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-export type { SchemeType } from '@/lib/benefit-types'
 import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
+export type { SchemeType } from '@/lib/benefit-types'
 
 // ─── Schemes ──────────────────────────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ export async function removeMembership(
 
   const { error } = await supabase
     .from('benefit_memberships')
-    .update({ ended_date: date, end_reason: reason, updated_at: new Date().toISOString() })
+    .update({ ended_date: date, end_reason: reason, updated_at: new Date().toISOString() } as any)
     .eq('id', membershipId)
 
   if (error) return { error: error.message }
