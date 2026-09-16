@@ -31,7 +31,8 @@ const valueLabel: Record<string, string> = {
 
 type SubTask = {
   id: string; title: string; status: string; assigned_to: string | null
-  due_date: string | null; priority: 'low' | 'medium' | 'high'; assignee: BasicProfile | null
+  due_date: string | null; priority: 'low' | 'medium' | 'high'
+  description: string | null; assignee: BasicProfile | null
 }
 
 type TaskWithSubs = {
@@ -128,6 +129,8 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   const [editSubTitle, setEditSubTitle] = useState('')
   const [editSubDue, setEditSubDue] = useState('')
   const [editSubPriority, setEditSubPriority] = useState('medium')
+  const [editSubAssignee, setEditSubAssignee] = useState('')
+  const [editSubDescription, setEditSubDescription] = useState('')
   const [savingSubEdit, setSavingSubEdit] = useState(false)
 
   function startSubEdit(sub: SubTask) {
@@ -135,16 +138,25 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     setEditSubTitle(sub.title)
     setEditSubDue(sub.due_date ?? '')
     setEditSubPriority(sub.priority)
+    setEditSubAssignee(sub.assigned_to ?? '')
+    setEditSubDescription(sub.description ?? '')
   }
 
-  async function saveSubEdit() {
+  async function saveSubEdit(originalSub: SubTask) {
     if (!editingSubId) return
     setSavingSubEdit(true)
-    await updateTask(editingSubId, clientId, {
-      title:    editSubTitle.trim() || 'Untitled',
-      due_date: editSubDue || null,
-      priority: editSubPriority,
-    })
+    const promises: Promise<any>[] = [
+      updateTask(editingSubId, clientId, {
+        title:       editSubTitle.trim() || 'Untitled',
+        due_date:    editSubDue || null,
+        priority:    editSubPriority,
+        description: editSubDescription.trim() || null,
+      }),
+    ]
+    if (editSubAssignee !== (originalSub.assigned_to ?? '')) {
+      promises.push(reassignTask(editingSubId, editSubAssignee, clientId))
+    }
+    await Promise.all(promises)
     setSavingSubEdit(false)
     setEditingSubId(null)
     router.refresh()
@@ -530,7 +542,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                             value={editSubTitle} onChange={e => setEditSubTitle(e.target.value)}
                             className="w-full px-2 py-1 text-xs rounded-lg border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
                             autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter') saveSubEdit(); if (e.key === 'Escape') setEditingSubId(null) }}
+                            onKeyDown={e => { if (e.key === 'Escape') setEditingSubId(null) }}
                           />
                           <div className="grid grid-cols-2 gap-1.5">
                             <select value={editSubPriority} onChange={e => setEditSubPriority(e.target.value)}
@@ -540,8 +552,18 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                             <input type="date" value={editSubDue} onChange={e => setEditSubDue(e.target.value)}
                               className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
                           </div>
+                          <select value={editSubAssignee} onChange={e => setEditSubAssignee(e.target.value)}
+                            className="w-full px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
+                            <option value="">Unassigned</option>
+                            {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
+                          </select>
+                          <textarea
+                            value={editSubDescription} onChange={e => setEditSubDescription(e.target.value)}
+                            placeholder="Notes…" rows={2}
+                            className="w-full px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                          />
                           <div className="flex gap-1.5">
-                            <button onClick={saveSubEdit} disabled={savingSubEdit}
+                            <button onClick={() => saveSubEdit(sub)} disabled={savingSubEdit}
                               className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
                               <Check size={11} />{savingSubEdit ? 'Saving…' : 'Save'}
                             </button>

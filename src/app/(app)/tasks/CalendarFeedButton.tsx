@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarDays, Copy, Check } from 'lucide-react'
+import { CalendarDays, Copy, Check, X } from 'lucide-react'
 
 export default function CalendarFeedButton({ userId }: { userId: string }) {
-  const [open, setCopied] = useState(false)
-  const url = `https://wheb-crm.vercel.app/api/calendar?uid=${userId}`
+  const [copied, setCopied] = useState(false)
+  const [open, setOpen] = useState(false)
+  const url = `https://wheb-crm.vercel.app/api/calendar/${userId}`
 
   async function copy() {
     await navigator.clipboard.writeText(url)
@@ -14,21 +15,77 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="relative group">
+    <>
       <button
-        onClick={copy}
-        title="Copy calendar subscription URL"
+        onClick={() => setOpen(true)}
+        title="Subscribe to task deadlines in your calendar"
         className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all"
       >
-        {open ? <Check size={13} className="text-green-600" /> : <CalendarDays size={13} />}
-        {open ? 'Copied!' : 'Subscribe'}
+        <CalendarDays size={13} />
+        Subscribe
       </button>
-      {/* Tooltip */}
-      <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl z-50 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-        <p className="font-medium mb-1">Calendar subscription</p>
-        <p className="text-slate-300 leading-relaxed">Copy this URL and paste it into Outlook, Google Calendar, or Apple Calendar as a subscribed calendar. Your task deadlines will sync automatically.</p>
-        <p className="mt-2 font-mono text-slate-400 break-all text-[10px]">{url}</p>
-      </div>
-    </div>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Subscribe to your task calendar</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Your open task deadlines as an always-updated calendar</p>
+                </div>
+                <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 ml-4 shrink-0">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* URL box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2 mb-5">
+                <span className="flex-1 text-xs font-mono text-slate-600 break-all">{url}</span>
+                <button
+                  onClick={copy}
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-1.5">Outlook desktop</p>
+                  <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
+                    <li>Copy the URL above</li>
+                    <li>Go to <span className="font-medium">File → Account Settings → Account Settings</span></li>
+                    <li>Click the <span className="font-medium">Internet Calendars</span> tab</li>
+                    <li>Click <span className="font-medium">New…</span> and paste the URL</li>
+                    <li>Click <span className="font-medium">Add</span> then <span className="font-medium">OK</span></li>
+                  </ol>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-1.5">Google Calendar</p>
+                  <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
+                    <li>Copy the URL above</li>
+                    <li>Open Google Calendar and click <span className="font-medium">+ Other calendars → From URL</span></li>
+                    <li>Paste the URL and click <span className="font-medium">Add calendar</span></li>
+                  </ol>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-1.5">Apple Calendar (Mac / iPhone)</p>
+                  <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
+                    <li>Copy the URL above</li>
+                    <li>Go to <span className="font-medium">File → New Calendar Subscription</span> (Mac) or <span className="font-medium">Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar</span> (iPhone)</li>
+                    <li>Paste the URL and tap <span className="font-medium">Subscribe</span></li>
+                  </ol>
+                </div>
+                <p className="text-xs text-slate-400">The calendar updates every hour. Only your assigned open tasks with a due date appear.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   )
 }

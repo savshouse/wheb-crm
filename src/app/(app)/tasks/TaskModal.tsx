@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -65,6 +65,10 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [subEdits, setSubEdits]       = useState<Record<string, SubEdit>>({})
   const [subSaving, setSubSaving]     = useState<string | null>(null)
 
+  // Audit history
+  const [history, setHistory]         = useState<any[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+
   // New sub-task form
   const [addingNew, setAddingNew]     = useState(false)
   const [newTitle, setNewTitle]       = useState('')
@@ -75,12 +79,21 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [newSaving, setNewSaving]     = useState(false)
 
   useEffect(() => {
-    createClient()
-      .from('tasks')
-      .select('id, title, status, priority, due_date, description, assigned_to')
-      .eq('parent_task_id', task.id)
-      .order('created_at')
-      .then(({ data }) => setSubTasks(data ?? []))
+    const supabase = createClient()
+    Promise.all([
+      supabase
+        .from('tasks')
+        .select('id, title, status, priority, due_date, description, assigned_to')
+        .eq('parent_task_id', task.id)
+        .order('created_at')
+        .then(({ data }) => setSubTasks(data ?? [])),
+      supabase
+        .from('task_history')
+        .select('id, action, old_value, new_value, note, created_at, performer:profiles!task_history_performed_by_fkey(full_name, email)')
+        .eq('task_id', task.id)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => setHistory(data ?? [])),
+    ])
   }, [task.id])
 
   useEffect(() => {
@@ -434,6 +447,51 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               )}
             </div>
           </div>
+          {/* ── Activity / audit history ────────────────────────── */}
+          {history.length > 0 && (
+            <div>
+              <button
+                onClick={() => setHistoryOpen(o => !o)}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <History size={12} />
+                Activity ({history.length})
+                {historyOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              </button>
+              {historyOpen && (
+                <div className="mt-2 border-l-2 border-slate-100 pl-3 space-y-2">
+                  {history.map(entry => (
+                    <div key={entry.id} className="text-xs text-slate-500 leading-snug">
+                      <span className="text-slate-400 tabular-nums">
+                        {format(parseISO(entry.created_at), 'd MMM yy HH:mm')}
+                      </span>
+                      {' · '}
+                      {entry.action === 'status_change' ? (
+                        <>
+                          <span className="text-slate-500">Status </span>
+                          <span className="font-medium text-slate-600">{entry.old_value ?? '—'}</span>
+                          <span className="text-slate-400"> → </span>
+                          <span className={`font-medium ${entry.new_value === 'completed' ? 'text-green-600' : entry.new_value === 'cancelled' ? 'text-slate-400' : entry.new_value === 'in_progress' ? 'text-blue-600' : 'text-slate-600'}`}>
+                            {entry.new_value ?? '—'}
+                          </span>
+                        </>
+                      ) : entry.action === 'reassigned' ? (
+                        <span className="font-medium text-slate-600">Reassigned</span>
+                      ) : entry.action === 'created' ? (
+                        <span className="font-medium text-slate-600">Created</span>
+                      ) : (
+                        <span className="font-medium text-slate-600">{entry.action}</span>
+                      )}
+                      {entry.performer && (
+                        <span className="text-slate-400"> by {(entry.performer as any).full_name ?? (entry.performer as any).email}</span>
+                      )}
+                      {entry.note && <span className="text-slate-400 italic"> — {entry.note}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

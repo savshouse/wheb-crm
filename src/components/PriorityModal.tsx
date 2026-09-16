@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { format, parseISO, isPast, isToday, isTomorrow } from 'date-fns'
 import { X, AlertCircle, Clock, Building2, User, CheckSquare, Check } from 'lucide-react'
 import { updateTaskStatus } from '@/app/actions'
+import TaskModal from '@/app/(app)/tasks/TaskModal'
 
 type Task = {
   id: string
@@ -14,8 +14,10 @@ type Task = {
   status: string
   due_date: string | null
   assigned_to: string | null
+  description: string | null
   client: { id: string; name: string } | null
   assignee: { id: string; full_name: string | null; email: string } | null
+  meeting: { title: string } | null
 }
 
 type Profile = { id: string; full_name: string | null; email: string }
@@ -47,7 +49,6 @@ function dueBadge(due: string | null) {
 }
 
 export default function PriorityModal({ currentUserId }: { currentUserId: string }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -55,6 +56,7 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
   const [tab, setTab] = useState<Tab>('all')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all')
   const [completing, setCompleting] = useState<string | null>(null)
+  const [modalTask, setModalTask] = useState<Task | null>(null)
 
   async function load() {
     setLoading(true)
@@ -62,8 +64,9 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
     const [{ data: taskData }, { data: profileData }] = await Promise.all([
       supabase
         .from('tasks')
-        .select('id, title, priority, status, due_date, assigned_to, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(id,full_name,email)')
+        .select('id, title, priority, status, due_date, assigned_to, description, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(id,full_name,email), meeting:meetings(title)')
         .in('status', ['open', 'in_progress'])
+        .is('parent_task_id', null)
         .order('due_date', { ascending: true, nullsFirst: false }),
       supabase.from('profiles').select('id, full_name, email').order('full_name'),
     ])
@@ -83,9 +86,8 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
   }
 
   function openTask(task: Task) {
-    if (!task.client) return
     setOpen(false)
-    router.push(`/clients/${task.client.id}`)
+    setModalTask(task)
   }
 
   const tabFiltered = tasks.filter(t => {
@@ -130,7 +132,7 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Priority tasks</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click a task to open the client record</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click a task to open and edit it</p>
               </div>
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={20} />
@@ -253,6 +255,18 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
             </div>
           </div>
         </div>
+      )}
+      {modalTask && (
+        <TaskModal
+          task={modalTask}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onClose={() => setModalTask(null)}
+          onSaved={(updated) => {
+            setModalTask(updated)
+            setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+          }}
+        />
       )}
     </>
   )
