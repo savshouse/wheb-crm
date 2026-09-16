@@ -102,6 +102,7 @@ export default function RelatedParties({
 
   if (clientType === 'individual') {
     return (
+      <>
       <div className="mb-5 space-y-3">
         {/* Employer */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -275,8 +276,8 @@ export default function RelatedParties({
           </div>
         </>
       )}
-    </div>
-  )
+      </>
+    )
   }
 
   // Corporate: show linked individuals as a table
