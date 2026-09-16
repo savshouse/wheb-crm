@@ -1,25 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
-import { CheckSquare, Clock, Building2, User } from 'lucide-react'
-import TaskStatusButton from './TaskStatusButton'
+import { CheckSquare } from 'lucide-react'
 import AddTaskButton from './AddTaskButton'
-import type { Task, Profile } from '@/lib/types'
-
-const priorityColour = {
-  high: 'bg-red-100 text-red-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-green-100 text-green-700',
-}
-
-function dueDateLabel(dateStr: string | null) {
-  if (!dateStr) return null
-  const d = parseISO(dateStr)
-  if (isPast(d) && !isToday(d)) return { label: `Overdue · ${format(d, 'd MMM')}`, cls: 'text-red-600 font-medium' }
-  if (isToday(d)) return { label: 'Due today', cls: 'text-amber-600 font-medium' }
-  if (isTomorrow(d)) return { label: 'Due tomorrow', cls: 'text-amber-500' }
-  return { label: format(d, 'd MMM'), cls: 'text-slate-500' }
-}
+import TasksClient from './TasksClient'
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const supabase = await createClient()
@@ -34,35 +18,42 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     .eq('id', user.id)
     .single()
 
-  const [{ data: myTasks }, { data: teamTasks }] = await Promise.all([
+  const [{ data: myTasks }, { data: teamTasks }, { data: profiles }] = await Promise.all([
     supabase
       .from('tasks')
-      .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)')
+      .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), sub_tasks(id,title,status,priority,due_date,assigned_to,assignee:profiles!sub_tasks_assigned_to_fkey(full_name,email))')
       .eq('assigned_to', user.id)
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false }),
     profile?.role !== 'staff'
       ? supabase
           .from('tasks')
-          .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)')
+          .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), sub_tasks(id,title,status,priority,due_date,assigned_to,assignee:profiles!sub_tasks_assigned_to_fkey(full_name,email))')
           .in('status', ['open', 'in_progress'])
-          .neq('assigned_to', user.id)
+          // When filter=team show ALL open tasks; otherwise show only others' tasks in the team section
           .order('due_date', { ascending: true, nullsFirst: false })
       : Promise.resolve({ data: [] }),
+    supabase.from('profiles').select('id, full_name, email').order('full_name'),
   ])
 
-  const overdueTasks = myTasks?.filter(t => {
+  // For the team section in normal view, exclude tasks already shown in "My tasks"
+  const myIds = new Set((myTasks ?? []).map((t: any) => t.id))
+  const teamDisplay = filter === 'team'
+    ? (teamTasks ?? [])                                        // all open tasks
+    : (teamTasks ?? []).filter((t: any) => !myIds.has(t.id)) // others' tasks only
+
+  const overdueTasks = (myTasks ?? []).filter((t: any) => {
     if (!t.due_date) return false
     const d = parseISO(t.due_date)
     return isPast(d) && !isToday(d)
-  }) ?? []
+  })
 
-  // When arriving from a dashboard filter link, show only the relevant subset
-  const myDisplay  = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
-  const showTeam   = filter !== 'mine' && filter !== 'overdue'
+  const myDisplay   = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
+  const showMine    = filter !== 'team'
+  const showTeam    = filter !== 'mine' && filter !== 'overdue' && profile?.role !== 'staff'
 
   const filterLabel = filter === 'overdue' ? 'Overdue tasks'
-    : filter === 'team' ? 'Team tasks'
+    : filter === 'team' ? 'All open tasks (team)'
     : null
 
   return (
@@ -76,7 +67,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                 <Link href="/tasks" className="ml-2 text-slate-400 hover:text-slate-600 underline text-xs">Clear</Link>
               </p>
             : <p className="text-sm text-slate-500 mt-0.5">
-                {myTasks?.length ?? 0} assigned to you · {teamTasks?.length ?? 0} assigned to others
+                {myTasks?.length ?? 0} assigned to you · {teamDisplay.length} assigned to others
               </p>
           }
         </div>
@@ -84,7 +75,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       </div>
 
       {/* My tasks (or overdue subset) */}
-      {filter !== 'team' && (
+      {showMine && (
         <section className="mb-8">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
             {filter === 'overdue' ? `Overdue (${myDisplay.length})` : `My tasks (${myDisplay.length})`}
@@ -97,79 +88,35 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {myDisplay.map(task => <TaskRow key={task.id} task={task} currentUserId={user.id} highlight={filter === 'overdue'} />)}
-            </div>
+            <TasksClient
+              tasks={myDisplay}
+              profiles={profiles ?? []}
+              currentUserId={user.id}
+              highlightOverdue={filter === 'overdue'}
+            />
           )}
         </section>
       )}
 
-      {/* Team tasks (managers/admins) */}
-      {showTeam && profile?.role !== 'staff' && (
+      {/* Team tasks */}
+      {showTeam && (
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            {filter === 'team' ? `Team tasks (${teamTasks?.length ?? 0})` : `Team tasks (${teamTasks?.length ?? 0})`}
+            {filter === 'team' ? `All open tasks (${teamDisplay.length})` : `Team tasks (${teamDisplay.length})`}
           </h2>
-          {!teamTasks?.length ? (
+          {!teamDisplay.length ? (
             <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
               <p className="text-slate-500 text-sm">No other open tasks</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {teamTasks.map(task => <TaskRow key={task.id} task={task} currentUserId={user.id} />)}
-            </div>
+            <TasksClient
+              tasks={teamDisplay}
+              profiles={profiles ?? []}
+              currentUserId={user.id}
+            />
           )}
         </section>
       )}
-    </div>
-  )
-}
-
-function TaskRow({ task, currentUserId, highlight }: { task: any; currentUserId: string; highlight?: boolean }) {
-  const due = dueDateLabel(task.due_date)
-
-  return (
-    <div className={`bg-white rounded-xl border p-4 flex items-start gap-4 transition-colors ${highlight ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-slate-300'}`}>
-      <TaskStatusButton taskId={task.id} clientId={task.client?.id} currentStatus={task.status} />
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-slate-900">{task.title}</p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              {task.client && (
-                <Link
-                  href={`/clients/${task.client.id}`}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-                >
-                  <Building2 size={11} />
-                  {task.client.name}
-                </Link>
-              )}
-              {task.assignee && (
-                <span className="flex items-center gap-1 text-xs text-slate-500">
-                  <User size={11} />
-                  {task.assignee.full_name ?? task.assignee.email}
-                </span>
-              )}
-              {due && (
-                <span className={`flex items-center gap-1 text-xs ${due.cls}`}>
-                  <Clock size={11} />
-                  {due.label}
-                </span>
-              )}
-              {task.meeting && (
-                <span className="text-xs text-slate-400">
-                  From: {task.meeting.title}
-                </span>
-              )}
-            </div>
-          </div>
-          <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${priorityColour[task.priority as keyof typeof priorityColour]}`}>
-            {task.priority}
-          </span>
-        </div>
-      </div>
     </div>
   )
 }
