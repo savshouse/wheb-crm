@@ -20,6 +20,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   const taskSelect = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
 
+  // When filter=team, show ALL open tasks regardless of role (matches the dashboard counter)
+  const fetchAllOpen = filter === 'team' || profile?.role !== 'staff'
+
   const [{ data: myTasks }, { data: teamTasks }, { data: profiles }] = await Promise.all([
     supabase
       .from('tasks')
@@ -28,7 +31,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       .is('parent_task_id', null)
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false }),
-    profile?.role !== 'staff'
+    fetchAllOpen
       ? supabase
           .from('tasks')
           .select(taskSelect)
@@ -53,7 +56,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   const myDisplay   = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
   const showMine    = filter !== 'team'
-  const showTeam    = filter !== 'mine' && filter !== 'overdue' && profile?.role !== 'staff'
+  // Always show team section when filter=team (bypasses staff role restriction to match dashboard count)
+  const showTeam    = filter === 'team' || (filter !== 'mine' && filter !== 'overdue' && profile?.role !== 'staff')
 
   const filterLabel = filter === 'overdue' ? 'Overdue tasks'
     : filter === 'team' ? 'All open tasks (team)'
