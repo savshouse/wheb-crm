@@ -109,6 +109,30 @@ body {
 .client-name:hover { text-decoration: underline; }
 .assignee-name { font-size: 13px; color: #475569; }
 
+/* Actions */
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.action-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s;
+}
+.action-btn:disabled { opacity: 0.5; cursor: default; }
+.btn-start    { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+.btn-complete { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.btn-reopen   { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.action-feedback { font-size: 12px; margin-top: 8px; }
+.feedback-ok  { color: #166534; }
+.feedback-err { color: #dc2626; }
+
 /* Sections */
 .section {
   background: white;

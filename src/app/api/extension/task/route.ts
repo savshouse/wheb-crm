@@ -17,12 +17,36 @@ export async function OPTIONS(req: NextRequest) {
       headers: {
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Allow-Methods': 'GET',
+        'Access-Control-Allow-Methods': 'GET, PATCH',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
     })
   }
   return new NextResponse(null, { status: 204 })
+}
+
+export async function PATCH(req: NextRequest) {
+  const origin = req.headers.get('origin') ?? ''
+  const headers = corsHeaders(origin)
+  const taskId = req.nextUrl.searchParams.get('id')
+  if (!taskId) return NextResponse.json({ error: 'Missing id' }, { status: 400, headers })
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
+
+  const body = await req.json()
+  const allowed = ['status']
+  const updates: Record<string, string> = {}
+  for (const key of allowed) {
+    if (body[key] !== undefined) updates[key] = body[key]
+  }
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400, headers })
+
+  updates.updated_at = new Date().toISOString()
+  const { error } = await supabase.from('tasks').update(updates).eq('id', taskId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers })
+  return NextResponse.json({ ok: true }, { headers })
 }
 
 export async function GET(req: NextRequest) {

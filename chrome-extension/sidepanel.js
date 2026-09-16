@@ -3,6 +3,78 @@ const TASK_API  = `${CRM_URL}/api/extension/task`
 
 const $ = id => document.getElementById(id)
 
+let currentTaskId = null
+let currentStatus = null
+
+async function updateStatus(newStatus, buttons) {
+  buttons.forEach(b => b.disabled = true)
+  try {
+    const res = await fetch(`${TASK_API}?id=${currentTaskId}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (!res.ok) throw new Error()
+    currentStatus = newStatus
+
+    // Update status badge
+    const sBadge = $('status-badge')
+    sBadge.textContent = STATUS_LABEL[newStatus] ?? newStatus
+    sBadge.className = `badge badge-${newStatus}`
+
+    // Rebuild action buttons for new status
+    renderActions(newStatus)
+
+    // Show brief confirmation
+    const fb = document.createElement('p')
+    fb.className = 'action-feedback feedback-ok'
+    fb.textContent = '✓ Updated'
+    $('actions').appendChild(fb)
+    setTimeout(() => fb.remove(), 2000)
+  } catch {
+    buttons.forEach(b => b.disabled = false)
+    const fb = document.createElement('p')
+    fb.className = 'action-feedback feedback-err'
+    fb.textContent = 'Failed to update — try again'
+    $('actions').appendChild(fb)
+    setTimeout(() => fb.remove(), 3000)
+  }
+}
+
+function renderActions(status) {
+  const container = $('actions')
+  container.innerHTML = ''
+  const btns = []
+
+  if (status === 'open') {
+    const start = makeBtn('Start working', 'action-btn btn-start')
+    const done  = makeBtn('Mark complete', 'action-btn btn-complete')
+    btns.push(start, done)
+    start.onclick = () => updateStatus('in_progress', btns)
+    done.onclick  = () => updateStatus('completed',   btns)
+  } else if (status === 'in_progress') {
+    const done   = makeBtn('Mark complete', 'action-btn btn-complete')
+    const reopen = makeBtn('Reopen',        'action-btn btn-reopen')
+    btns.push(done, reopen)
+    done.onclick   = () => updateStatus('completed', btns)
+    reopen.onclick = () => updateStatus('open',      btns)
+  } else if (status === 'completed' || status === 'cancelled') {
+    const reopen = makeBtn('Reopen', 'action-btn btn-reopen')
+    btns.push(reopen)
+    reopen.onclick = () => updateStatus('open', btns)
+  }
+
+  btns.forEach(b => container.appendChild(b))
+}
+
+function makeBtn(label, cls) {
+  const b = document.createElement('button')
+  b.textContent = label
+  b.className = cls
+  return b
+}
+
 const PRIO_LABEL = { high: 'High', medium: 'Medium', low: 'Low' }
 const STATUS_LABEL = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }
 
@@ -18,6 +90,9 @@ function formatDue(dateStr) {
 }
 
 function renderTask(task, subTasks) {
+  currentTaskId = task.id
+  currentStatus = task.status
+
   // CRM link
   $('open-crm').href = `${CRM_URL}/tasks?task=${task.id}`
 
@@ -82,6 +157,9 @@ function renderTask(task, subTasks) {
     })
     $('subtasks-section').classList.remove('hidden')
   }
+
+  // Action buttons
+  renderActions(task.status)
 
   $('loading').classList.add('hidden')
   $('detail').classList.remove('hidden')
