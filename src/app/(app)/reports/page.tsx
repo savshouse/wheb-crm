@@ -7,7 +7,8 @@ import { BarChart2, Calendar, CheckSquare, AlertCircle, Download, Search, X, Clo
 import Link from 'next/link'
 import SearchableSelect from '@/components/SearchableSelect'
 
-type ClientRow = { id: string; name: string; type: 'corporate' | 'individual'; employer_id: string | null }
+type ClientRow  = { id: string; name: string; type: 'corporate' | 'individual'; employer_id: string | null }
+type Profile    = { id: string; full_name: string | null; email: string }
 type Meeting = {
   id: string; title: string; meeting_date: string; notes: string | null
   creator: { full_name: string | null; email: string } | null
@@ -56,8 +57,10 @@ function exportCSV(filename: string, headers: string[], rows: string[][]) {
 }
 
 export default function ReportsPage() {
-  const [allClients, setAllClients] = useState<ClientRow[]>([])
-  const [subjectId, setSubjectId] = useState('')
+  const [allClients, setAllClients]   = useState<ClientRow[]>([])
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([])
+  const [subjectId, setSubjectId]     = useState('')
+  const [staffId, setStaffId]         = useState('')
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [dateTo, setDateTo]     = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
   const [preset, setPreset]     = useState<Preset>('this_month')
@@ -70,11 +73,11 @@ export default function ReportsPage() {
   const [taskStatus, setTaskStatus] = useState('all')
 
   useEffect(() => {
-    createClient()
-      .from('clients')
-      .select('id, name, type, employer_id')
-      .order('name')
+    const supabase = createClient()
+    supabase.from('clients').select('id, name, type, employer_id').order('name')
       .then(({ data }) => setAllClients((data ?? []) as ClientRow[]))
+    supabase.from('profiles').select('id, full_name, email').order('full_name')
+      .then(({ data }) => setAllProfiles((data ?? []) as Profile[]))
   }, [])
 
   function applyPreset(p: Preset) {
@@ -108,12 +111,16 @@ export default function ReportsPage() {
       meetingQ.eq('client_id', subjectId)
       taskQ.eq('client_id', subjectId)
     }
+    if (staffId) {
+      meetingQ.eq('created_by', staffId)
+      taskQ.eq('assigned_to', staffId)
+    }
 
     const [{ data: m }, { data: t }] = await Promise.all([meetingQ, taskQ])
     setMeetings((m ?? []) as unknown as Meeting[])
     setTasks((t ?? []) as unknown as Task[])
     setLoading(false)
-  }, [subjectId, dateFrom, dateTo])
+  }, [subjectId, staffId, dateFrom, dateTo])
 
   // Summary counts
   const totalMeetings  = meetings.length
@@ -131,7 +138,8 @@ export default function ReportsPage() {
     return true
   })
 
-  const subject = allClients.find(c => c.id === subjectId)
+  const subject     = allClients.find(c => c.id === subjectId)
+  const staffMember = allProfiles.find(p => p.id === staffId)
 
   const PRESETS: { key: Preset; label: string }[] = [
     { key: 'this_month', label: 'This month' },
@@ -236,6 +244,19 @@ export default function ReportsPage() {
               emptyOption="All clients & people"
             />
           </div>
+          <div className="flex-1 min-w-40">
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Staff member</label>
+            <SearchableSelect
+              options={allProfiles.map(p => ({
+                id: p.id,
+                label: p.full_name ?? p.email,
+              }))}
+              value={staffId}
+              onChange={setStaffId}
+              placeholder="All staff"
+              emptyOption="All staff"
+            />
+          </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1.5">From</label>
             <input
@@ -297,15 +318,19 @@ export default function ReportsPage() {
 
           {/* Report subject + date range label */}
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 flex items-center gap-2 flex-wrap">
               {subject ? (
                 <span className="flex items-center gap-1.5">
                   {subject.type === 'individual' ? <User size={14} /> : <Building2 size={14} />}
                   <strong>{subject.name}</strong>
                 </span>
               ) : <span>All clients & people</span>}
-              {' · '}
-              <span className="text-slate-400">{format(parseISO(dateFrom), 'd MMM yyyy')} – {format(parseISO(dateTo), 'd MMM yyyy')}</span>
+              {staffMember && (
+                <span className="flex items-center gap-1 text-blue-600">
+                  · <User size={13} /> <strong>{staffMember.full_name ?? staffMember.email}</strong>
+                </span>
+              )}
+              <span className="text-slate-400">· {format(parseISO(dateFrom), 'd MMM yyyy')} – {format(parseISO(dateTo), 'd MMM yyyy')}</span>
             </p>
           </div>
 
