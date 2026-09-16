@@ -13,6 +13,7 @@ import {
   Users,
   ChevronRight,
   LayoutTemplate,
+  BarChart2,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/clients', label: 'Companies', icon: Building2 },
   { href: '/people', label: 'People', icon: Users },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/reports', label: 'Reports', icon: BarChart2 },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
 ]
 
