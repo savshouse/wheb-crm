@@ -6,12 +6,12 @@ import AddTaskButton from './AddTaskButton'
 import TasksClient from './TasksClient'
 import CalendarFeedButton from './CalendarFeedButton'
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string; task?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { filter } = await searchParams
+  const { filter, task: taskId } = await searchParams
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -24,7 +24,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   // When filter=team, show ALL open tasks regardless of role (matches the dashboard counter)
   const fetchAllOpen = filter === 'team' || profile?.role !== 'staff'
 
-  const [{ data: myTasks }, { data: teamTasks }, { data: profiles }] = await Promise.all([
+  const [{ data: myTasks }, { data: teamTasks }, { data: profiles }, { data: linkedTask }] = await Promise.all([
     supabase
       .from('tasks')
       .select(taskSelect)
@@ -41,6 +41,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
           .order('due_date', { ascending: true, nullsFirst: false })
       : Promise.resolve({ data: [] }),
     supabase.from('profiles').select('id, full_name, email').order('full_name'),
+    taskId
+      ? supabase.from('tasks').select(taskSelect).eq('id', taskId).single()
+      : Promise.resolve({ data: null }),
   ])
 
   // For the team section in normal view, exclude tasks already shown in "My tasks"
@@ -104,6 +107,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               profiles={profiles ?? []}
               currentUserId={user.id}
               highlightOverdue={filter === 'overdue'}
+              initialTask={linkedTask ?? undefined}
             />
           )}
         </section>

@@ -80,7 +80,7 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
                     <li>Paste the URL and tap <span className="font-medium">Subscribe</span></li>
                   </ol>
                 </div>
-                <p className="text-xs text-slate-400">The calendar updates every hour. Only your assigned open tasks with a due date appear.</p>
+                <p className="text-xs text-slate-400">Updates every hour. Only your open tasks with a due date appear. Each item is set to 09:00 with a reminder — click the title in your calendar to open it directly in WHEB CRM.</p>
               </div>
             </div>
           </div>

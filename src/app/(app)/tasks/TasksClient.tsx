@@ -27,10 +27,11 @@ type Props = {
   profiles: any[]
   currentUserId: string
   highlightOverdue?: boolean
+  initialTask?: any
 }
 
-export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue }: Props) {
-  const [openTask, setOpenTask] = useState<any | null>(null)
+export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, initialTask }: Props) {
+  const [openTask, setOpenTask] = useState<any | null>(initialTask ?? null)
 
   return (
     <>
