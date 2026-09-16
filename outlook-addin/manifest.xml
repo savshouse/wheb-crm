@@ -1,20 +1,25 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<OfficeApp
-  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:type="MailApp">
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+           xsi:type="MailApp">
 
-  <!-- Replace this GUID with your own if you clone the add-in -->
-  <Id>a8f9b234-1c6d-4e87-a231-b8f9c345d678</Id>
-  <Version>1.0.0</Version>
-  <ProviderName>WHEB</ProviderName>
+  <Id>7f3a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Chrystie Savage Ltd</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
   <DisplayName DefaultValue="WHEB CRM" />
-  <Description DefaultValue="View client information and create tasks directly from your inbox." />
+  <Description DefaultValue="Look up clients, meetings and tasks from your inbox" />
 
-  <IconUrl DefaultValue="https://wheb-crm.vercel.app/favicon.ico" />
-  <HighResolutionIconUrl DefaultValue="https://wheb-crm.vercel.app/favicon.ico" />
+  <IconUrl DefaultValue="https://wheb-crm.vercel.app/icons/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://wheb-crm.vercel.app/icons/icon-192.png" />
   <SupportUrl DefaultValue="https://wheb-crm.vercel.app" />
+
+  <AppDomains>
+    <AppDomain>wheb-crm.vercel.app</AppDomain>
+    <AppDomain>gederjleajrtqvgcdiyp.supabase.co</AppDomain>
+  </AppDomains>
 
   <Hosts>
     <Host Name="Mailbox" />
@@ -29,15 +34,19 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://wheb-crm.vercel.app/outlook" />
-        <RequestedHeight>350</RequestedHeight>
+        <SourceLocation DefaultValue="https://wheb-crm.vercel.app/outlook-addin" />
+        <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
   </FormSettings>
 
   <Permissions>ReadItem</Permissions>
 
-  <!-- Activates when reading any email -->
-  <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Appointment" FormType="Read" />
+  </Rule>
+
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
 
 </OfficeApp>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WHEB CRM</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <img src="icons/icon-32.png" alt="" class="logo" />
+    <div>
+      <div class="header-title">WHEB CRM</div>
+      <div class="header-sub" id="user-name">Loading…</div>
+    </div>
+    <a href="https://wheb-crm.vercel.app" target="_blank" class="open-btn" title="Open CRM">↗</a>
+  </div>
+
+  <!-- Not logged in state -->
+  <div id="not-logged-in" class="state hidden">
+    <div class="empty-icon">🔒</div>
+    <p class="empty-text">Log in to WHEB CRM to see your tasks</p>
+    <a href="https://wheb-crm.vercel.app/login" target="_blank" class="btn-primary">Log in</a>
+  </div>
+
+  <!-- Loading state -->
+  <div id="loading" class="state">
+    <div class="spinner"></div>
+    <p class="empty-text">Loading tasks…</p>
+  </div>
+
+  <!-- Main content -->
+  <div id="content" class="hidden">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat stat-red">
+        <div class="stat-num" id="stat-overdue">0</div>
+        <div class="stat-label">Overdue</div>
+      </div>
+      <div class="stat stat-amber">
+        <div class="stat-num" id="stat-today">0</div>
+        <div class="stat-label">Due today</div>
+      </div>
+      <div class="stat stat-blue">
+        <div class="stat-num" id="stat-open">0</div>
+        <div class="stat-label">Open</div>
+      </div>
+    </div>
+
+    <!-- Task list -->
+    <div class="section-label">Your tasks</div>
+    <div id="task-list" class="task-list"></div>
+
+    <div id="no-tasks" class="empty hidden">
+      <div class="empty-icon">✅</div>
+      <p class="empty-text">All clear — no open tasks</p>
+    </div>
+  </div>
+
+  <!-- Quick links -->
+  <div class="quick-links">
+    <a href="https://wheb-crm.vercel.app/tasks" target="_blank" class="quick-link">Tasks</a>
+    <a href="https://wheb-crm.vercel.app/clients" target="_blank" class="quick-link">Clients</a>
+    <a href="https://wheb-crm.vercel.app/meetings" target="_blank" class="quick-link">Meetings</a>
+    <a href="https://wheb-crm.vercel.app/reports" target="_blank" class="quick-link">Reports</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
