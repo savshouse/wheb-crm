@@ -1,9 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
-import { CheckSquare } from 'lucide-react'
+import { parseISO, isToday, isPast, subDays } from 'date-fns'
 import AddTaskButton from './AddTaskButton'
-import TasksClient from './TasksClient'
+import TasksPageClient from './TasksPageClient'
 import CalendarFeedButton from './CalendarFeedButton'
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string; task?: string }> }) {
@@ -21,10 +20,11 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   const taskSelect = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
 
-  // When filter=team, show ALL open tasks regardless of role (matches the dashboard counter)
   const fetchAllOpen = filter === 'team' || profile?.role !== 'staff'
 
-  const [{ data: myTasks }, { data: teamTasks }, { data: profiles }, { data: linkedTask }] = await Promise.all([
+  const thirtyDaysAgo = subDays(new Date(), 30).toISOString()
+
+  const [{ data: myTasks }, { data: teamTasks }, { data: profiles }, { data: linkedTask }, { data: completedTasks }] = await Promise.all([
     supabase
       .from('tasks')
       .select(taskSelect)
@@ -44,13 +44,20 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     taskId
       ? supabase.from('tasks').select(taskSelect).eq('id', taskId).single()
       : Promise.resolve({ data: null }),
+    supabase
+      .from('tasks')
+      .select(taskSelect)
+      .eq('status', 'completed')
+      .is('parent_task_id', null)
+      .gte('updated_at', thirtyDaysAgo)
+      .order('updated_at', { ascending: false })
+      .limit(60),
   ])
 
-  // For the team section in normal view, exclude tasks already shown in "My tasks"
   const myIds = new Set((myTasks ?? []).map((t: any) => t.id))
   const teamDisplay = filter === 'team'
-    ? (teamTasks ?? [])                                        // all open tasks
-    : (teamTasks ?? []).filter((t: any) => !myIds.has(t.id)) // others' tasks only
+    ? (teamTasks ?? [])
+    : (teamTasks ?? []).filter((t: any) => !myIds.has(t.id))
 
   const overdueTasks = (myTasks ?? []).filter((t: any) => {
     if (!t.due_date) return false
@@ -58,10 +65,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     return isPast(d) && !isToday(d)
   })
 
-  const myDisplay   = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
-  const showMine    = filter !== 'team'
-  // Always show team section when filter=team (bypasses staff role restriction to match dashboard count)
-  const showTeam    = filter === 'team' || (filter !== 'mine' && filter !== 'overdue' && profile?.role !== 'staff')
+  const myDisplay = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
+  const showMine  = filter !== 'team'
+  const showTeam  = filter === 'team' || (filter !== 'mine' && filter !== 'overdue' && profile?.role !== 'staff')
 
   const filterLabel = filter === 'overdue' ? 'Overdue tasks'
     : filter === 'team' ? 'All open tasks (team)'
@@ -88,50 +94,18 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         </div>
       </div>
 
-      {/* My tasks (or overdue subset) */}
-      {showMine && (
-        <section className="mb-8">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            {filter === 'overdue' ? `Overdue (${myDisplay.length})` : `My tasks (${myDisplay.length})`}
-          </h2>
-          {!myDisplay.length ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-              <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-slate-500 text-sm">
-                {filter === 'overdue' ? 'No overdue tasks' : 'No tasks assigned to you'}
-              </p>
-            </div>
-          ) : (
-            <TasksClient
-              tasks={myDisplay}
-              profiles={profiles ?? []}
-              currentUserId={user.id}
-              highlightOverdue={filter === 'overdue'}
-              initialTask={linkedTask ?? undefined}
-            />
-          )}
-        </section>
-      )}
-
-      {/* Team tasks */}
-      {showTeam && (
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            {filter === 'team' ? `All open tasks (${teamDisplay.length})` : `Team tasks (${teamDisplay.length})`}
-          </h2>
-          {!teamDisplay.length ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
-              <p className="text-slate-500 text-sm">No other open tasks</p>
-            </div>
-          ) : (
-            <TasksClient
-              tasks={teamDisplay}
-              profiles={profiles ?? []}
-              currentUserId={user.id}
-            />
-          )}
-        </section>
-      )}
+      <TasksPageClient
+        myTasks={myDisplay}
+        teamTasks={teamDisplay}
+        completedTasks={completedTasks ?? []}
+        profiles={profiles ?? []}
+        currentUserId={user.id}
+        highlightOverdue={filter === 'overdue'}
+        initialTask={linkedTask ?? undefined}
+        filter={filter}
+        showMine={showMine}
+        showTeam={showTeam}
+      />
     </div>
   )
 }
