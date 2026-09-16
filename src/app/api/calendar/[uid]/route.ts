@@ -48,7 +48,7 @@ export async function GET(
     subsByParent[sub.parent_task_id].push(sub)
   }
 
-  const now = format(new Date(), "yyyyMMdd'T'HHmmss'Z'")
+    const now = format(new Date(), "yyyyMMdd'T'HHmmss'Z'")
   const calName = `WHEB Tasks – ${profile.full_name ?? profile.email}`
 
   const lines: string[] = [
@@ -59,33 +59,14 @@ export async function GET(
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${esc(calName)}`,
     'X-WR-CALDESC:Task deadlines from WHEB CRM',
-    'X-WR-TIMEZONE:Europe/London',
     'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
     'X-PUBLISHED-TTL:PT1H',
-    // Timezone definition so timed events resolve correctly
-    'BEGIN:VTIMEZONE',
-    'TZID:Europe/London',
-    'BEGIN:STANDARD',
-    'DTSTART:19701025T020000',
-    'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10',
-    'TZNAME:GMT',
-    'TZOFFSETFROM:+0100',
-    'TZOFFSETTO:+0000',
-    'END:STANDARD',
-    'BEGIN:DAYLIGHT',
-    'DTSTART:19700329T010000',
-    'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3',
-    'TZNAME:BST',
-    'TZOFFSETFROM:+0000',
-    'TZOFFSETTO:+0100',
-    'END:DAYLIGHT',
-    'END:VTIMEZONE',
   ]
 
   for (const task of tasks ?? []) {
-    const dateBase  = (task.due_date as string).replace(/-/g, '')
-    const dtStart   = `${dateBase}T090000`
-    const dtEnd     = `${dateBase}T093000`
+    const dateStr  = task.due_date as string
+    const dtStart  = londonToUtcZ(dateStr, 9, 0)
+    const dtEnd    = londonToUtcZ(dateStr, 9, 30)
     const client    = (task.client as any)?.name as string | undefined
     const assignee  = (task.assignee as any)
     const assigneeName = assignee?.full_name ?? assignee?.email ?? 'Unassigned'
@@ -118,8 +99,8 @@ export async function GET(
       'BEGIN:VEVENT',
       `UID:wheb-task-${task.id}@wheb-crm.vercel.app`,
       `DTSTAMP:${now}`,
-      `DTSTART;TZID=Europe/London:${dtStart}`,
-      `DTEND;TZID=Europe/London:${dtEnd}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
       `SUMMARY:${esc(summary)}`,
       `DESCRIPTION:${esc(descParts.join('\n'))}`,
       `PRIORITY:${prio}`,
@@ -143,6 +124,23 @@ export async function GET(
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   })
+}
+
+// Convert a Europe/London local time to a UTC Z-suffix iCal timestamp.
+// Uses Intl to resolve the BST (+01) / GMT (+00) offset for that specific date.
+function londonToUtcZ(dateStr: string, hour: number, minute: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  // Sample midday UTC on the date to safely determine the London offset
+  const midday = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  const londonHour = +new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour: 'numeric', hour12: false,
+  }).format(midday)
+  const offsetHours = londonHour - 12  // 1 in BST, 0 in GMT
+  const totalMinutes = hour * 60 + minute - offsetHours * 60
+  const utcH = Math.floor(totalMinutes / 60)
+  const utcM = totalMinutes % 60
+  const base = dateStr.replace(/-/g, '')
+  return `${base}T${String(utcH).padStart(2, '0')}${String(utcM).padStart(2, '0')}00Z`
 }
 
 function esc(s: string): string {

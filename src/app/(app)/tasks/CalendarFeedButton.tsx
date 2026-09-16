@@ -1,12 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CalendarDays, Copy, Check, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import SearchableSelect from '@/components/SearchableSelect'
+
+type Profile = { id: string; full_name: string | null; email: string }
 
 export default function CalendarFeedButton({ userId }: { userId: string }) {
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(false)
-  const url = `https://wheb-crm.vercel.app/api/calendar/${userId}`
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [selectedUid, setSelectedUid] = useState(userId)
+
+  useEffect(() => {
+    if (!open) return
+    createClient()
+      .from('profiles')
+      .select('id, full_name, email')
+      .order('full_name')
+      .then(({ data }) => setProfiles(data ?? []))
+  }, [open])
+
+  const selectedProfile = profiles.find(p => p.id === selectedUid)
+  const displayName = selectedProfile
+    ? (selectedProfile.full_name ?? selectedProfile.email)
+    : null
+
+  const url = `https://wheb-crm.vercel.app/api/calendar/${selectedUid}`
 
   async function copy() {
     await navigator.clipboard.writeText(url)
@@ -14,10 +35,15 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function handleOpen() {
+    setSelectedUid(userId)
+    setOpen(true)
+  }
+
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         title="Subscribe to task deadlines in your calendar"
         className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all"
       >
@@ -30,14 +56,37 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setOpen(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-5">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Subscribe to your task calendar</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Your open task deadlines as an always-updated calendar</p>
+                  <h3 className="text-base font-bold text-slate-900">Subscribe to task calendar</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Task deadlines as an always-updated calendar feed</p>
                 </div>
                 <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 ml-4 shrink-0">
                   <X size={18} />
                 </button>
+              </div>
+
+              {/* Person selector */}
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Whose tasks?</label>
+                {profiles.length > 0 ? (
+                  <SearchableSelect
+                    options={profiles.map(p => ({
+                      id: p.id,
+                      label: (p.full_name ?? p.email) + (p.id === userId ? ' (you)' : ''),
+                    }))}
+                    value={selectedUid}
+                    onChange={setSelectedUid}
+                    placeholder="Search team members…"
+                  />
+                ) : (
+                  <div className="h-9 rounded-lg border border-slate-200 bg-slate-50 animate-pulse" />
+                )}
+                {selectedUid !== userId && displayName && (
+                  <p className="text-xs text-amber-600 mt-1.5">
+                    Subscribing to {displayName}&apos;s tasks — useful for cover when someone is away.
+                  </p>
+                )}
               </div>
 
               {/* URL box */}
@@ -80,7 +129,7 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
                     <li>Paste the URL and tap <span className="font-medium">Subscribe</span></li>
                   </ol>
                 </div>
-                <p className="text-xs text-slate-400">Updates every hour. Only your open tasks with a due date appear. Each item is set to 09:00 with a reminder — click the title in your calendar to open it directly in WHEB CRM.</p>
+                <p className="text-xs text-slate-400">Updates hourly. Events appear at 09:00 with a reminder. Click any event title to open the task directly in WHEB CRM.</p>
               </div>
             </div>
           </div>

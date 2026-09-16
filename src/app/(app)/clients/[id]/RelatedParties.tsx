@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Building2, User, Plus, X, ArrowRight } from 'lucide-react'
 import { addRelationship, removeRelationship, updateEmployer } from '@/app/actions'
+import SearchableSelect from '@/components/SearchableSelect'
 
 const RELATIONSHIP_TYPES = [
   'Spouse', 'Partner', 'Civil Partner',
@@ -118,17 +119,15 @@ export default function RelatedParties({
         </div>
 
         {showChangeEmployer && (
-          <div className="flex items-center gap-2 pl-2">
-            <select
+          <div className="flex items-center gap-2 pl-2 flex-wrap">
+            <SearchableSelect
+              options={allCorporates.map(c => ({ id: c.id, label: c.name }))}
               value={employerId}
-              onChange={e => setEmployerId(e.target.value)}
-              className="text-sm rounded-lg border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">— No employer —</option>
-              {allCorporates.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              onChange={setEmployerId}
+              placeholder="Search companies…"
+              emptyOption="— No employer —"
+              className="w-64"
+            />
             <button
               onClick={handleChangeEmployer}
               disabled={isPending}
@@ -183,16 +182,13 @@ export default function RelatedParties({
             </button>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              <select
+              <SearchableSelect
+                options={available.map(p => ({ id: p.id, label: p.name }))}
                 value={relatedId}
-                onChange={e => setRelatedId(e.target.value)}
-                className="text-sm rounded-lg border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select person...</option>
-                {available.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={setRelatedId}
+                placeholder="Search people…"
+                className="w-56"
+              />
               <select
                 value={relType}
                 onChange={e => setRelType(e.target.value)}
