@@ -293,12 +293,23 @@ body {
 .dot-high   { background: #ef4444; }
 .dot-medium { background: #f59e0b; }
 .dot-low    { background: #22c55e; }
-.subtask-title {
+.subtask-title-btn {
   flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
   font-size: 13px;
   color: #334155;
+  cursor: pointer;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.subtask-title.done { color: #94a3b8; text-decoration: line-through; }
+.subtask-title-btn:hover { color: #2563eb; text-decoration: underline; }
+.subtask-title-btn.done { color: #94a3b8; text-decoration: line-through; }
+.subtask-title-btn.done:hover { color: #94a3b8; }
 .subtask-due { font-size: 11px; color: #94a3b8; }
 
 /* Outline button */

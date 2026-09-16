@@ -5,6 +5,7 @@ const COMMENTS_API = `${CRM_URL}/api/extension/comments`
 const $ = id => document.getElementById(id)
 
 let currentTaskId = null
+let parentTaskId  = null  // set when drilling into a sub-task
 
 // ─── Lookup tables ───────────────────────────────────────────────
 const PRIO_LABEL   = { high: 'High', medium: 'Medium', low: 'Low' }
@@ -108,6 +109,32 @@ function renderActions(status) {
   btns.forEach(b => container.appendChild(b))
 }
 
+// ─── Navigation ──────────────────────────────────────────────────
+function resetDetail() {
+  $('client-row').classList.add('hidden')
+  $('assignee-row').classList.add('hidden')
+  $('subtasks-section').classList.add('hidden')
+  $('actions').innerHTML = ''
+  $('subtask-list').innerHTML = ''
+  $('comment-list').innerHTML = ''
+  $('comment-input').value = ''
+  $('notes-edit').classList.add('hidden')
+  const descEl = $('description')
+  descEl.textContent = 'No notes — click ✏ to add'
+  descEl.classList.add('empty-hint')
+  descEl.classList.remove('hidden')
+  delete descEl.dataset.value
+  $('due-badge').className = 'hidden'
+}
+
+function navigateToSubTask(subId) {
+  parentTaskId = currentTaskId
+  $('loading').classList.remove('hidden')
+  $('detail').classList.add('hidden')
+  resetDetail()
+  loadTask(subId)
+}
+
 // ─── Sub-tasks ───────────────────────────────────────────────────
 function renderSubTasks(subTasks) {
   if (!subTasks?.length) return
@@ -127,13 +154,16 @@ function renderSubTasks(subTasks) {
     const dot = document.createElement('div')
     dot.className = `subtask-dot dot-${sub.priority}`
 
-    const title = document.createElement('span')
-    title.className = `subtask-title${sub.status === 'completed' ? ' done' : ''}`
-    title.textContent = sub.title
+    // Clickable title → drills into that sub-task
+    const titleBtn = document.createElement('button')
+    titleBtn.className = `subtask-title-btn${sub.status === 'completed' ? ' done' : ''}`
+    titleBtn.textContent = sub.title
+    titleBtn.title = 'View sub-task details'
+    titleBtn.addEventListener('click', () => navigateToSubTask(sub.id))
 
     div.appendChild(statusBtn)
     div.appendChild(dot)
-    div.appendChild(title)
+    div.appendChild(titleBtn)
 
     const due = sub.due_date ? formatDue(sub.due_date) : null
     if (due) {
@@ -159,9 +189,9 @@ function renderSubTasks(subTasks) {
           statusBtn.className = `subtask-status-btn subtask-status-${next}`
           statusBtn.textContent = STATUS_ICON[next] ?? ''
           statusBtn.title = `${STATUS_LABEL[next]} — click to advance`
-          title.className = `subtask-title${next === 'completed' ? ' done' : ''}`
+          titleBtn.className = `subtask-title-btn${next === 'completed' ? ' done' : ''}`
         })
-        .catch(() => { /* silent — button re-enables below */ })
+        .catch(() => {})
         .finally(() => { statusBtn.disabled = false })
     })
 
@@ -370,7 +400,18 @@ async function loadTask(taskId) {
 }
 
 async function init() {
-  $('btn-back').addEventListener('click', () => window.close())
+  $('btn-back').addEventListener('click', () => {
+    if (parentTaskId) {
+      const pid = parentTaskId
+      parentTaskId = null
+      $('loading').classList.remove('hidden')
+      $('detail').classList.add('hidden')
+      resetDetail()
+      loadTask(pid)
+    } else {
+      window.close()
+    }
+  })
 
   const result = await chrome.storage.session.get('selectedTask')
   const stored = result?.selectedTask

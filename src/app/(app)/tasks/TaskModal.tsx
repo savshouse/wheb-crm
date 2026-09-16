@@ -69,6 +69,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [history, setHistory]         = useState<any[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
 
+  // Comments
+  const [comments, setComments]       = useState<any[]>([])
+  const [commentText, setCommentText] = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
+
   // New sub-task form
   const [addingNew, setAddingNew]     = useState(false)
   const [newTitle, setNewTitle]       = useState('')
@@ -80,20 +85,36 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
 
   useEffect(() => {
     const supabase = createClient()
-    Promise.all([
-      supabase
-        .from('tasks')
-        .select('id, title, status, priority, due_date, description, assigned_to')
-        .eq('parent_task_id', task.id)
-        .order('created_at')
-        .then(({ data }) => setSubTasks(data ?? [])),
-      supabase
-        .from('task_history')
-        .select('id, action, old_value, new_value, note, created_at, performer:profiles!task_history_performed_by_fkey(full_name, email)')
+
+    supabase
+      .from('tasks')
+      .select('id, title, status, priority, due_date, description, assigned_to')
+      .eq('parent_task_id', task.id)
+      .order('created_at')
+      .then(({ data }) => setSubTasks(data ?? []))
+
+    supabase
+      .from('task_history')
+      .select('id, action, old_value, new_value, note, created_at, performer:profiles!task_history_performed_by_fkey(full_name, email)')
+      .eq('task_id', task.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setHistory(data ?? []))
+
+    ;(async () => {
+      const { data: rows } = await supabase
+        .from('task_comments')
+        .select('id, content, created_at, user_id')
         .eq('task_id', task.id)
         .order('created_at', { ascending: false })
-        .then(({ data }) => setHistory(data ?? [])),
-    ])
+      const list = rows ?? []
+      const ids = [...new Set(list.map((c: any) => c.user_id as string))]
+      const profMap: Record<string, any> = {}
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name, email').in('id', ids)
+        ;(profs ?? []).forEach((p: any) => { profMap[p.id] = p })
+      }
+      setComments(list.map((c: any) => ({ ...c, commenter: profMap[c.user_id] ?? null })))
+    })()
   }, [task.id])
 
   useEffect(() => {
@@ -103,6 +124,24 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   }, [onClose])
 
   useEffect(() => { setDirty(true) }, [title, priority, dueDate, description])
+
+  // ── Add comment ─────────────────────────────────────────────
+  async function handleAddComment() {
+    if (!commentText.trim()) return
+    setCommentSaving(true)
+    const supabase = createClient()
+    const { data: row } = await supabase
+      .from('task_comments')
+      .insert({ task_id: task.id, user_id: currentUserId, content: commentText.trim() })
+      .select('id, content, created_at, user_id')
+      .single()
+    if (row) {
+      const { data: profile } = await supabase.from('profiles').select('id, full_name, email').eq('id', currentUserId).single()
+      setComments(prev => [{ ...row, commenter: profile ?? null }, ...prev])
+      setCommentText('')
+    }
+    setCommentSaving(false)
+  }
 
   // ── Parent save ──────────────────────────────────────────────
   async function handleSave() {
@@ -447,6 +486,47 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               )}
             </div>
           </div>
+          {/* ── Comments ────────────────────────────────────────── */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Comments</label>
+            <textarea
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddComment() }}
+              rows={2}
+              placeholder="Leave a comment… (Ctrl+Enter to send)"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-1.5"
+            />
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={handleAddComment}
+                disabled={commentSaving || !commentText.trim()}
+                className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40"
+              >
+                {commentSaving ? 'Adding…' : 'Add comment'}
+              </button>
+            </div>
+            {comments.length > 0 ? (
+              <div className="space-y-2 max-h-52 overflow-y-auto">
+                {comments.map(c => (
+                  <div key={c.id} className="bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="text-xs font-semibold text-slate-700">
+                        {c.commenter?.full_name ?? c.commenter?.email ?? 'Unknown'}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {format(parseISO(c.created_at), 'd MMM yy HH:mm')}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{c.content}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">No comments yet</p>
+            )}
+          </div>
+
           {/* ── Activity / audit history ────────────────────────── */}
           {history.length > 0 && (
             <div>
