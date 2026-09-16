@@ -4,6 +4,7 @@ import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
 import { CheckSquare } from 'lucide-react'
 import AddTaskButton from './AddTaskButton'
 import TasksClient from './TasksClient'
+import CalendarFeedButton from './CalendarFeedButton'
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const supabase = await createClient()
@@ -78,7 +79,10 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               </p>
           }
         </div>
-        <AddTaskButton currentUserId={user.id} />
+        <div className="flex items-center gap-2">
+          <CalendarFeedButton userId={user.id} />
+          <AddTaskButton currentUserId={user.id} />
+        </div>
       </div>
 
       {/* My tasks (or overdue subset) */}
