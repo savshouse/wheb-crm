@@ -23,7 +23,6 @@ type ContribChange = {
   salary_at_calculation: number | null
   change_reason: string | null
   created_at: string
-  performer: { full_name: string | null; email: string } | null
 }
 
 type Membership = {
@@ -189,7 +188,7 @@ export default function PersonBenefits({
 
   async function fetchData() {
     const supabase = createClient()
-    const [{ data: mems }, { data: schemes }] = await Promise.all([
+    const [{ data: mems, error: memsErr }, { data: schemes }] = await Promise.all([
       supabase
         .from('benefit_memberships')
         .select(`
@@ -203,8 +202,7 @@ export default function PersonBenefits({
           contribution_changes:benefit_contribution_changes(
             id, effective_date, employer_contribution_pct, employer_contribution_gbp,
             employee_contribution_pct, employee_contribution_gbp,
-            salary_at_calculation, change_reason, created_at,
-            performer:profiles!benefit_contribution_changes_created_by_fkey(full_name, email)
+            salary_at_calculation, change_reason, created_at
           )
         `)
         .eq('client_id', clientId)
@@ -213,6 +211,7 @@ export default function PersonBenefits({
         ? supabase.from('benefit_schemes').select('id, scheme_type, scheme_name, provider').eq('employer_id', employerId).eq('is_active', true).order('scheme_type')
         : Promise.resolve({ data: [] }),
     ])
+    if (memsErr) console.error('PersonBenefits fetch error:', memsErr)
     setMemberships((mems ?? []) as unknown as Membership[])
     setEmpSchemes((schemes ?? []) as EmployerScheme[])
   }
@@ -376,7 +375,6 @@ export default function PersonBenefits({
                                   {c.salary_at_calculation && <span className="text-slate-400 ml-2">on £{c.salary_at_calculation.toLocaleString('en-GB')}</span>}
                                   {c.change_reason && <span className="text-slate-500 ml-2">— {c.change_reason}</span>}
                                 </div>
-                                {c.performer && <span className="text-slate-400 shrink-0">{c.performer.full_name ?? c.performer.email}</span>}
                               </div>
                             ))}
                         </div>
