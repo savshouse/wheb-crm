@@ -24,6 +24,8 @@ type Props = {
     employer_id: string | null
     date_of_birth: string | null
     ni_number: string | null
+    papercloud_id: string | null
+    salary: number | null
   }
   corporates: Corporate[]
 }
@@ -141,6 +143,20 @@ export default function EditClientForm({ client, corporates }: Props) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Address</label>
             <input name="address" defaultValue={client.address ?? ''} className={inputClass} placeholder="123 Business Park, London" />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Papercloud ID</label>
+            <input name="papercloud_id" defaultValue={client.papercloud_id ?? ''} className={inputClass} placeholder="e.g. 1856" />
+            <p className="text-xs text-slate-400 mt-1">Last digits of the Papercloud URL</p>
+          </div>
+
+          {isIndividual && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Annual salary (£)</label>
+              <input name="salary" type="number" min="0" step="0.01" defaultValue={client.salary ?? ''} className={inputClass} placeholder="e.g. 45000" />
+              <p className="text-xs text-slate-400 mt-1">Used to calculate benefit contributions</p>
+            </div>
+          )}
 
           <div className="col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Notes</label>

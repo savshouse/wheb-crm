@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import {
   ArrowLeft, Plus, Calendar, CheckSquare, Clock,
-  User, Phone, Globe, Building2, Pencil,
+  User, Phone, Globe, Building2, Pencil, ExternalLink,
 } from 'lucide-react'
 import TaskPanel from './TaskPanel'
 import RelatedParties from './RelatedParties'
@@ -12,6 +12,8 @@ import ViewTracker from './ViewTracker'
 import CompletedTaskCard from './CompletedTaskCard'
 import MeetingHistoryToggle from './MeetingHistoryToggle'
 import ClientActivityLog from './ClientActivityLog'
+import PersonBenefits from './PersonBenefits'
+import EmployerBenefits from './EmployerBenefits'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -200,6 +202,15 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                     <Globe size={11} />Website
                   </a>
                 )}
+                {client.papercloud_id && (
+                  <a
+                    href={`https://www.papercloudelite.co.uk/client-file/${client.papercloud_id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-blue-600 text-blue-500"
+                  >
+                    <ExternalLink size={11} />Papercloud
+                  </a>
+                )}
                 {client.account_manager && (
                   <span className="flex items-center gap-1">
                     <User size={11} />
@@ -247,6 +258,17 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
 
           {/* Profile change audit log */}
           <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
+
+          {/* Benefits */}
+          {isIndividual ? (
+            <PersonBenefits
+              clientId={id}
+              salary={client.salary ?? null}
+              employerId={client.employer_id ?? null}
+            />
+          ) : (
+            <EmployerBenefits employerId={id} />
+          )}
 
           {/* Contacts strip */}
           {contacts && contacts.length > 0 && (

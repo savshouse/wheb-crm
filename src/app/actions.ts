@@ -54,6 +54,8 @@ export async function updateClient(
     notes:   (formData.get('notes') as string) || null,
   }
 
+  updates.papercloud_id = (formData.get('papercloud_id') as string) || null
+
   if (type === 'corporate') {
     updates.industry = (formData.get('industry') as string) || null
     updates.website  = (formData.get('website') as string) || null
@@ -62,6 +64,8 @@ export async function updateClient(
     updates.employer_id   = (formData.get('employer_id') as string) || null
     updates.date_of_birth = (formData.get('date_of_birth') as string) || null
     updates.ni_number     = (formData.get('ni_number') as string) || null
+    const salaryRaw = formData.get('salary') as string
+    updates.salary = salaryRaw ? parseFloat(salaryRaw) : null
   }
 
   const { error } = await supabase.from('clients').update(updates).eq('id', clientId)
@@ -72,6 +76,7 @@ export async function updateClient(
     name: 'Name', status: 'Status', phone: 'Phone', address: 'Address',
     notes: 'Notes', industry: 'Industry', website: 'Website',
     email: 'Email', date_of_birth: 'Date of birth', ni_number: 'NI number',
+    papercloud_id: 'Papercloud ID', salary: 'Salary',
   }
   const activityRows: any[] = []
 
