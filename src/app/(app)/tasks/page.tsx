@@ -21,10 +21,12 @@ function dueDateLabel(dateStr: string | null) {
   return { label: format(d, 'd MMM'), cls: 'text-slate-500' }
 }
 
-export default async function TasksPage() {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
+
+  const { filter } = await searchParams
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -49,41 +51,64 @@ export default async function TasksPage() {
       : Promise.resolve({ data: [] }),
   ])
 
+  const overdueTasks = myTasks?.filter(t => {
+    if (!t.due_date) return false
+    const d = parseISO(t.due_date)
+    return isPast(d) && !isToday(d)
+  }) ?? []
+
+  // When arriving from a dashboard filter link, show only the relevant subset
+  const myDisplay  = filter === 'overdue' ? overdueTasks : (myTasks ?? [])
+  const showTeam   = filter !== 'mine' && filter !== 'overdue'
+
+  const filterLabel = filter === 'overdue' ? 'Overdue tasks'
+    : filter === 'team' ? 'Team tasks'
+    : null
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {myTasks?.length ?? 0} assigned to you · {teamTasks?.length ?? 0} assigned to others
-          </p>
+          {filterLabel
+            ? <p className="text-sm text-blue-600 mt-0.5 flex items-center gap-1">
+                Filtered: {filterLabel}
+                <Link href="/tasks" className="ml-2 text-slate-400 hover:text-slate-600 underline text-xs">Clear</Link>
+              </p>
+            : <p className="text-sm text-slate-500 mt-0.5">
+                {myTasks?.length ?? 0} assigned to you · {teamTasks?.length ?? 0} assigned to others
+              </p>
+          }
         </div>
         <AddTaskButton currentUserId={user.id} />
       </div>
 
-      {/* My tasks */}
-      <section className="mb-8">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-          My tasks ({myTasks?.length ?? 0})
-        </h2>
-
-        {!myTasks?.length ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-            <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
-            <p className="text-slate-500 text-sm">No tasks assigned to you</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {myTasks.map(task => <TaskRow key={task.id} task={task} currentUserId={user.id} />)}
-          </div>
-        )}
-      </section>
+      {/* My tasks (or overdue subset) */}
+      {filter !== 'team' && (
+        <section className="mb-8">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+            {filter === 'overdue' ? `Overdue (${myDisplay.length})` : `My tasks (${myDisplay.length})`}
+          </h2>
+          {!myDisplay.length ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+              <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-slate-500 text-sm">
+                {filter === 'overdue' ? 'No overdue tasks' : 'No tasks assigned to you'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {myDisplay.map(task => <TaskRow key={task.id} task={task} currentUserId={user.id} highlight={filter === 'overdue'} />)}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Team tasks (managers/admins) */}
-      {profile?.role !== 'staff' && (
+      {showTeam && profile?.role !== 'staff' && (
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            Team tasks ({teamTasks?.length ?? 0})
+            {filter === 'team' ? `Team tasks (${teamTasks?.length ?? 0})` : `Team tasks (${teamTasks?.length ?? 0})`}
           </h2>
           {!teamTasks?.length ? (
             <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
@@ -100,11 +125,11 @@ export default async function TasksPage() {
   )
 }
 
-function TaskRow({ task, currentUserId }: { task: any; currentUserId: string }) {
+function TaskRow({ task, currentUserId, highlight }: { task: any; currentUserId: string; highlight?: boolean }) {
   const due = dueDateLabel(task.due_date)
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-start gap-4 hover:border-slate-300 transition-colors">
+    <div className={`bg-white rounded-xl border p-4 flex items-start gap-4 transition-colors ${highlight ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-slate-300'}`}>
       <TaskStatusButton taskId={task.id} clientId={task.client?.id} currentStatus={task.status} />
 
       <div className="flex-1 min-w-0">

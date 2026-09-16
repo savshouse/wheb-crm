@@ -85,9 +85,9 @@ export default async function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <Link href="/tasks?filter=mine" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all group">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
               <CheckSquare size={18} className="text-blue-600" />
             </div>
             <div>
@@ -95,10 +95,10 @@ export default async function DashboardPage() {
               <div className="text-xs text-slate-500">My open tasks</div>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        </Link>
+        <Link href="/tasks?filter=overdue" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-red-300 hover:shadow-sm transition-all group">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-red-100 group-hover:bg-red-200 flex items-center justify-center transition-colors">
               <AlertCircle size={18} className="text-red-600" />
             </div>
             <div>
@@ -106,10 +106,10 @@ export default async function DashboardPage() {
               <div className="text-xs text-slate-500">Overdue</div>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        </Link>
+        <Link href="/tasks?filter=team" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all group">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 group-hover:bg-slate-200 flex items-center justify-center transition-colors">
               <Clock size={18} className="text-slate-600" />
             </div>
             <div>
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
               <div className="text-xs text-slate-500">Total open (team)</div>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="grid grid-cols-5 gap-6">
