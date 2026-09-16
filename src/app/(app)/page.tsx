@@ -1,33 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
-import { CheckSquare, Building2, Clock, AlertCircle, Plus, Upload } from 'lucide-react'
-import type { Task } from '@/lib/types'
+import { isToday, isPast, parseISO } from 'date-fns'
+import { CheckSquare, AlertCircle, Plus, Upload, Clock } from 'lucide-react'
 import RecentlyViewed from '@/components/RecentlyViewed'
 import TeamTasks from '@/components/TeamTasks'
 import PriorityModal from '@/components/PriorityModal'
+import DashboardTaskList from '@/components/DashboardTaskList'
 
-function dueDateLabel(dateStr: string | null) {
-  if (!dateStr) return null
-  const d = parseISO(dateStr)
-  if (isToday(d)) return { label: 'Today', urgent: true }
-  if (isTomorrow(d)) return { label: 'Tomorrow', urgent: false }
-  if (isPast(d)) return { label: `Overdue · ${format(d, 'd MMM')}`, urgent: true }
-  return { label: format(d, 'd MMM'), urgent: false }
-}
-
-const priorityColour = {
-  high: 'bg-red-100 text-red-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-green-100 text-green-700',
-}
-
-const statusColour = {
-  open: 'text-slate-500',
-  in_progress: 'text-blue-600',
-  completed: 'text-green-600',
-  cancelled: 'text-slate-400',
-}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -40,18 +19,21 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  const [{ data: myTasks }, { data: allOpenTasks }] = await Promise.all([
+  const [{ data: myTasks }, { data: allOpenTasks }, { data: profiles }] = await Promise.all([
     supabase
       .from('tasks')
       .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
       .eq('assigned_to', user.id)
+      .is('parent_task_id', null)
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(10),
     supabase
       .from('tasks')
       .select('id, status')
+      .is('parent_task_id', null)
       .in('status', ['open', 'in_progress']),
+    supabase.from('profiles').select('id, full_name, email').order('full_name'),
   ])
 
   const overdueTasks = myTasks?.filter(t => {
@@ -136,41 +118,11 @@ export default async function DashboardPage() {
               <p className="text-slate-500 text-sm">No open tasks assigned to you</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {myTasks.map((task: Task & { client: { id: string; name: string } | null }) => {
-                const due = dueDateLabel(task.due_date)
-                return (
-                  <Link
-                    key={task.id}
-                    href={`/clients/${task.client?.id}`}
-                    className="block bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 w-4 h-4 rounded border-2 border-slate-300 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{task.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {task.client && (
-                            <span className="text-xs text-slate-500 flex items-center gap-1">
-                              <Building2 size={11} />
-                              {task.client.name}
-                            </span>
-                          )}
-                          {due && (
-                            <span className={`text-xs font-medium ${due.urgent ? 'text-red-600' : 'text-slate-500'}`}>
-                              · {due.label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${priorityColour[task.priority]}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
+            <DashboardTaskList
+              tasks={myTasks as any[]}
+              profiles={profiles ?? []}
+              currentUserId={user.id}
+            />
           )}
         </div>
 

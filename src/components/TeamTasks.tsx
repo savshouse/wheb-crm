@@ -1,16 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Building2, Clock, CheckSquare, ChevronDown } from 'lucide-react'
 import { format, parseISO, isPast, isToday } from 'date-fns'
+import TaskModal from '@/app/(app)/tasks/TaskModal'
 
 type Profile = { id: string; full_name: string | null; email: string; avatar_url?: string | null }
 type Task = {
   id: string; title: string; priority: string; status: string; due_date: string | null
   client: { id: string; name: string } | null
   assignee: Profile | null
+  assigned_to?: string | null
+  description?: string | null
+  meeting?: { title: string } | null
 }
 
 const priorityColour: Record<string, string> = {
@@ -27,15 +30,19 @@ function dueDateCls(d: string | null) {
 
 export default function TeamTasks({ currentUserId }: { currentUserId: string }) {
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([])
   const [selectedId, setSelectedId] = useState<string>('')
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
+  const [openTask, setOpenTask] = useState<Task | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.from('profiles').select('id, full_name, email, avatar_url').order('full_name')
       .then(({ data }) => {
-        const others = (data ?? []).filter(p => p.id !== currentUserId)
+        const all = data ?? []
+        setAllProfiles(all)
+        const others = all.filter(p => p.id !== currentUserId)
         setProfiles(others)
         if (others.length) setSelectedId(others[0].id)
       })
@@ -47,8 +54,9 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
     const supabase = createClient()
     supabase
       .from('tasks')
-      .select('id, title, priority, status, due_date, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(id,full_name,email,avatar_url)')
+      .select('id, title, priority, status, due_date, description, assigned_to, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(id,full_name,email,avatar_url), meeting:meetings(title)')
       .eq('assigned_to', selectedId)
+      .is('parent_task_id', null)
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false })
       .then(({ data }) => { setTasks((data ?? []) as any[]); setLoading(false) })
@@ -88,10 +96,10 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
       ) : (
         <div className="space-y-1.5">
           {tasks.map(task => (
-            <Link
+            <div
               key={task.id}
-              href={task.client ? `/clients/${task.client.id}` : '#'}
-              className="block bg-white rounded-xl border border-slate-200 p-3 hover:border-blue-300 hover:shadow-sm transition-all"
+              onClick={() => setOpenTask(task)}
+              className="block bg-white rounded-xl border border-slate-200 p-3 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
             >
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 w-3.5 h-3.5 rounded border-2 border-slate-300 shrink-0" />
@@ -114,9 +122,19 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
                   {task.priority[0].toUpperCase()}
                 </span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
+      )}
+
+      {openTask && (
+        <TaskModal
+          task={openTask}
+          profiles={allProfiles}
+          currentUserId={currentUserId}
+          onClose={() => setOpenTask(null)}
+          onSaved={(updated) => setOpenTask(updated)}
+        />
       )}
     </div>
   )
