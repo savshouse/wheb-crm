@@ -48,7 +48,7 @@ type Membership = {
   created_at: string
   scheme: {
     scheme_name: string; provider: string | null; salary_definition: string | null
-    cover_level: string | null; employer: { id: string; name: string } | null
+    cover_level: string | null
   } | null
   contribution_changes: ContribChange[]
 }
@@ -199,7 +199,7 @@ export default function PersonBenefits({
           employer_contribution_pct, employer_contribution_gbp,
           employee_contribution_pct, employee_contribution_gbp,
           salary_at_calculation, cover_level, notes, created_at,
-          scheme:benefit_schemes(scheme_name, provider, salary_definition, cover_level, employer:clients(id, name)),
+          scheme:benefit_schemes(scheme_name, provider, salary_definition, cover_level),
           contribution_changes:benefit_contribution_changes(
             id, effective_date, employer_contribution_pct, employer_contribution_gbp,
             employee_contribution_pct, employee_contribution_gbp,
@@ -235,6 +235,10 @@ export default function PersonBenefits({
 
   function handleSave() {
     if (!form.scheme_type) { setError('Scheme type required'); return }
+    if (!editing && form.scheme_id && memberships.some(m => m.scheme_id === form.scheme_id)) {
+      setError('This person already has a membership for that scheme')
+      return
+    }
     setError(null)
     startTransition(async () => {
       const payload = buildPayload(form, salary)

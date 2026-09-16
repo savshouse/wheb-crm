@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES } from '@/lib/benefit-types'
-import { createScheme, updateScheme, deleteScheme } from '@/app/actions-benefits'
+import { createScheme, updateScheme, deleteScheme, deleteMembership } from '@/app/actions-benefits'
 import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
@@ -77,7 +77,8 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   const [showModal, setShowModal]   = useState(false)
   const [editScheme, setEditScheme] = useState<Scheme | null>(null)
   const [form, setForm]             = useState<FormState>(emptyForm())
-  const [confirmDel, setConfirmDel] = useState<Scheme | null>(null)
+  const [confirmDel, setConfirmDel]       = useState<Scheme | null>(null)
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ memberId: string; clientId: string; name: string } | null>(null)
   const [isPending, startTransition] = useTransition()
   const [error, setError]           = useState<string | null>(null)
 
@@ -147,6 +148,15 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
     startTransition(async () => {
       await deleteScheme(s.id, employerId)
       setConfirmDel(null)
+      await fetchSchemes()
+    })
+  }
+
+  function handleRemoveMember() {
+    if (!confirmRemoveMember) return
+    startTransition(async () => {
+      await deleteMembership(confirmRemoveMember.memberId, confirmRemoveMember.clientId)
+      setConfirmRemoveMember(null)
       await fetchSchemes()
     })
   }
@@ -242,6 +252,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                           <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employer %/£</th>
                           <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employee %/£</th>
                           <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Status</th>
+                          <th className="px-4 py-2" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -262,6 +273,15 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                               {m.opted_out
                                 ? <span className="flex items-center gap-1 text-xs text-red-500"><X size={10} />Opted out</span>
                                 : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle size={10} />Active</span>}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <button
+                                onClick={() => setConfirmRemoveMember({ memberId: m.id, clientId: m.client_id, name: m.client?.name ?? 'this member' })}
+                                className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Remove from scheme"
+                              >
+                                <X size={12} />
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -284,6 +304,31 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
           isPending={isPending}
           error={error}
         />
+      )}
+
+      {confirmRemoveMember && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmRemoveMember(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Remove member?</h3>
+              <p className="text-sm text-slate-600 mt-1.5">
+                This will remove <strong>{confirmRemoveMember.name}</strong> from this scheme and delete their contribution history for it.
+              </p>
+              <div className="flex gap-3 mt-5">
+                <button onClick={handleRemoveMember} disabled={isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
+                  {isPending ? 'Removing…' : 'Yes, remove'}
+                </button>
+                <button onClick={() => setConfirmRemoveMember(null)} className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {confirmDel && (
