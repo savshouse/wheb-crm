@@ -248,6 +248,7 @@ export async function createSubTask(data: {
   dueDate: string | null
   priority: string
   clientId: string
+  description?: string | null
 }): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -260,6 +261,7 @@ export async function createSubTask(data: {
     assigned_to:    data.assignedTo,
     due_date:       data.dueDate,
     priority:       data.priority,
+    description:    data.description ?? null,
     created_by:     user.id,
     status:         'open',
   }).select().single()

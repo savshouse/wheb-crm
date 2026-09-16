@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import Link from 'next/link'
-import { updateTask, updateTaskStatus, reassignTask } from '@/app/actions'
+import { updateTask, updateTaskStatus, reassignTask, createSubTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -29,6 +29,15 @@ function dueDateClass(dateStr: string | null) {
   return 'text-slate-600'
 }
 
+type SubEdit = {
+  title: string
+  status: string
+  priority: string
+  due_date: string
+  assigned_to: string
+  description: string
+}
+
 type Props = {
   task: any
   profiles: any[]
@@ -40,58 +49,146 @@ type Props = {
 export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved }: Props) {
   const router = useRouter()
 
-  const [title, setTitle]               = useState(task.title)
-  const [priority, setPriority]         = useState(task.priority)
-  const [dueDate, setDueDate]           = useState(task.due_date ?? '')
-  const [description, setDescription]   = useState(task.description ?? '')
-  const [status, setStatus]             = useState(task.status)
-  const [assignedTo, setAssignedTo]     = useState(task.assigned_to ?? '')
-  const [saving, setSaving]             = useState(false)
-  const [dirty, setDirty]               = useState(false)
-  const [subTasks, setSubTasks]         = useState<any[]>([])
+  // Parent task fields
+  const [title, setTitle]             = useState(task.title)
+  const [priority, setPriority]       = useState(task.priority)
+  const [dueDate, setDueDate]         = useState(task.due_date ?? '')
+  const [description, setDescription] = useState(task.description ?? '')
+  const [status, setStatus]           = useState(task.status)
+  const [assignedTo, setAssignedTo]   = useState(task.assigned_to ?? '')
+  const [saving, setSaving]           = useState(false)
+  const [dirty, setDirty]             = useState(false)
 
-  // Fetch sub-tasks on open
+  // Sub-task state
+  const [subTasks, setSubTasks]       = useState<any[]>([])
+  const [expandedSub, setExpandedSub] = useState<string | null>(null)
+  const [subEdits, setSubEdits]       = useState<Record<string, SubEdit>>({})
+  const [subSaving, setSubSaving]     = useState<string | null>(null)
+
+  // New sub-task form
+  const [addingNew, setAddingNew]     = useState(false)
+  const [newTitle, setNewTitle]       = useState('')
+  const [newPriority, setNewPriority] = useState('medium')
+  const [newDueDate, setNewDueDate]   = useState('')
+  const [newAssignee, setNewAssignee] = useState('')
+  const [newDesc, setNewDesc]         = useState('')
+  const [newSaving, setNewSaving]     = useState(false)
+
   useEffect(() => {
     createClient()
       .from('tasks')
-      .select('id, title, status, priority, due_date')
+      .select('id, title, status, priority, due_date, description, assigned_to')
       .eq('parent_task_id', task.id)
       .order('created_at')
       .then(({ data }) => setSubTasks(data ?? []))
   }, [task.id])
 
-  // Close on Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Mark dirty on any change
   useEffect(() => { setDirty(true) }, [title, priority, dueDate, description])
 
+  // ── Parent save ──────────────────────────────────────────────
   async function handleSave() {
     setSaving(true)
     const promises: Promise<any>[] = [
       updateTask(task.id, task.client?.id ?? null, {
-        title:       title.trim() || task.title,
-        due_date:    dueDate || null,
+        title: title.trim() || task.title,
+        due_date: dueDate || null,
         priority,
         description: description.trim() || null,
       }),
     ]
-    if (status !== task.status) {
+    if (status !== task.status)
       promises.push(updateTaskStatus(task.id, status, task.client?.id ?? null))
-    }
-    if (assignedTo !== (task.assigned_to ?? '')) {
+    if (assignedTo !== (task.assigned_to ?? ''))
       promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null))
-    }
     await Promise.all(promises)
     setSaving(false)
     setDirty(false)
     router.refresh()
     onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
   }
+
+  // ── Sub-task expand/collapse ─────────────────────────────────
+  function toggleSub(sub: any) {
+    if (expandedSub === sub.id) { setExpandedSub(null); return }
+    setExpandedSub(sub.id)
+    setSubEdits(prev => ({
+      ...prev,
+      [sub.id]: {
+        title:       sub.title,
+        status:      sub.status,
+        priority:    sub.priority,
+        due_date:    sub.due_date ?? '',
+        assigned_to: sub.assigned_to ?? '',
+        description: sub.description ?? '',
+      },
+    }))
+  }
+
+  function patchSub(id: string, field: keyof SubEdit, value: string) {
+    setSubEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  // ── Sub-task save ────────────────────────────────────────────
+  async function saveSub(sub: any) {
+    const edits = subEdits[sub.id]
+    if (!edits) return
+    setSubSaving(sub.id)
+    const promises: Promise<any>[] = [
+      updateTask(sub.id, task.client?.id ?? null, {
+        title:       edits.title.trim() || sub.title,
+        due_date:    edits.due_date || null,
+        priority:    edits.priority,
+        description: edits.description.trim() || null,
+      }),
+    ]
+    if (edits.status !== sub.status)
+      promises.push(updateTaskStatus(sub.id, edits.status, task.client?.id ?? null))
+    if (edits.assigned_to !== (sub.assigned_to ?? ''))
+      promises.push(reassignTask(sub.id, edits.assigned_to, task.client?.id ?? null))
+    await Promise.all(promises)
+    setSubTasks(prev => prev.map(s => s.id === sub.id
+      ? { ...s, ...edits, due_date: edits.due_date || null, assigned_to: edits.assigned_to || null, description: edits.description || null }
+      : s))
+    setSubSaving(null)
+    setExpandedSub(null)
+    router.refresh()
+  }
+
+  // ── Add new sub-task ─────────────────────────────────────────
+  async function handleAddSub() {
+    if (!newTitle.trim()) return
+    setNewSaving(true)
+    const { error } = await createSubTask({
+      parentTaskId: task.id,
+      clientId:     task.client?.id ?? null,
+      title:        newTitle.trim(),
+      assignedTo:   newAssignee || null,
+      dueDate:      newDueDate || null,
+      priority:     newPriority,
+      description:  newDesc.trim() || null,
+    })
+    if (!error) {
+      const { data } = await createClient()
+        .from('tasks')
+        .select('id, title, status, priority, due_date, description, assigned_to')
+        .eq('parent_task_id', task.id)
+        .order('created_at')
+      setSubTasks(data ?? [])
+      setNewTitle(''); setNewPriority('medium'); setNewDueDate(''); setNewAssignee(''); setNewDesc('')
+      setAddingNew(false)
+    }
+    setNewSaving(false)
+    router.refresh()
+  }
+
+  const selectCls = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const inputCls  = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
   return (
     <>
@@ -100,17 +197,13 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
 
       {/* Slide-over panel */}
       <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white z-50 shadow-2xl flex flex-col">
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2">
             {task.client && (
-              <Link
-                href={`/clients/${task.client.id}`}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                onClick={onClose}
-              >
-                <Building2 size={12} />
-                {task.client.name}
+              <Link href={`/clients/${task.client.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium" onClick={onClose}>
+                <Building2 size={12} />{task.client.name}
               </Link>
             )}
             {task.meeting && <span className="text-xs text-slate-400">· From: {task.meeting.title}</span>}
@@ -122,6 +215,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
           {/* Title */}
           <input
             value={title}
@@ -130,25 +224,17 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
             placeholder="Task title"
           />
 
-          {/* Meta row */}
+          {/* Meta grid */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
-              <select
-                value={status}
-                onChange={e => { setStatus(e.target.value); setDirty(true) }}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={status} onChange={e => { setStatus(e.target.value); setDirty(true) }} className={selectCls}>
                 {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
-              <select
-                value={priority}
-                onChange={e => setPriority(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={priority} onChange={e => setPriority(e.target.value)} className={selectCls}>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -156,12 +242,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Due date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
               {dueDate && (
                 <p className={`text-xs mt-1 ${dueDateClass(dueDate)}`}>
                   <Clock size={10} className="inline mr-0.5" />
@@ -171,15 +252,9 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Assigned to</label>
-              <select
-                value={assignedTo}
-                onChange={e => { setAssignedTo(e.target.value); setDirty(true) }}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); setDirty(true) }} className={selectCls}>
                 <option value="">Unassigned</option>
-                {profiles.map(p => (
-                  <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
-                ))}
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
               </select>
             </div>
           </div>
@@ -190,54 +265,181 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={5}
+              rows={4}
               placeholder="Add notes, context, or a description…"
               className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
             />
           </div>
 
-          {/* Sub-tasks */}
-          {subTasks.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Sub-tasks ({subTasks.length})</label>
-              <div className="space-y-1.5">
-                {subTasks.map((sub: any) => (
-                  <div key={sub.id} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <div className={`w-3.5 h-3.5 rounded border-2 shrink-0 ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'}`} />
-                    <span className={`text-sm flex-1 min-w-0 ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                      {sub.title}
-                    </span>
-                    {sub.due_date && (
-                      <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>
-                        {format(parseISO(sub.due_date), 'd MMM')}
-                      </span>
-                    )}
-                    <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${priorityColour[sub.priority as keyof typeof priorityColour]}`}>
-                      {sub.priority[0].toUpperCase()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {task.client && (
-                <p className="text-xs text-slate-400 mt-2">
-                  Edit sub-tasks on the{' '}
-                  <Link href={`/clients/${task.client.id}`} className="text-blue-500 hover:underline" onClick={onClose}>
-                    client page
-                  </Link>
-                </p>
+          {/* ── Sub-tasks ───────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-medium text-slate-500">
+                Sub-tasks {subTasks.length > 0 && `(${subTasks.length})`}
+              </label>
+              {!addingNew && (
+                <button
+                  onClick={() => setAddingNew(true)}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  <Plus size={12} />Add
+                </button>
               )}
             </div>
-          )}
+
+            <div className="space-y-1.5">
+              {subTasks.map(sub => {
+                const isExpanded = expandedSub === sub.id
+                const edits = subEdits[sub.id]
+                const isSavingSub = subSaving === sub.id
+
+                return (
+                  <div key={sub.id} className={`rounded-lg border transition-all ${isExpanded ? 'border-blue-200 bg-blue-50/40' : 'border-slate-100 bg-slate-50'}`}>
+                    {/* Collapsed row */}
+                    <div
+                      className="flex items-center gap-2.5 p-2.5 cursor-pointer"
+                      onClick={() => toggleSub(sub)}
+                    >
+                      {isExpanded
+                        ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
+                        : <ChevronRight size={14} className="text-slate-400 shrink-0" />
+                      }
+                      <div className={`w-3.5 h-3.5 rounded border-2 shrink-0 ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'}`} />
+                      <span className={`text-sm flex-1 min-w-0 truncate ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                        {sub.title}
+                      </span>
+                      {sub.due_date && (
+                        <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>
+                          {format(parseISO(sub.due_date), 'd MMM')}
+                        </span>
+                      )}
+                      <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${priorityColour[sub.priority as keyof typeof priorityColour]}`}>
+                        {sub.priority[0].toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Expanded edit form */}
+                    {isExpanded && edits && (
+                      <div className="px-3 pb-3 space-y-2.5 border-t border-blue-100 pt-2.5">
+                        <input
+                          value={edits.title}
+                          onChange={e => patchSub(sub.id, 'title', e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                          placeholder="Sub-task title"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Status</label>
+                            <select value={edits.status} onChange={e => patchSub(sub.id, 'status', e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Priority</label>
+                            <select value={edits.priority} onChange={e => patchSub(sub.id, 'priority', e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              <option value="low">Low</option>
+                              <option value="medium">Medium</option>
+                              <option value="high">High</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Due date</label>
+                            <input type="date" value={edits.due_date} onChange={e => patchSub(sub.id, 'due_date', e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Assigned to</label>
+                            <select value={edits.assigned_to} onChange={e => patchSub(sub.id, 'assigned_to', e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              <option value="">Unassigned</option>
+                              {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Notes</label>
+                          <textarea
+                            value={edits.description}
+                            onChange={e => patchSub(sub.id, 'description', e.target.value)}
+                            rows={2}
+                            placeholder="Notes…"
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setExpandedSub(null)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveSub(sub)}
+                            disabled={isSavingSub}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
+                          >
+                            <Check size={11} />{isSavingSub ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* New sub-task form */}
+              {addingNew && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2.5">
+                  <input
+                    autoFocus
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddSub() }}
+                    placeholder="Sub-task title…"
+                    className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Priority</label>
+                      <select value={newPriority} onChange={e => setNewPriority(e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Due date</label>
+                      <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs text-slate-500 mb-1">Assigned to</label>
+                      <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)} className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Unassigned</option>
+                        {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs text-slate-500 mb-1">Notes</label>
+                      <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2} placeholder="Notes…" className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => { setAddingNew(false); setNewTitle('') }} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddSub}
+                      disabled={newSaving || !newTitle.trim()}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
+                    >
+                      <Plus size={11} />{newSaving ? 'Adding…' : 'Add sub-task'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
           {task.client && (
-            <Link
-              href={`/clients/${task.client.id}`}
-              className="text-xs text-slate-500 hover:text-blue-600 underline"
-              onClick={onClose}
-            >
+            <Link href={`/clients/${task.client.id}`} className="text-xs text-slate-500 hover:text-blue-600 underline" onClick={onClose}>
               Open client page →
             </Link>
           )}
@@ -250,8 +452,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               disabled={saving || !dirty}
               className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-1.5"
             >
-              <Check size={14} />
-              {saving ? 'Saving…' : 'Save'}
+              <Check size={14} />{saving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
