@@ -12,14 +12,9 @@
   <DisplayName DefaultValue="WHEB CRM" />
   <Description DefaultValue="View client information and create tasks directly from your inbox." />
 
-  <!--
-    REPLACE "YOUR_APP_URL" with your deployed Next.js URL, e.g.:
-      https://wheb-crm.vercel.app
-    The URL must be HTTPS.
-  -->
-  <IconUrl DefaultValue="https://YOUR_APP_URL/favicon.ico" />
-  <HighResolutionIconUrl DefaultValue="https://YOUR_APP_URL/favicon.ico" />
-  <SupportUrl DefaultValue="https://YOUR_APP_URL" />
+  <IconUrl DefaultValue="https://wheb-crm.vercel.app/favicon.ico" />
+  <HighResolutionIconUrl DefaultValue="https://wheb-crm.vercel.app/favicon.ico" />
+  <SupportUrl DefaultValue="https://wheb-crm.vercel.app" />
 
   <Hosts>
     <Host Name="Mailbox" />
@@ -34,7 +29,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://YOUR_APP_URL/outlook" />
+        <SourceLocation DefaultValue="https://wheb-crm.vercel.app/outlook" />
         <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
