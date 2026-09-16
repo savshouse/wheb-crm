@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import './globals.css'
 import PwaRegistration from '@/components/PwaRegistration'
@@ -8,14 +8,20 @@ const geist = Geist({
   subsets: ['latin'],
 })
 
+export const viewport: Viewport = {
+  themeColor: '#2563eb',
+}
+
 export const metadata: Metadata = {
   title: 'WHEB CRM',
   description: 'Client relationship and task management',
-  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'WHEB CRM',
+  },
+  icons: {
+    apple: '/icons/icon-192.png',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -25,10 +31,6 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en" className={`${geist.variable} h-full`}>
-      <head>
-        <meta name="theme-color" content="#2563eb" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-      </head>
       <body className="h-full">
         {children}
         <PwaRegistration />
