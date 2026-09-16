@@ -213,7 +213,7 @@ export default function PersonBenefits({
         ? supabase.from('benefit_schemes').select('id, scheme_type, scheme_name, provider').eq('employer_id', employerId).eq('is_active', true).order('scheme_type')
         : Promise.resolve({ data: [] }),
     ])
-    setMemberships((mems ?? []) as Membership[])
+    setMemberships((mems ?? []) as unknown as Membership[])
     setEmpSchemes((schemes ?? []) as EmployerScheme[])
   }
 

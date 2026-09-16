@@ -29,7 +29,7 @@ export default function RemindersBell({ userId }: { userId: string }) {
       .not('status', 'in', '("completed","cancelled")')
       .order('due_date')
       .then(({ data }) => {
-        setTasks((data ?? []) as ReminderTask[])
+        setTasks((data ?? []) as unknown as ReminderTask[])
         setLoaded(true)
       })
   }, [userId])

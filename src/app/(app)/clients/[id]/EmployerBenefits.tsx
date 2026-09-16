@@ -96,7 +96,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
       `)
       .eq('employer_id', employerId)
       .order('scheme_type')
-    setSchemes((data ?? []) as Scheme[])
+    setSchemes((data ?? []) as unknown as Scheme[])
   }
 
   useEffect(() => { fetchSchemes() }, [employerId])
