@@ -18,19 +18,22 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     .eq('id', user.id)
     .single()
 
+  const taskSelect = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
+
   const [{ data: myTasks }, { data: teamTasks }, { data: profiles }] = await Promise.all([
     supabase
       .from('tasks')
-      .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), sub_tasks(id,title,status,priority,due_date,assigned_to,assignee:profiles!sub_tasks_assigned_to_fkey(full_name,email))')
+      .select(taskSelect)
       .eq('assigned_to', user.id)
+      .is('parent_task_id', null)
       .in('status', ['open', 'in_progress'])
       .order('due_date', { ascending: true, nullsFirst: false }),
     profile?.role !== 'staff'
       ? supabase
           .from('tasks')
-          .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), sub_tasks(id,title,status,priority,due_date,assigned_to,assignee:profiles!sub_tasks_assigned_to_fkey(full_name,email))')
+          .select(taskSelect)
           .in('status', ['open', 'in_progress'])
-          // When filter=team show ALL open tasks; otherwise show only others' tasks in the team section
+          .is('parent_task_id', null)
           .order('due_date', { ascending: true, nullsFirst: false })
       : Promise.resolve({ data: [] }),
     supabase.from('profiles').select('id, full_name, email').order('full_name'),

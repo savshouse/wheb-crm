@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown } from 'lucide-react'
+import { X, Check, Building2, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask } from '@/app/actions'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 const priorityColour = {
@@ -38,16 +39,26 @@ type Props = {
 
 export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved }: Props) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
 
-  const [title, setTitle]           = useState(task.title)
-  const [priority, setPriority]     = useState(task.priority)
-  const [dueDate, setDueDate]       = useState(task.due_date ?? '')
-  const [description, setDescription] = useState(task.description ?? '')
-  const [status, setStatus]         = useState(task.status)
-  const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? '')
-  const [saving, setSaving]         = useState(false)
-  const [dirty, setDirty]           = useState(false)
+  const [title, setTitle]               = useState(task.title)
+  const [priority, setPriority]         = useState(task.priority)
+  const [dueDate, setDueDate]           = useState(task.due_date ?? '')
+  const [description, setDescription]   = useState(task.description ?? '')
+  const [status, setStatus]             = useState(task.status)
+  const [assignedTo, setAssignedTo]     = useState(task.assigned_to ?? '')
+  const [saving, setSaving]             = useState(false)
+  const [dirty, setDirty]               = useState(false)
+  const [subTasks, setSubTasks]         = useState<any[]>([])
+
+  // Fetch sub-tasks on open
+  useEffect(() => {
+    createClient()
+      .from('tasks')
+      .select('id, title, status, priority, due_date')
+      .eq('parent_task_id', task.id)
+      .order('created_at')
+      .then(({ data }) => setSubTasks(data ?? []))
+  }, [task.id])
 
   // Close on Escape
   useEffect(() => {
@@ -81,8 +92,6 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     router.refresh()
     onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
   }
-
-  const subTasks: any[] = task.sub_tasks ?? []
 
   return (
     <>
