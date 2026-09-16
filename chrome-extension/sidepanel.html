@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WHEB CRM</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <button id="btn-back" class="back-btn" title="Back to tasks">← Back</button>
+    <span class="header-title">WHEB CRM</span>
+    <a id="open-crm" href="#" target="_blank" class="open-link" title="Open in CRM">Open ↗</a>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="center-state">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Task detail -->
+  <div id="detail" class="hidden">
+    <div class="task-header">
+      <div class="meta-row">
+        <span id="priority-badge" class="badge"></span>
+        <span id="status-badge" class="badge"></span>
+        <span id="due-badge" class="due"></span>
+      </div>
+      <h1 id="task-title" class="task-title"></h1>
+      <div id="client-row" class="client-row hidden">
+        <span class="label-sm">Client</span>
+        <a id="client-link" href="#" target="_blank" class="client-name"></a>
+      </div>
+      <div id="assignee-row" class="assignee-row hidden">
+        <span class="label-sm">Assigned to</span>
+        <span id="assignee-name" class="assignee-name"></span>
+      </div>
+    </div>
+
+    <div id="description-section" class="section hidden">
+      <div class="section-label">Notes</div>
+      <p id="description" class="description"></p>
+    </div>
+
+    <div id="subtasks-section" class="section hidden">
+      <div class="section-label">Sub-tasks</div>
+      <div id="subtask-list"></div>
+    </div>
+  </div>
+
+  <!-- Fallback: task list (when opened directly without a selected task) -->
+  <div id="task-list-view" class="hidden">
+    <div class="center-state">
+      <p class="hint">Click a task in the popup to view it here.</p>
+      <a href="#" id="open-popup" class="btn-outline">Open WHEB CRM ↗</a>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

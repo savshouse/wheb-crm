@@ -14,6 +14,13 @@ function formatDate(dateStr) {
   return { label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), cls: 'due-normal' }
 }
 
+async function openSidePanel(task) {
+  await chrome.storage.session.set({ selectedTask: task })
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  await chrome.sidePanel.open({ windowId: tab.windowId })
+  window.close()
+}
+
 function renderTasks(tasks) {
   const todayStr = new Date().toISOString().split('T')[0]
   const overdue  = tasks.filter(t => t.due_date && t.due_date < todayStr).length
@@ -27,11 +34,9 @@ function renderTasks(tasks) {
   list.innerHTML = ''
   tasks.slice(0, 8).forEach(task => {
     const due = task.due_date ? formatDate(task.due_date) : null
-    const a = document.createElement('a')
-    a.href = `${CRM_URL}/tasks?task=${task.id}`
-    a.target = '_blank'
-    a.className = 'task-item'
-    a.innerHTML = `
+    const btn = document.createElement('button')
+    btn.className = 'task-item'
+    btn.innerHTML = `
       <div class="task-dot dot-${task.priority}"></div>
       <div class="task-body">
         <div class="task-title">${task.title}</div>
@@ -39,7 +44,8 @@ function renderTasks(tasks) {
       </div>
       ${due ? `<div class="task-due ${due.cls}">${due.label}</div>` : ''}
     `
-    list.appendChild(a)
+    btn.addEventListener('click', () => openSidePanel(task))
+    list.appendChild(btn)
   })
 
   if (!tasks.length) $('no-tasks').classList.remove('hidden')

@@ -1,0 +1,168 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+
+/* Header */
+.header {
+  background: #1e40af;
+  color: white;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.back-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.back-btn:hover { background: rgba(255,255,255,0.25); }
+.header-title { font-weight: 700; font-size: 14px; flex: 1; }
+.open-link { color: rgba(255,255,255,0.8); font-size: 12px; text-decoration: none; white-space: nowrap; }
+.open-link:hover { color: white; }
+
+/* Center state */
+.center-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 14px;
+}
+.spinner {
+  width: 28px; height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.hint { color: #94a3b8; font-size: 13px; text-align: center; }
+
+/* Task header */
+.task-header {
+  background: white;
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.badge-high    { background: #fee2e2; color: #b91c1c; }
+.badge-medium  { background: #fef3c7; color: #92400e; }
+.badge-low     { background: #dcfce7; color: #166534; }
+.badge-open       { background: #f1f5f9; color: #475569; }
+.badge-in_progress { background: #dbeafe; color: #1e40af; }
+.badge-completed  { background: #dcfce7; color: #166534; }
+.badge-cancelled  { background: #f1f5f9; color: #94a3b8; }
+.due {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: auto;
+}
+.due.overdue  { color: #dc2626; font-weight: 600; }
+.due.today    { color: #d97706; font-weight: 600; }
+
+.task-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+
+.client-row, .assignee-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.label-sm { font-size: 11px; color: #94a3b8; font-weight: 500; width: 72px; flex-shrink: 0; }
+.client-name { font-size: 13px; color: #2563eb; text-decoration: none; font-weight: 500; }
+.client-name:hover { text-decoration: underline; }
+.assignee-name { font-size: 13px; color: #475569; }
+
+/* Sections */
+.section {
+  background: white;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+  margin-bottom: 10px;
+}
+.description {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Sub-tasks */
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.subtask-item:last-child { border-bottom: none; }
+.subtask-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-high   { background: #ef4444; }
+.dot-medium { background: #f59e0b; }
+.dot-low    { background: #22c55e; }
+.subtask-title {
+  flex: 1;
+  font-size: 13px;
+  color: #334155;
+}
+.subtask-title.done { color: #94a3b8; text-decoration: line-through; }
+.subtask-due { font-size: 11px; color: #94a3b8; }
+
+/* Outline button */
+.btn-outline {
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn-outline:hover { border-color: #2563eb; color: #2563eb; }
