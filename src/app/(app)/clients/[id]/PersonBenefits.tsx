@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SCHEME_TYPES } from '@/app/actions-benefits'
+import { SCHEME_TYPES } from '@/lib/benefit-types'
 import {
   createMembership, updateMembership, deleteMembership, addContributionChange,
   type MembershipPayload,

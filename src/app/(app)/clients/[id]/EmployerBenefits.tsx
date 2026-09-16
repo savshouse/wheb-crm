@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SCHEME_TYPES } from '@/app/actions-benefits'
+import { SCHEME_TYPES } from '@/lib/benefit-types'
 import { createScheme, updateScheme, deleteScheme } from '@/app/actions-benefits'
 import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
