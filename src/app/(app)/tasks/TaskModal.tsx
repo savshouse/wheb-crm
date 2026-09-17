@@ -237,6 +237,14 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setSubTasks(prev => prev.map(s => s.id === sub.id
       ? { ...s, ...edits, due_date: edits.due_date || null, assigned_to: edits.assigned_to || null, description: edits.description || null }
       : s))
+
+    // If a sub-task just moved to in_progress and the parent is still open, jog the parent on too
+    if (edits.status === 'in_progress' && status === 'open') {
+      await updateTaskStatus(task.id, 'in_progress', task.client?.id ?? null)
+      setStatus('in_progress')
+      onSaved({ ...task, status: 'in_progress' })
+    }
+
     setSubSaving(null)
     setExpandedSub(null)
   }
