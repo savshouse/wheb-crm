@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Navigation from '@/components/Navigation'
-import RemindersBell from '@/components/RemindersBell'
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const supabase = await createClient()
@@ -25,9 +24,6 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
         userRole={profile?.role ?? 'staff'}
       />
       <main className="flex-1 overflow-y-auto">
-        <div className="fixed top-4 right-4 z-40">
-          <RemindersBell userId={user.id} />
-        </div>
         {children}
       </main>
     </div>

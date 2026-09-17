@@ -6,6 +6,7 @@ import RecentlyViewed from '@/components/RecentlyViewed'
 import TeamTasks from '@/components/TeamTasks'
 import PriorityModal from '@/components/PriorityModal'
 import DashboardTaskList from '@/components/DashboardTaskList'
+import RemindersBell from '@/components/RemindersBell'
 
 
 export default async function DashboardPage() {
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
             {greeting()}, {displayName}
@@ -62,7 +63,10 @@ export default async function DashboardPage() {
             {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <PriorityModal currentUserId={user.id} />
+        <div className="flex items-center gap-2">
+          <PriorityModal currentUserId={user.id} />
+          <RemindersBell />
+        </div>
       </div>
 
       {/* Stats row */}

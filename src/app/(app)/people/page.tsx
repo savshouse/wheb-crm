@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Plus, Users, Search, Upload } from 'lucide-react'
+import RemindersBell from '@/components/RemindersBell'
 import DataTable, { ColumnDef } from '@/components/DataTable'
 
 type Person = {
@@ -150,13 +151,14 @@ export default function PeoplePage() {
           <h1 className="text-2xl font-bold text-slate-900">People</h1>
           <p className="text-sm text-slate-500 mt-0.5">{counts.active} active · {counts.prospect} prospects · {counts.inactive} inactive</p>
         </div>
-        <div className="flex gap-2 mr-48">
+        <div className="flex items-center gap-2">
           <Link href="/clients/bulk-upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
             <Upload size={15} />Bulk import
           </Link>
           <Link href="/clients/new?type=individual" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
             <Plus size={15} />Add person
           </Link>
+          <RemindersBell />
         </div>
       </div>
 

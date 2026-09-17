@@ -13,26 +13,29 @@ type ReminderTask = {
   client: { id: string; name: string } | null
 }
 
-export default function RemindersBell({ userId }: { userId: string }) {
+export default function RemindersBell() {
   const [tasks, setTasks]   = useState<ReminderTask[]>([])
   const [open, setOpen]     = useState(false)
   const [loaded, setLoaded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const today = format(new Date(), 'yyyy-MM-dd')
-    createClient()
-      .from('tasks')
-      .select('id, title, due_date, client:clients(id, name)')
-      .eq('assigned_to', userId)
-      .lte('due_date', today)
-      .not('status', 'in', '("completed","cancelled")')
-      .order('due_date')
-      .then(({ data }) => {
-        setTasks((data ?? []) as unknown as ReminderTask[])
-        setLoaded(true)
-      })
-  }, [userId])
+    createClient().auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      const today = format(new Date(), 'yyyy-MM-dd')
+      createClient()
+        .from('tasks')
+        .select('id, title, due_date, client:clients(id, name)')
+        .eq('assigned_to', session.user.id)
+        .lte('due_date', today)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('due_date')
+        .then(({ data }) => {
+          setTasks((data ?? []) as unknown as ReminderTask[])
+          setLoaded(true)
+        })
+    })
+  }, [])
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -42,7 +45,11 @@ export default function RemindersBell({ userId }: { userId: string }) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [])
 
-  if (!loaded) return null
+  if (!loaded) return (
+    <div className="w-9 h-9 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-300">
+      <Bell size={16} />
+    </div>
+  )
 
   const overdue  = tasks.filter(t => !isToday(parseISO(t.due_date)))
   const dueToday = tasks.filter(t =>  isToday(parseISO(t.due_date)))
@@ -50,7 +57,6 @@ export default function RemindersBell({ userId }: { userId: string }) {
 
   return (
     <div ref={ref} className="relative">
-      {/* Popup — opens downward, extends left from bell */}
       {open && (
         <div className="absolute top-full mt-2 right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
           <div className={`px-4 py-3 flex items-center justify-between ${count > 0 ? 'bg-red-500' : 'bg-slate-700'}`}>
@@ -97,17 +103,21 @@ export default function RemindersBell({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Bell button — top-right page header style */}
       <button
         onClick={() => setOpen(v => !v)}
-        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors focus:outline-none ${
+        className={`relative w-9 h-9 rounded-lg border flex items-center justify-center transition-colors focus:outline-none ${
           count > 0
-            ? 'bg-red-500 text-white hover:bg-red-600'
-            : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+            ? 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
+            : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-50'
         }`}
+        title={count > 0 ? `${count} reminder${count !== 1 ? 's' : ''}` : 'No reminders'}
       >
-        <Bell size={15} />
-        {count > 0 ? `${count} Reminder${count !== 1 ? 's' : ''}` : 'Reminders'}
+        <Bell size={16} />
+        {count > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+            {count > 9 ? '9+' : count}
+          </span>
+        )}
       </button>
     </div>
   )

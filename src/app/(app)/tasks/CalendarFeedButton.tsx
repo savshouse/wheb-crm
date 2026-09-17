@@ -45,9 +45,9 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
       <button
         onClick={handleOpen}
         title="Subscribe to task deadlines in your calendar"
-        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
       >
-        <CalendarDays size={13} />
+        <CalendarDays size={15} />
         Subscribe
       </button>
 

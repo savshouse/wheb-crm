@@ -6,6 +6,7 @@ import { format, parseISO, isPast, isToday, startOfMonth, endOfMonth, startOfQua
 import { BarChart2, Calendar, CheckSquare, AlertCircle, Download, Search, X, Clock, Building2, User } from 'lucide-react'
 import Link from 'next/link'
 import SearchableSelect from '@/components/SearchableSelect'
+import RemindersBell from '@/components/RemindersBell'
 
 type ClientRow  = { id: string; name: string; type: 'corporate' | 'individual'; employer_id: string | null }
 type Profile    = { id: string; full_name: string | null; email: string }
@@ -201,12 +202,17 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <BarChart2 size={24} className="text-blue-600" />
-          Reports
-        </h1>
-        <p className="text-sm text-slate-500 mt-0.5">Meetings and tasks by client, person or date range</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <BarChart2 size={24} className="text-blue-600" />
+            Reports
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">Meetings and tasks by client, person or date range</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <RemindersBell />
+        </div>
       </div>
 
       {/* Filter panel */}

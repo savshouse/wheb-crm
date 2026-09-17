@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem } from '@/app/actions'
 import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info } from 'lucide-react'
+import RemindersBell from '@/components/RemindersBell'
 import { useRouter } from 'next/navigation'
 
 type Item = {
@@ -164,17 +165,20 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Task Templates</h1>
           <p className="text-sm text-slate-500 mt-0.5">Reusable step-by-step workflows</p>
         </div>
-        <button
-          onClick={() => setShowNew(!showNew)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors mr-48"
-        >
-          <Plus size={15} />New template
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowNew(!showNew)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={15} />New template
+          </button>
+          <RemindersBell />
+        </div>
       </div>
 
       {/* How to apply */}

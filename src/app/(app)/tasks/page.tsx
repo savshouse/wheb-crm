@@ -4,6 +4,7 @@ import { parseISO, isToday, isPast, subDays } from 'date-fns'
 import AddTaskButton from './AddTaskButton'
 import TasksPageClient from './TasksPageClient'
 import CalendarFeedButton from './CalendarFeedButton'
+import RemindersBell from '@/components/RemindersBell'
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ filter?: string; task?: string }> }) {
   const supabase = await createClient()
@@ -75,7 +76,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
           {filterLabel
@@ -88,9 +89,10 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               </p>
           }
         </div>
-        <div className="flex items-center gap-2 mr-48">
+        <div className="flex items-center gap-2">
           <CalendarFeedButton userId={user.id} />
           <AddTaskButton currentUserId={user.id} />
+          <RemindersBell />
         </div>
       </div>
 
