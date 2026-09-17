@@ -49,10 +49,10 @@ export default function RemindersBell({ userId }: { userId: string }) {
   const count    = tasks.length
 
   return (
-    <div ref={ref} className="fixed bottom-6 left-6 z-40">
+    <div ref={ref} className="relative">
+      {/* Popup — opens upward, extends right of sidebar */}
       {open && (
-        <div className="mb-3 bg-white rounded-2xl shadow-2xl border border-slate-200 w-80 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-          {/* Header */}
+        <div className="absolute bottom-full mb-2 left-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
           <div className={`px-4 py-3 flex items-center justify-between ${count > 0 ? 'bg-red-500' : 'bg-slate-700'}`}>
             <div className="flex items-center gap-2 text-white">
               <Bell size={15} />
@@ -66,7 +66,7 @@ export default function RemindersBell({ userId }: { userId: string }) {
             </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto">
             {count === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell size={28} className="mx-auto text-slate-300 mb-2" />
@@ -97,20 +97,20 @@ export default function RemindersBell({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Bell button */}
+      {/* Bell button — styled for dark sidebar */}
       <button
         onClick={() => setOpen(v => !v)}
-        className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all focus:outline-none ${
+        className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors focus:outline-none ${
           count > 0
-            ? 'bg-red-500 hover:bg-red-600 text-white'
-            : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200'
+            ? 'text-red-400 hover:text-red-300 hover:bg-slate-800'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
         }`}
         title={count > 0 ? `${count} reminder${count !== 1 ? 's' : ''}` : 'No reminders'}
       >
-        <Bell size={22} />
+        <Bell size={18} />
         {count > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-white text-red-500 text-xs font-bold rounded-full flex items-center justify-center px-1 border-2 border-red-500">
-            {count > 99 ? '99+' : count}
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+            {count > 9 ? '9+' : count}
           </span>
         )}
       </button>

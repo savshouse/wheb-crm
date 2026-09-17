@@ -16,6 +16,7 @@ import {
   BarChart2,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
+import RemindersBell from './RemindersBell'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,12 +28,13 @@ const navItems = [
 ]
 
 type Props = {
+  userId: string
   userEmail: string
   userName: string | null
   userRole: string
 }
 
-export default function Navigation({ userEmail, userName, userRole }: Props) {
+export default function Navigation({ userId, userEmail, userName, userRole }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -128,20 +130,23 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
 
       {/* User / Sign out */}
       <div className="px-3 py-3 border-t border-slate-800">
-        <Link href="/profile" className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {(userName || userEmail).charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-white truncate">
-              {userName || userEmail.split('@')[0]}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Link href="/profile" className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {(userName || userEmail).charAt(0).toUpperCase()}
             </div>
-            <div className="text-xs text-slate-400 truncate">Edit profile</div>
-          </div>
-        </Link>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-white truncate">
+                {userName || userEmail.split('@')[0]}
+              </div>
+              <div className="text-xs text-slate-400 truncate">Edit profile</div>
+            </div>
+          </Link>
+          <RemindersBell userId={userId} />
+        </div>
         <button
           onClick={handleSignOut}
-          className="mt-1.5 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
         >
           <LogOut size={16} />
           Sign out
