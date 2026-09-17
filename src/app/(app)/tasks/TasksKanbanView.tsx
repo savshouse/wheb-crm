@@ -29,9 +29,10 @@ type Props = {
   completedTasks: any[]
   profiles: any[]
   currentUserId: string
+  onTaskSaved?: (task: any) => void
 }
 
-export default function TasksKanbanView({ tasks, completedTasks, profiles, currentUserId }: Props) {
+export default function TasksKanbanView({ tasks, completedTasks, profiles, currentUserId, onTaskSaved }: Props) {
   const [openTask, setOpenTask] = useState<any | null>(null)
 
   const byStatus: Record<string, any[]> = {
@@ -100,7 +101,7 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
           profiles={profiles}
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
-          onSaved={(updated) => setOpenTask(updated)}
+          onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
         />
       )}
     </>

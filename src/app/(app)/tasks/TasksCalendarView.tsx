@@ -17,9 +17,10 @@ type Props = {
   tasks: any[]
   profiles: any[]
   currentUserId: string
+  onTaskSaved?: (task: any) => void
 }
 
-export default function TasksCalendarView({ tasks, profiles, currentUserId }: Props) {
+export default function TasksCalendarView({ tasks, profiles, currentUserId, onTaskSaved }: Props) {
   const [month, setMonth] = useState(() => new Date())
   const [openTask, setOpenTask] = useState<any | null>(null)
 
@@ -119,7 +120,7 @@ export default function TasksCalendarView({ tasks, profiles, currentUserId }: Pr
           profiles={profiles}
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
-          onSaved={(updated) => setOpenTask(updated)}
+          onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
         />
       )}
     </>

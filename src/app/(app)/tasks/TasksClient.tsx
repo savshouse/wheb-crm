@@ -27,9 +27,10 @@ type Props = {
   profiles: any[]
   currentUserId: string
   highlightOverdue?: boolean
+  onTaskSaved?: (task: any) => void
 }
 
-export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue }: Props) {
+export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, onTaskSaved }: Props) {
   const [openTask, setOpenTask] = useState<any | null>(null)
 
   return (
@@ -100,7 +101,7 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
           profiles={profiles}
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
-          onSaved={(updated) => setOpenTask(updated)}
+          onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
         />
       )}
     </>

@@ -63,6 +63,33 @@ export default function TasksPageClient({
     window.history.replaceState({}, '', url.toString())
   }
 
+  // Called by any TaskModal after a save so the lists update immediately
+  // without waiting for the Supabase subscription to fire.
+  function updateTaskInLists(task: any) {
+    const isActive = task.status === 'open' || task.status === 'in_progress'
+    setMyTasks(prev => {
+      const had = prev.some((t: any) => t.id === task.id)
+      if (!had) return prev
+      return isActive
+        ? prev.map((t: any) => t.id === task.id ? task : t)
+        : prev.filter((t: any) => t.id !== task.id)
+    })
+    setTeamTasks(prev => {
+      const had = prev.some((t: any) => t.id === task.id)
+      if (!had) return prev
+      return isActive
+        ? prev.map((t: any) => t.id === task.id ? task : t)
+        : prev.filter((t: any) => t.id !== task.id)
+    })
+    setCompletedTasks(prev => {
+      if (task.status === 'completed' || task.status === 'cancelled') {
+        const had = prev.some((t: any) => t.id === task.id)
+        return had ? prev.map((t: any) => t.id === task.id ? task : t) : [task, ...prev]
+      }
+      return prev.filter((t: any) => t.id !== task.id)
+    })
+  }
+
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
@@ -122,7 +149,7 @@ export default function TasksPageClient({
           profiles={profiles}
           currentUserId={currentUserId}
           onClose={handleUrlTaskClose}
-          onSaved={(updated) => setUrlTask(updated)}
+          onSaved={(updated) => { setUrlTask(updated); updateTaskInLists(updated) }}
         />
       )}
 
@@ -164,6 +191,7 @@ export default function TasksPageClient({
                   profiles={profiles}
                   currentUserId={currentUserId}
                   highlightOverdue={highlightOverdue}
+                  onTaskSaved={updateTaskInLists}
                 />
               )}
             </section>
@@ -184,6 +212,7 @@ export default function TasksPageClient({
                   tasks={teamTasks}
                   profiles={profiles}
                   currentUserId={currentUserId}
+                  onTaskSaved={updateTaskInLists}
                 />
               )}
             </section>
@@ -196,6 +225,7 @@ export default function TasksPageClient({
           tasks={allActiveTasks}
           profiles={profiles}
           currentUserId={currentUserId}
+          onTaskSaved={updateTaskInLists}
         />
       )}
 
@@ -205,6 +235,7 @@ export default function TasksPageClient({
           completedTasks={completedTasks}
           profiles={profiles}
           currentUserId={currentUserId}
+          onTaskSaved={updateTaskInLists}
         />
       )}
     </>
