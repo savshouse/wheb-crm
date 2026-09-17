@@ -158,6 +158,7 @@ export default function TasksPageClient({
                   tasks={teamTasks}
                   profiles={profiles}
                   currentUserId={currentUserId}
+                  initialTask={initialTask}
                 />
               )}
             </section>
