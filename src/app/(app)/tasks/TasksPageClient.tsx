@@ -5,6 +5,7 @@ import { CheckSquare, List, CalendarDays, Kanban } from 'lucide-react'
 import TasksClient from './TasksClient'
 import TasksCalendarView from './TasksCalendarView'
 import TasksKanbanView from './TasksKanbanView'
+import TaskModal from './TaskModal'
 import { createClient } from '@/lib/supabase/client'
 
 type View = 'list' | 'calendar' | 'kanban'
@@ -46,6 +47,21 @@ export default function TasksPageClient({
   const [myTasks, setMyTasks]             = useState(initialMy)
   const [teamTasks, setTeamTasks]         = useState(initialTeam)
   const [completedTasks, setCompletedTasks] = useState(initialCompleted)
+  const [urlTask, setUrlTask]             = useState<any | null>(initialTask ?? null)
+
+  // Sync urlTask whenever the server sends a new initialTask (e.g. clicking a bell reminder
+  // while already on the tasks page navigates to /tasks?task=<id>, server re-renders with
+  // the linked task, and this effect opens the modal client-side without relying on TasksClient).
+  useEffect(() => {
+    if (initialTask) setUrlTask(initialTask)
+  }, [initialTask?.id])
+
+  function handleUrlTaskClose() {
+    setUrlTask(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('task')
+    window.history.replaceState({}, '', url.toString())
+  }
 
   useEffect(() => {
     const supabase = createClient()
@@ -99,6 +115,17 @@ export default function TasksPageClient({
 
   return (
     <>
+      {/* URL-driven task modal (opened via bell reminder or direct link) */}
+      {urlTask && (
+        <TaskModal
+          task={urlTask}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onClose={handleUrlTaskClose}
+          onSaved={(updated) => setUrlTask(updated)}
+        />
+      )}
+
       {/* View toggle */}
       <div className="flex items-center gap-1 mb-5 bg-slate-100 rounded-lg p-1 w-fit">
         {VIEWS.map(({ key, icon: Icon, label }) => (
@@ -137,7 +164,6 @@ export default function TasksPageClient({
                   profiles={profiles}
                   currentUserId={currentUserId}
                   highlightOverdue={highlightOverdue}
-                  initialTask={initialTask}
                 />
               )}
             </section>
@@ -158,7 +184,6 @@ export default function TasksPageClient({
                   tasks={teamTasks}
                   profiles={profiles}
                   currentUserId={currentUserId}
-                  initialTask={initialTask}
                 />
               )}
             </section>

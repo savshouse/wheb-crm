@@ -6,7 +6,6 @@ import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History } 
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 
 const priorityColour = {
   high: 'bg-red-100 text-red-700',
@@ -47,8 +46,6 @@ type Props = {
 }
 
 export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved }: Props) {
-  const router = useRouter()
-
   // Parent task fields
   const [title, setTitle]             = useState(task.title)
   const [priority, setPriority]       = useState(task.priority)
@@ -195,7 +192,6 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     await Promise.all(promises)
     setSaving(false)
     setDirty(false)
-    router.refresh()
     onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
   }
 
@@ -243,7 +239,6 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       : s))
     setSubSaving(null)
     setExpandedSub(null)
-    router.refresh()
   }
 
   // ── Add new sub-task ─────────────────────────────────────────
@@ -270,7 +265,6 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       setAddingNew(false)
     }
     setNewSaving(false)
-    router.refresh()
   }
 
   const selectCls = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
 import { Clock, Building2, User } from 'lucide-react'
 import Link from 'next/link'
@@ -27,15 +27,10 @@ type Props = {
   profiles: any[]
   currentUserId: string
   highlightOverdue?: boolean
-  initialTask?: any
 }
 
-export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, initialTask }: Props) {
-  const [openTask, setOpenTask] = useState<any | null>(initialTask ?? null)
-
-  useEffect(() => {
-    if (initialTask) setOpenTask(initialTask)
-  }, [initialTask?.id])
+export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue }: Props) {
+  const [openTask, setOpenTask] = useState<any | null>(null)
 
   return (
     <>
