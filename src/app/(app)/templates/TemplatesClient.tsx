@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, Fragment } from 'react'
 import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem } from '@/app/actions'
 import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
@@ -12,6 +12,7 @@ type Item = {
   priority: 'low' | 'medium' | 'high'
   order_index: number
   relative_due_days: number | null
+  parent_item_id: string | null
 }
 
 type Template = {
@@ -53,10 +54,11 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const [newItems, setNewItems] = useState<Array<{ id: string; title: string; priority: string; relative_due_days: string }>>([])
 
   // Add item to existing template
-  const [addingItemTo, setAddingItemTo]   = useState<string | null>(null)
-  const [addItemTitle, setAddItemTitle]   = useState('')
+  const [addingItemTo, setAddingItemTo]       = useState<string | null>(null)
+  const [addingSubStepTo, setAddingSubStepTo] = useState<string | null>(null)
+  const [addItemTitle, setAddItemTitle]       = useState('')
   const [addItemPriority, setAddItemPriority] = useState('medium')
-  const [addItemDays, setAddItemDays]     = useState('')
+  const [addItemDays, setAddItemDays]         = useState('')
 
   // Derive all categories
   const allCategories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[]
@@ -128,19 +130,45 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   async function handleAddItem(templateId: string) {
     if (!addItemTitle.trim()) return
     const template = templates.find(t => t.id === templateId)
+    const topLevelCount = template?.items.filter(i => !i.parent_item_id).length ?? 0
     startTransition(async () => {
       const { item, error } = await addTemplateItem({
         templateId,
         title: addItemTitle,
         priority: addItemPriority,
-        orderIndex: template?.items.length ?? 0,
+        orderIndex: topLevelCount,
         relativeDueDays: addItemDays ? parseInt(addItemDays) : null,
       })
       if (!error && item) {
         setTemplates(prev => prev.map(t => t.id === templateId
-          ? { ...t, items: [...t.items, { id: item.id, title: item.title, priority: item.priority as Item['priority'], order_index: item.order_index, relative_due_days: item.relative_due_days }] }
+          ? { ...t, items: [...t.items, { id: item.id, title: item.title, priority: item.priority as Item['priority'], order_index: item.order_index, relative_due_days: item.relative_due_days, parent_item_id: null }] }
           : t))
         setAddingItemTo(null)
+        setAddItemTitle('')
+        setAddItemDays('')
+        setAddItemPriority('medium')
+      }
+    })
+  }
+
+  async function handleAddSubStep(templateId: string, parentItemId: string) {
+    if (!addItemTitle.trim()) return
+    const template = templates.find(t => t.id === templateId)
+    const siblingCount = template?.items.filter(i => i.parent_item_id === parentItemId).length ?? 0
+    startTransition(async () => {
+      const { item, error } = await addTemplateItem({
+        templateId,
+        title: addItemTitle,
+        priority: addItemPriority,
+        orderIndex: siblingCount,
+        relativeDueDays: addItemDays ? parseInt(addItemDays) : null,
+        parentItemId,
+      })
+      if (!error && item) {
+        setTemplates(prev => prev.map(t => t.id === templateId
+          ? { ...t, items: [...t.items, { id: item.id, title: item.title, priority: item.priority as Item['priority'], order_index: item.order_index, relative_due_days: item.relative_due_days, parent_item_id: parentItemId }] }
+          : t))
+        setAddingSubStepTo(null)
         setAddItemTitle('')
         setAddItemDays('')
         setAddItemPriority('medium')
@@ -173,7 +201,7 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
       if (!error && id) {
         const { data: items } = await createClient()
           .from('task_template_items')
-          .select('id, title, priority, order_index, relative_due_days')
+          .select('id, title, priority, order_index, relative_due_days, parent_item_id')
           .eq('template_id', id)
           .order('order_index')
         setTemplates(prev => [...prev, {
@@ -345,59 +373,117 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
                       {/* Steps */}
                       {isExpanded && (
                         <div className="border-t border-slate-100">
-                          {sorted.map((item, i) => (
-                            <div key={item.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                              {editingItem === item.id ? (
-                                <div className="px-5 py-2 flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs text-slate-400 w-5 shrink-0">{i + 1}.</span>
-                                  <input value={editItemTitle} onChange={e => setEditItemTitle(e.target.value)} className="flex-1 min-w-32 px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" onKeyDown={e => e.key === 'Enter' && saveItem(item.id)} autoFocus />
-                                  <select value={editItemPri} onChange={e => setEditItemPri(e.target.value)} className="text-xs rounded border border-slate-300 px-1.5 py-1 focus:outline-none">
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                  </select>
-                                  <div className="flex items-center gap-1">
-                                    <input type="number" value={editItemDays} onChange={e => setEditItemDays(e.target.value)} placeholder="Days" min="0" className="w-14 px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
-                                    <span className="text-xs text-slate-400">days</span>
-                                  </div>
-                                  <button onClick={() => saveItem(item.id)} disabled={isPending} className="w-6 h-6 rounded bg-green-500 flex items-center justify-center text-white hover:bg-green-600 disabled:opacity-50"><Check size={12} /></button>
-                                  <button onClick={() => setEditingItem(null)} className="w-6 h-6 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50"><X size={12} /></button>
+                          {(() => {
+                            const topLevel = sorted.filter(i => !i.parent_item_id)
+                            const alpha = (n: number) => String.fromCharCode(97 + n)
+                            const editRow = (item: Item, label: string, indent: boolean) => (
+                              <div className={`${indent ? 'pl-10 pr-5' : 'px-5'} py-2 flex items-center gap-2 flex-wrap`}>
+                                <span className="text-xs text-slate-400 shrink-0 w-7">{label}</span>
+                                <input value={editItemTitle} onChange={e => setEditItemTitle(e.target.value)} className="flex-1 min-w-32 px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" onKeyDown={e => e.key === 'Enter' && saveItem(item.id)} autoFocus />
+                                <select value={editItemPri} onChange={e => setEditItemPri(e.target.value)} className="text-xs rounded border border-slate-300 px-1.5 py-1 focus:outline-none">
+                                  <option value="low">Low</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="high">High</option>
+                                </select>
+                                <div className="flex items-center gap-1">
+                                  <input type="number" value={editItemDays} onChange={e => setEditItemDays(e.target.value)} placeholder="Days" min="0" className="w-14 px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
+                                  <span className="text-xs text-slate-400">days</span>
                                 </div>
-                              ) : (
-                                <div className="flex items-center gap-3 px-5 py-2.5">
-                                  <span className="text-xs text-slate-400 w-5 shrink-0">{i + 1}.</span>
-                                  <p className="flex-1 text-sm text-slate-800">{item.title}</p>
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[item.priority]}`}>{item.priority}</span>
-                                  {item.relative_due_days != null && <span className="text-xs text-slate-400">+{item.relative_due_days}d</span>}
-                                  <div className="flex items-center gap-1">
-                                    <button onClick={() => startEditItem(item)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit step"><Pencil size={11} /></button>
-                                    <button onClick={() => handleRemoveItem(item.id)} disabled={isPending} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete step"><Trash2 size={11} /></button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-
-                          {addingItemTo === template.id ? (
-                            <div className="px-5 py-3 bg-slate-50 flex items-center gap-2 flex-wrap">
-                              <input value={addItemTitle} onChange={e => setAddItemTitle(e.target.value)} placeholder="Step title..." className="flex-1 px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-40" autoFocus onKeyDown={e => e.key === 'Enter' && handleAddItem(template.id)} />
-                              <select value={addItemPriority} onChange={e => setAddItemPriority(e.target.value)} className="px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none">
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                              </select>
-                              <div className="flex items-center gap-1">
-                                <input type="number" value={addItemDays} onChange={e => setAddItemDays(e.target.value)} placeholder="Days" min="0" className="w-16 px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none" />
-                                <span className="text-xs text-slate-400">days</span>
+                                <button onClick={() => saveItem(item.id)} disabled={isPending} className="w-6 h-6 rounded bg-green-500 flex items-center justify-center text-white hover:bg-green-600 disabled:opacity-50"><Check size={12} /></button>
+                                <button onClick={() => setEditingItem(null)} className="w-6 h-6 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-slate-50"><X size={12} /></button>
                               </div>
-                              <button onClick={() => handleAddItem(template.id)} disabled={isPending || !addItemTitle.trim()} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
-                              <button onClick={() => { setAddingItemTo(null); setAddItemTitle('') }} className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setAddingItemTo(template.id)} className="w-full px-5 py-2.5 text-left text-xs text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-colors flex items-center gap-2">
-                              <Plus size={13} />Add step
-                            </button>
-                          )}
+                            )
+                            return (
+                              <>
+                                {topLevel.map((item, pi) => {
+                                  const children = sorted.filter(c => c.parent_item_id === item.id)
+                                  return (
+                                    <Fragment key={item.id}>
+                                      {/* Parent step */}
+                                      <div className="border-b border-slate-50 hover:bg-slate-50 group">
+                                        {editingItem === item.id ? editRow(item, `${pi + 1}.`, false) : (
+                                          <div className="flex items-center gap-3 px-5 py-2.5">
+                                            <span className="text-xs text-slate-400 shrink-0 w-5">{pi + 1}.</span>
+                                            <p className="flex-1 text-sm font-medium text-slate-800">{item.title}</p>
+                                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[item.priority]}`}>{item.priority}</span>
+                                            {item.relative_due_days != null && <span className="text-xs text-slate-400">+{item.relative_due_days}d</span>}
+                                            <div className="flex items-center gap-1">
+                                              <button onClick={() => startEditItem(item)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit"><Pencil size={11} /></button>
+                                              <button onClick={() => handleRemoveItem(item.id)} disabled={isPending} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={11} /></button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Sub-steps */}
+                                      {children.map((child, ci) => (
+                                        <div key={child.id} className="border-b border-slate-50 hover:bg-slate-50/80 group bg-slate-50/40">
+                                          {editingItem === child.id ? editRow(child, `${pi + 1}${alpha(ci)}.`, true) : (
+                                            <div className="flex items-center gap-3 pl-10 pr-5 py-2">
+                                              <span className="text-xs text-slate-400 shrink-0 w-7">{pi + 1}{alpha(ci)}.</span>
+                                              <p className="flex-1 text-xs text-slate-700">{child.title}</p>
+                                              <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[child.priority]}`}>{child.priority}</span>
+                                              {child.relative_due_days != null && <span className="text-xs text-slate-400">+{child.relative_due_days}d</span>}
+                                              <div className="flex items-center gap-1">
+                                                <button onClick={() => startEditItem(child)} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit"><Pencil size={11} /></button>
+                                                <button onClick={() => handleRemoveItem(child.id)} disabled={isPending} className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={11} /></button>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+
+                                      {/* Add sub-step inline */}
+                                      {addingSubStepTo === item.id ? (
+                                        <div className="pl-10 pr-5 py-2.5 bg-blue-50/40 border-b border-slate-100 flex items-center gap-2 flex-wrap">
+                                          <input value={addItemTitle} onChange={e => setAddItemTitle(e.target.value)} placeholder="Sub-step title…" className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-32" autoFocus onKeyDown={e => e.key === 'Enter' && handleAddSubStep(template.id, item.id)} />
+                                          <select value={addItemPriority} onChange={e => setAddItemPriority(e.target.value)} className="px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none">
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                          </select>
+                                          <div className="flex items-center gap-1">
+                                            <input type="number" value={addItemDays} onChange={e => setAddItemDays(e.target.value)} placeholder="Days" min="0" className="w-14 px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none" />
+                                            <span className="text-xs text-slate-400">days</span>
+                                          </div>
+                                          <button onClick={() => handleAddSubStep(template.id, item.id)} disabled={isPending || !addItemTitle.trim()} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
+                                          <button onClick={() => { setAddingSubStepTo(null); setAddItemTitle('') }} className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
+                                        </div>
+                                      ) : (
+                                        <div className="pl-10 border-b border-slate-50">
+                                          <button onClick={() => { setAddingSubStepTo(item.id); setAddingItemTo(null) }} className="py-1.5 text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                                            <Plus size={11} />Add sub-step
+                                          </button>
+                                        </div>
+                                      )}
+                                    </Fragment>
+                                  )
+                                })}
+
+                                {/* Add top-level step */}
+                                {addingItemTo === template.id ? (
+                                  <div className="px-5 py-3 bg-slate-50 flex items-center gap-2 flex-wrap">
+                                    <input value={addItemTitle} onChange={e => setAddItemTitle(e.target.value)} placeholder="Step title…" className="flex-1 px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-40" autoFocus onKeyDown={e => e.key === 'Enter' && handleAddItem(template.id)} />
+                                    <select value={addItemPriority} onChange={e => setAddItemPriority(e.target.value)} className="px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none">
+                                      <option value="low">Low</option>
+                                      <option value="medium">Medium</option>
+                                      <option value="high">High</option>
+                                    </select>
+                                    <div className="flex items-center gap-1">
+                                      <input type="number" value={addItemDays} onChange={e => setAddItemDays(e.target.value)} placeholder="Days" min="0" className="w-16 px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none" />
+                                      <span className="text-xs text-slate-400">days</span>
+                                    </div>
+                                    <button onClick={() => handleAddItem(template.id)} disabled={isPending || !addItemTitle.trim()} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
+                                    <button onClick={() => { setAddingItemTo(null); setAddItemTitle('') }} className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => { setAddingItemTo(template.id); setAddingSubStepTo(null) }} className="w-full px-5 py-2.5 text-left text-xs text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-colors flex items-center gap-2">
+                                    <Plus size={13} />Add step
+                                  </button>
+                                )}
+                              </>
+                            )
+                          })()}
                         </div>
                       )}
                     </div>

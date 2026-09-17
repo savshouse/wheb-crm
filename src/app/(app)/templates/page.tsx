@@ -6,7 +6,7 @@ export default async function TemplatesPage() {
 
   const { data: templates } = await supabase
     .from('task_templates')
-    .select('*, items:task_template_items(id, title, priority, order_index, relative_due_days)')
+    .select('*, items:task_template_items(id, title, priority, order_index, relative_due_days, parent_item_id)')
     .order('name')
 
   return <TemplatesClient initialTemplates={templates ?? []} />

@@ -408,27 +408,55 @@ export async function applyTemplateToTask(
 
   const baseDate = baseDueDate ? new Date(baseDueDate) : new Date()
 
-  const subTasks = items.map(item => {
-    let dueDate: string | null = null
-    if (item.relative_due_days != null) {
-      const d = new Date(baseDate)
-      d.setDate(d.getDate() + item.relative_due_days)
-      dueDate = d.toISOString().split('T')[0]
-    }
-    return {
+  function calcDueDate(relativeDays: number | null): string | null {
+    if (relativeDays == null) return null
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() + relativeDays)
+    return d.toISOString().split('T')[0]
+  }
+
+  const topLevel = items.filter(i => !i.parent_item_id)
+  const children  = items.filter(i => i.parent_item_id)
+
+  // Create top-level steps as sub-tasks of the main task, one at a time to capture their new IDs
+  const templateItemToTaskId: Record<string, string> = {}
+  for (const item of topLevel) {
+    const { data: created, error } = await supabase.from('tasks').insert({
       title:          item.title,
-      description:    item.description,
       client_id:      clientId,
       parent_task_id: taskId,
       priority:       item.priority,
-      due_date:       dueDate,
+      due_date:       calcDueDate(item.relative_due_days),
       created_by:     user.id,
       status:         'open',
-    }
-  })
+    }).select('id').single()
+    if (error) return { error: error.message }
+    if (created) templateItemToTaskId[item.id] = created.id
+  }
 
-  const { error } = await supabase.from('tasks').insert(subTasks)
-  if (error) return { error: error.message }
+  // Create child steps as sub-tasks of their newly-created parent tasks
+  if (children.length > 0) {
+    const childRows = children
+      .map(item => {
+        const parentTaskId = templateItemToTaskId[item.parent_item_id]
+        if (!parentTaskId) return null
+        return {
+          title:          item.title,
+          client_id:      clientId,
+          parent_task_id: parentTaskId,
+          priority:       item.priority,
+          due_date:       calcDueDate(item.relative_due_days),
+          created_by:     user.id,
+          status:         'open',
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+
+    if (childRows.length > 0) {
+      const { error } = await supabase.from('tasks').insert(childRows)
+      if (error) return { error: error.message }
+    }
+  }
 
   revalidatePath(`/clients/${clientId}`)
   revalidatePath('/tasks')
@@ -563,7 +591,8 @@ export async function addTemplateItem(data: {
   priority: string
   orderIndex: number
   relativeDueDays: number | null
-}): Promise<{ item: { id: string; title: string; priority: string; order_index: number; relative_due_days: number | null } | null; error: string | null }> {
+  parentItemId?: string | null
+}): Promise<{ item: { id: string; title: string; priority: string; order_index: number; relative_due_days: number | null; parent_item_id: string | null } | null; error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { item: null, error: 'Unauthorized' }
@@ -574,7 +603,8 @@ export async function addTemplateItem(data: {
     priority:          data.priority,
     order_index:       data.orderIndex,
     relative_due_days: data.relativeDueDays,
-  }).select('id, title, priority, order_index, relative_due_days').single()
+    parent_item_id:    data.parentItemId ?? null,
+  }).select('id, title, priority, order_index, relative_due_days, parent_item_id').single()
 
   if (error) return { item: null, error: error.message }
 
