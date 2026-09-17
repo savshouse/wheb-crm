@@ -74,7 +74,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     : null
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6">
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
@@ -88,7 +88,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               </p>
           }
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mr-48">
           <CalendarFeedButton userId={user.id} />
           <AddTaskButton currentUserId={user.id} />
         </div>

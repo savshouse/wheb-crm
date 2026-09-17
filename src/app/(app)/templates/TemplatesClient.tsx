@@ -163,7 +163,7 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const inputClass = 'px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Task Templates</h1>
@@ -171,7 +171,7 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
         </div>
         <button
           onClick={() => setShowNew(!showNew)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors mr-48"
         >
           <Plus size={15} />New template
         </button>

@@ -50,9 +50,9 @@ export default function RemindersBell({ userId }: { userId: string }) {
 
   return (
     <div ref={ref} className="relative">
-      {/* Popup — opens upward, extends right of sidebar */}
+      {/* Popup — opens downward, extends left from bell */}
       {open && (
-        <div className="absolute bottom-full mb-2 left-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
+        <div className="absolute top-full mt-2 right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
           <div className={`px-4 py-3 flex items-center justify-between ${count > 0 ? 'bg-red-500' : 'bg-slate-700'}`}>
             <div className="flex items-center gap-2 text-white">
               <Bell size={15} />
@@ -97,22 +97,17 @@ export default function RemindersBell({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Bell button — styled for dark sidebar */}
+      {/* Bell button — top-right page header style */}
       <button
         onClick={() => setOpen(v => !v)}
-        className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors focus:outline-none ${
+        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors focus:outline-none ${
           count > 0
-            ? 'text-red-400 hover:text-red-300 hover:bg-slate-800'
-            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            ? 'bg-red-500 text-white hover:bg-red-600'
+            : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
         }`}
-        title={count > 0 ? `${count} reminder${count !== 1 ? 's' : ''}` : 'No reminders'}
       >
-        <Bell size={18} />
-        {count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
-            {count > 9 ? '9+' : count}
-          </span>
-        )}
+        <Bell size={15} />
+        {count > 0 ? `${count} Reminder${count !== 1 ? 's' : ''}` : 'Reminders'}
       </button>
     </div>
   )

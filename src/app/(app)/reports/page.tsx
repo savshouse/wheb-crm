@@ -200,7 +200,7 @@ export default function ReportsPage() {
   const inputClass = 'px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <BarChart2 size={24} className="text-blue-600" />

@@ -150,7 +150,7 @@ export default function PeoplePage() {
           <h1 className="text-2xl font-bold text-slate-900">People</h1>
           <p className="text-sm text-slate-500 mt-0.5">{counts.active} active · {counts.prospect} prospects · {counts.inactive} inactive</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mr-48">
           <Link href="/clients/bulk-upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
             <Upload size={15} />Bulk import
           </Link>
