@@ -10,6 +10,7 @@ type ReminderTask = {
   id: string
   title: string
   due_date: string
+  parent_task_id: string | null
   client: { id: string; name: string } | null
 }
 
@@ -25,7 +26,7 @@ export default function RemindersBell() {
       const today = format(new Date(), 'yyyy-MM-dd')
       createClient()
         .from('tasks')
-        .select('id, title, due_date, client:clients(id, name)')
+        .select('id, title, due_date, parent_task_id, client:clients(id, name)')
         .eq('assigned_to', session.user.id)
         .lte('due_date', today)
         .not('status', 'in', '("completed","cancelled")')
@@ -124,15 +125,17 @@ export default function RemindersBell() {
 }
 
 function TaskRow({ task, overdue, onClose }: { task: ReminderTask; overdue: boolean; onClose: () => void }) {
+  const taskId = task.parent_task_id ?? task.id
   return (
     <Link
-      href={`/tasks?task=${task.id}`}
+      href={`/tasks?task=${taskId}`}
       onClick={onClose}
       className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
     >
       <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${overdue ? 'bg-red-500' : 'bg-amber-400'}`} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-900 truncate">{task.title}</p>
+        {task.parent_task_id && <p className="text-xs text-slate-400 truncate">Sub-task</p>}
         {task.client && <p className="text-xs text-slate-500 truncate">{task.client.name}</p>}
         <p className={`text-xs mt-0.5 font-medium ${overdue ? 'text-red-500' : 'text-amber-600'}`}>
           {overdue ? 'Due ' : ''}{format(parseISO(task.due_date), 'd MMM yyyy')}
