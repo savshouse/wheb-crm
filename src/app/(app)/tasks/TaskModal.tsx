@@ -72,6 +72,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
 
+  // Sub-task comments
+  const [subCommentsMap, setSubCommentsMap]   = useState<Record<string, any[]>>({})
+  const [subCommentTexts, setSubCommentTexts] = useState<Record<string, string>>({})
+  const [subCommentSaving, setSubCommentSaving] = useState<string | null>(null)
+
   // New sub-task form
   const [addingNew, setAddingNew]     = useState(false)
   const [newTitle, setNewTitle]       = useState('')
@@ -155,6 +160,45 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   }, [onClose])
 
   useEffect(() => { setDirty(true); dirtyRef.current = true }, [title, priority, dueDate, description])
+
+  // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
+  useEffect(() => {
+    if (!expandedSub || subCommentsMap[expandedSub] !== undefined) return
+    const supabase = createClient()
+    ;(async () => {
+      const { data: rows } = await supabase
+        .from('task_comments')
+        .select('id, content, created_at, user_id')
+        .eq('task_id', expandedSub)
+        .order('created_at', { ascending: false })
+      const list = rows ?? []
+      const ids = [...new Set(list.map((c: any) => c.user_id as string))]
+      const profMap: Record<string, any> = {}
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name, email').in('id', ids)
+        ;(profs ?? []).forEach((p: any) => { profMap[p.id] = p })
+      }
+      setSubCommentsMap(prev => ({ ...prev, [expandedSub]: list.map((c: any) => ({ ...c, commenter: profMap[c.user_id] ?? null })) }))
+    })()
+  }, [expandedSub])
+
+  async function handleAddSubComment(subId: string) {
+    const text = (subCommentTexts[subId] ?? '').trim()
+    if (!text) return
+    setSubCommentSaving(subId)
+    const supabase = createClient()
+    const { data: row } = await supabase
+      .from('task_comments')
+      .insert({ task_id: subId, user_id: currentUserId, content: text })
+      .select('id, content, created_at, user_id')
+      .single()
+    if (row) {
+      const { data: profile } = await supabase.from('profiles').select('id, full_name, email').eq('id', currentUserId).single()
+      setSubCommentsMap(prev => ({ ...prev, [subId]: [{ ...row, commenter: profile ?? null }, ...(prev[subId] ?? [])] }))
+      setSubCommentTexts(prev => ({ ...prev, [subId]: '' }))
+    }
+    setSubCommentSaving(null)
+  }
 
   // ── Add comment ─────────────────────────────────────────────
   async function handleAddComment() {
@@ -463,6 +507,45 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                           >
                             <Check size={11} />{isSavingSub ? 'Saving…' : 'Save'}
                           </button>
+                        </div>
+
+                        {/* Sub-task comments */}
+                        <div className="border-t border-blue-100 pt-2.5 mt-1">
+                          <p className="text-xs font-medium text-slate-500 mb-1.5">Comments</p>
+                          {subCommentsMap[sub.id] === undefined ? (
+                            <p className="text-xs text-slate-400">Loading…</p>
+                          ) : subCommentsMap[sub.id].length === 0 ? (
+                            <p className="text-xs text-slate-400 mb-2">No comments yet</p>
+                          ) : (
+                            <div className="space-y-2 mb-2">
+                              {subCommentsMap[sub.id].map((c: any) => (
+                                <div key={c.id}>
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-xs font-medium text-slate-700">{c.commenter?.full_name ?? c.commenter?.email ?? 'User'}</span>
+                                    <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 mt-0.5">{c.content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <textarea
+                            value={subCommentTexts[sub.id] ?? ''}
+                            onChange={e => setSubCommentTexts(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddSubComment(sub.id) }}
+                            rows={2}
+                            placeholder="Leave a comment… (Ctrl+Enter to send)"
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          />
+                          <div className="flex justify-end mt-1">
+                            <button
+                              onClick={() => handleAddSubComment(sub.id)}
+                              disabled={subCommentSaving === sub.id || !(subCommentTexts[sub.id] ?? '').trim()}
+                              className="px-2.5 py-1 text-xs rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40"
+                            >
+                              {subCommentSaving === sub.id ? 'Sending…' : 'Comment'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

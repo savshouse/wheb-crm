@@ -417,10 +417,10 @@ async function initComments(taskId) {
     submit.disabled = false
   }
 
-  submit.addEventListener('click', doSubmit)
-  input.addEventListener('keydown', e => {
+  submit.onclick = doSubmit
+  input.onkeydown = e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doSubmit()
-  })
+  }
 }
 
 // ─── Main render ─────────────────────────────────────────────────
