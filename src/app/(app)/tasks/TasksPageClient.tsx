@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckSquare, List, CalendarDays, Kanban } from 'lucide-react'
 import TasksClient from './TasksClient'
 import TasksCalendarView from './TasksCalendarView'
 import TasksKanbanView from './TasksKanbanView'
+import { createClient } from '@/lib/supabase/client'
 
 type View = 'list' | 'calendar' | 'kanban'
 
@@ -27,10 +28,12 @@ const VIEWS = [
   { key: 'kanban'   as const, icon: Kanban,       label: 'Board'    },
 ]
 
+const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
+
 export default function TasksPageClient({
-  myTasks,
-  teamTasks,
-  completedTasks,
+  myTasks: initialMy,
+  teamTasks: initialTeam,
+  completedTasks: initialCompleted,
   profiles,
   currentUserId,
   highlightOverdue,
@@ -40,10 +43,59 @@ export default function TasksPageClient({
   showTeam,
 }: Props) {
   const [view, setView] = useState<View>('list')
+  const [myTasks, setMyTasks]             = useState(initialMy)
+  const [teamTasks, setTeamTasks]         = useState(initialTeam)
+  const [completedTasks, setCompletedTasks] = useState(initialCompleted)
 
-  // Deduplicated union for calendar/kanban (my tasks + others' tasks)
-  const myIds = new Set(myTasks.map(t => t.id))
-  const allActiveTasks = [...myTasks, ...teamTasks.filter(t => !myIds.has(t.id))]
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('tasks-page-live')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'tasks' },
+        async ({ new: raw }) => {
+          if (raw.parent_task_id) return  // sub-task updates handled in modal
+          const { data: task } = await supabase
+            .from('tasks')
+            .select(TASK_SELECT)
+            .eq('id', raw.id)
+            .single()
+          if (!task) return
+
+          const isActive = task.status === 'open' || task.status === 'in_progress'
+
+          setMyTasks(prev => {
+            const had = prev.some((t: any) => t.id === task.id)
+            if (!had) return prev
+            if (!isActive) return prev.filter((t: any) => t.id !== task.id)
+            return prev.map((t: any) => t.id === task.id ? task : t)
+          })
+          setTeamTasks(prev => {
+            const had = prev.some((t: any) => t.id === task.id)
+            if (!had) return prev
+            if (!isActive) return prev.filter((t: any) => t.id !== task.id)
+            return prev.map((t: any) => t.id === task.id ? task : t)
+          })
+          setCompletedTasks(prev => {
+            if (task.status === 'completed' || task.status === 'cancelled') {
+              const had = prev.some((t: any) => t.id === task.id)
+              return had
+                ? prev.map((t: any) => t.id === task.id ? task : t)
+                : [task, ...prev]
+            }
+            return prev.filter((t: any) => t.id !== task.id)
+          })
+        },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  // Deduplicated union for calendar/kanban
+  const myIds = new Set(myTasks.map((t: any) => t.id))
+  const allActiveTasks = [...myTasks, ...teamTasks.filter((t: any) => !myIds.has(t.id))]
 
   return (
     <>

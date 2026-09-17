@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
 import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History } from 'lucide-react'
 import Link from 'next/link'
@@ -58,6 +58,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [assignedTo, setAssignedTo]   = useState(task.assigned_to ?? '')
   const [saving, setSaving]           = useState(false)
   const [dirty, setDirty]             = useState(false)
+  const dirtyRef                       = useRef(false)
 
   // Sub-task state
   const [subTasks, setSubTasks]       = useState<any[]>([])
@@ -115,7 +116,40 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       }
       setComments(list.map((c: any) => ({ ...c, commenter: profMap[c.user_id] ?? null })))
     })()
-  }, [task.id])
+
+    // Real-time: sync task fields when changed externally (e.g. via extension)
+    const channel = supabase
+      .channel(`task-modal-${task.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `id=eq.${task.id}` },
+        ({ new: u }) => {
+          // Always sync status — it's a dropdown, no text at risk
+          setStatus(u.status ?? 'open')
+          // Sync other fields only if the user hasn't made unsaved edits
+          if (!dirtyRef.current) {
+            setTitle(u.title ?? '')
+            setPriority(u.priority ?? 'medium')
+            setDueDate(u.due_date ?? '')
+            setDescription(u.description ?? '')
+            setAssignedTo(u.assigned_to ?? '')
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'task_comments', filter: `task_id=eq.${task.id}` },
+        async ({ new: raw }) => {
+          if (raw.user_id === currentUserId) return  // already added optimistically
+          const { data: profile } = await supabase
+            .from('profiles').select('id, full_name, email').eq('id', raw.user_id).single()
+          setComments(prev => [{ ...raw, commenter: profile ?? null }, ...prev])
+        },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [task.id, currentUserId])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -123,7 +157,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  useEffect(() => { setDirty(true) }, [title, priority, dueDate, description])
+  useEffect(() => { setDirty(true); dirtyRef.current = true }, [title, priority, dueDate, description])
 
   // ── Add comment ─────────────────────────────────────────────
   async function handleAddComment() {
