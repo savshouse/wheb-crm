@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckSquare, List, CalendarDays, Kanban } from 'lucide-react'
+import { CheckSquare, List, CalendarDays, Kanban, Clock } from 'lucide-react'
 import TasksClient from './TasksClient'
 import TasksCalendarView from './TasksCalendarView'
 import TasksKanbanView from './TasksKanbanView'
+import TasksRecentView from './TasksRecentView'
 import TaskModal from './TaskModal'
 import { createClient } from '@/lib/supabase/client'
 
-type View = 'list' | 'calendar' | 'kanban'
+type View = 'list' | 'calendar' | 'kanban' | 'recent'
 
 type Props = {
   myTasks: any[]
@@ -28,6 +29,7 @@ const VIEWS = [
   { key: 'list'     as const, icon: List,        label: 'List'     },
   { key: 'calendar' as const, icon: CalendarDays, label: 'Calendar' },
   { key: 'kanban'   as const, icon: Kanban,       label: 'Board'    },
+  { key: 'recent'   as const, icon: Clock,        label: 'Recent'   },
 ]
 
 const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
@@ -233,6 +235,14 @@ export default function TasksPageClient({
         <TasksKanbanView
           tasks={allActiveTasks}
           completedTasks={completedTasks}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onTaskSaved={updateTaskInLists}
+        />
+      )}
+
+      {view === 'recent' && (
+        <TasksRecentView
           profiles={profiles}
           currentUserId={currentUserId}
           onTaskSaved={updateTaskInLists}

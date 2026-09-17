@@ -408,8 +408,10 @@ export async function applyTemplateToTask(
 
   const baseDate = baseDueDate ? new Date(baseDueDate) : new Date()
 
-  function calcDueDate(relativeDays: number | null): string | null {
-    if (relativeDays == null) return null
+  const fallbackDate = baseDueDate || new Date().toISOString().split('T')[0]
+
+  function calcDueDate(relativeDays: number | null): string {
+    if (relativeDays == null) return fallbackDate
     const d = new Date(baseDate)
     d.setDate(d.getDate() + relativeDays)
     return d.toISOString().split('T')[0]
