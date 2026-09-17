@@ -1,6 +1,7 @@
 const CRM_URL      = 'https://wheb-crm.vercel.app'
 const TASK_API     = `${CRM_URL}/api/extension/task`
 const COMMENTS_API = `${CRM_URL}/api/extension/comments`
+const SUMMARY_API  = `${CRM_URL}/api/extension/summary`
 
 const $ = id => document.getElementById(id)
 
@@ -107,6 +108,88 @@ function renderActions(status) {
   }
 
   btns.forEach(b => container.appendChild(b))
+}
+
+// ─── Task list (home screen) ─────────────────────────────────────
+async function showTaskList() {
+  $('detail').classList.add('hidden')
+  $('loading').classList.add('hidden')
+  $('task-list-view').classList.remove('hidden')
+  $('task-list-loading').classList.remove('hidden')
+  $('task-list-content').classList.add('hidden')
+  $('task-list-error').classList.add('hidden')
+
+  try {
+    const res = await fetch(SUMMARY_API, { credentials: 'include' })
+    if (!res.ok) throw new Error()
+    const { tasks } = await res.json()
+
+    $('task-list-loading').classList.add('hidden')
+
+    if (!tasks?.length) {
+      $('task-list-content').classList.remove('hidden')
+      $('tl-empty').classList.remove('hidden')
+      return
+    }
+
+    const items = $('tl-items')
+    items.innerHTML = ''
+    tasks.forEach(task => {
+      const btn = document.createElement('button')
+      btn.className = 'tl-item'
+
+      const dot = document.createElement('div')
+      dot.className = `tl-dot tl-dot-${task.priority}`
+
+      const body = document.createElement('div')
+      body.className = 'tl-body'
+
+      const title = document.createElement('div')
+      title.className = 'tl-task-title'
+      title.textContent = task.title
+
+      const meta = document.createElement('div')
+      meta.className = 'tl-meta'
+      if (task.client?.name) {
+        const cl = document.createElement('span')
+        cl.textContent = task.client.name
+        meta.appendChild(cl)
+      }
+      if (task.due_date) {
+        const due = formatDue(task.due_date)
+        if (due) {
+          const d = document.createElement('span')
+          d.textContent = due.label
+          if (due.cls) d.className = `tl-due-${due.cls}`
+          meta.appendChild(d)
+        }
+      }
+
+      const badge = document.createElement('span')
+      badge.className = `tl-status-badge tl-${task.status}`
+      badge.textContent = STATUS_LABEL[task.status] ?? task.status
+
+      body.appendChild(title)
+      body.appendChild(meta)
+      btn.appendChild(dot)
+      btn.appendChild(body)
+      btn.appendChild(badge)
+
+      btn.addEventListener('click', () => {
+        $('task-list-view').classList.add('hidden')
+        $('loading').classList.remove('hidden')
+        resetDetail()
+        loadTask(task.id)
+      })
+
+      items.appendChild(btn)
+    })
+
+    $('task-list-content').classList.remove('hidden')
+  } catch {
+    $('task-list-loading').classList.add('hidden')
+    $('task-list-error').classList.remove('hidden')
+  }
 }
 
 // ─── Navigation ──────────────────────────────────────────────────
@@ -409,7 +492,7 @@ async function init() {
       resetDetail()
       loadTask(pid)
     } else {
-      window.close()
+      showTaskList()
     }
   })
 
@@ -420,8 +503,7 @@ async function init() {
     chrome.storage.session.remove('selectedTask')
     loadTask(stored.id)
   } else {
-    $('loading').classList.add('hidden')
-    $('task-list-view').classList.remove('hidden')
+    showTaskList()
   }
 }
 

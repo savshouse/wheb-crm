@@ -49,7 +49,7 @@ export default function RemindersBell({ userId }: { userId: string }) {
   const count    = tasks.length
 
   return (
-    <div ref={ref} className="fixed bottom-6 right-6 z-50">
+    <div ref={ref} className="fixed bottom-6 left-6 z-40">
       {open && (
         <div className="mb-3 bg-white rounded-2xl shadow-2xl border border-slate-200 w-80 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
           {/* Header */}

@@ -72,11 +72,24 @@
     </div>
   </div>
 
-  <!-- Fallback: opened directly without a selected task -->
+  <!-- Task list (home screen) -->
   <div id="task-list-view" class="hidden">
-    <div class="center-state">
-      <p class="hint">Click a task in the popup to view it here.</p>
-      <a href="#" id="open-popup" class="btn-outline">Open WHEB CRM ↗</a>
+    <div id="task-list-loading" class="center-state">
+      <div class="spinner"></div>
+    </div>
+    <div id="task-list-error" class="center-state hidden">
+      <p class="hint">Could not load tasks. Are you logged in?</p>
+      <a href="https://wheb-crm.vercel.app/auth/login" target="_blank" class="btn-outline">Log in ↗</a>
+    </div>
+    <div id="task-list-content" class="hidden">
+      <div class="tl-header">
+        <span class="tl-title">Your open tasks</span>
+        <a id="tl-open-crm" href="https://wheb-crm.vercel.app/tasks" target="_blank" class="open-link">Open ↗</a>
+      </div>
+      <div id="tl-items"></div>
+      <div id="tl-empty" class="center-state hidden">
+        <p class="hint">No open tasks assigned to you.</p>
+      </div>
     </div>
   </div>
 
