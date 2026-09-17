@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { CheckSquare, List, CalendarDays, Kanban } from 'lucide-react'
 import TasksClient from './TasksClient'
 import TasksCalendarView from './TasksCalendarView'
@@ -43,6 +44,7 @@ export default function TasksPageClient({
   showMine,
   showTeam,
 }: Props) {
+  const router = useRouter()
   const [view, setView] = useState<View>('list')
   const [myTasks, setMyTasks]             = useState(initialMy)
   const [teamTasks, setTeamTasks]         = useState(initialTeam)
@@ -60,7 +62,7 @@ export default function TasksPageClient({
     setUrlTask(null)
     const url = new URL(window.location.href)
     url.searchParams.delete('task')
-    window.history.replaceState({}, '', url.toString())
+    router.replace(url.pathname + url.search)
   }
 
   // Called by any TaskModal after a save so the lists update immediately
@@ -69,17 +71,15 @@ export default function TasksPageClient({
     const isActive = task.status === 'open' || task.status === 'in_progress'
     setMyTasks(prev => {
       const had = prev.some((t: any) => t.id === task.id)
-      if (!had) return prev
-      return isActive
-        ? prev.map((t: any) => t.id === task.id ? task : t)
-        : prev.filter((t: any) => t.id !== task.id)
+      if (had) return isActive ? prev.map((t: any) => t.id === task.id ? task : t) : prev.filter((t: any) => t.id !== task.id)
+      if (isActive && task.assigned_to === currentUserId) return [task, ...prev]
+      return prev
     })
     setTeamTasks(prev => {
       const had = prev.some((t: any) => t.id === task.id)
-      if (!had) return prev
-      return isActive
-        ? prev.map((t: any) => t.id === task.id ? task : t)
-        : prev.filter((t: any) => t.id !== task.id)
+      if (had) return isActive ? prev.map((t: any) => t.id === task.id ? task : t) : prev.filter((t: any) => t.id !== task.id)
+      if (isActive && task.assigned_to !== currentUserId) return [task, ...prev]
+      return prev
     })
     setCompletedTasks(prev => {
       if (task.status === 'completed' || task.status === 'cancelled') {

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem } from '@/app/actions'
 import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
-import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 type Item = {
   id: string
@@ -33,7 +33,6 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const [showNew, setShowNew]       = useState(false)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
   const [isPending, startTransition] = useTransition()
-  const router = useRouter()
 
   // Editing template header
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
@@ -89,22 +88,32 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
 
   async function saveTemplate(id: string) {
     startTransition(async () => {
-      await updateTemplate({ id, name: editName, description: editDesc || null, category: editCat || null })
-      setEditingTemplate(null)
-      router.refresh()
+      const { error } = await updateTemplate({ id, name: editName, description: editDesc || null, category: editCat || null })
+      if (!error) {
+        setTemplates(prev => prev.map(t => t.id === id ? { ...t, name: editName, description: editDesc || null, category: editCat || null } : t))
+        setEditingTemplate(null)
+      }
     })
   }
 
   async function saveItem(id: string) {
     startTransition(async () => {
-      await updateTemplateItem({
+      const days = editItemDays ? parseInt(editItemDays) : null
+      const { error } = await updateTemplateItem({
         id,
         title:             editItemTitle,
         priority:          editItemPri,
-        relative_due_days: editItemDays ? parseInt(editItemDays) : null,
+        relative_due_days: days,
       })
-      setEditingItem(null)
-      router.refresh()
+      if (!error) {
+        setTemplates(prev => prev.map(t => ({
+          ...t,
+          items: t.items.map(item => item.id === id
+            ? { ...item, title: editItemTitle, priority: editItemPri as Item['priority'], relative_due_days: days }
+            : item),
+        })))
+        setEditingItem(null)
+      }
     })
   }
 
@@ -120,25 +129,31 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
     if (!addItemTitle.trim()) return
     const template = templates.find(t => t.id === templateId)
     startTransition(async () => {
-      await addTemplateItem({
+      const { item, error } = await addTemplateItem({
         templateId,
         title: addItemTitle,
         priority: addItemPriority,
         orderIndex: template?.items.length ?? 0,
         relativeDueDays: addItemDays ? parseInt(addItemDays) : null,
       })
-      setAddingItemTo(null)
-      setAddItemTitle('')
-      setAddItemDays('')
-      setAddItemPriority('medium')
-      router.refresh()
+      if (!error && item) {
+        setTemplates(prev => prev.map(t => t.id === templateId
+          ? { ...t, items: [...t.items, { id: item.id, title: item.title, priority: item.priority as Item['priority'], order_index: item.order_index, relative_due_days: item.relative_due_days }] }
+          : t))
+        setAddingItemTo(null)
+        setAddItemTitle('')
+        setAddItemDays('')
+        setAddItemPriority('medium')
+      }
     })
   }
 
   async function handleRemoveItem(itemId: string) {
     startTransition(async () => {
-      await removeTemplateItem(itemId)
-      router.refresh()
+      const { error } = await removeTemplateItem(itemId)
+      if (!error) {
+        setTemplates(prev => prev.map(t => ({ ...t, items: t.items.filter(item => item.id !== itemId) })))
+      }
     })
   }
 
@@ -146,17 +161,29 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
     e.preventDefault()
     if (!newName.trim()) return
     startTransition(async () => {
-      const { error } = await createTemplate({
+      const { id, error } = await createTemplate({
         name: newName,
         description: newDesc || null,
+        category: newCat || null,
         items: newItems.filter(i => i.title.trim()).map((i, idx) => ({
           title: i.title, priority: i.priority, order_index: idx,
           relative_due_days: i.relative_due_days ? parseInt(i.relative_due_days) : null,
         })),
       })
-      if (!error) {
+      if (!error && id) {
+        const { data: items } = await createClient()
+          .from('task_template_items')
+          .select('id, title, priority, order_index, relative_due_days')
+          .eq('template_id', id)
+          .order('order_index')
+        setTemplates(prev => [...prev, {
+          id,
+          name: newName,
+          description: newDesc || null,
+          category: newCat || null,
+          items: (items ?? []) as Item[],
+        }])
         setShowNew(false); setNewName(''); setNewDesc(''); setNewCat(''); setNewItems([])
-        router.refresh()
       }
     })
   }

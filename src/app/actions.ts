@@ -519,6 +519,7 @@ export async function reassignTask(taskId: string, newAssigneeId: string, client
 export async function createTemplate(data: {
   name: string
   description: string | null
+  category?: string | null
   items: Array<{ title: string; priority: string; order_index: number; relative_due_days: number | null }>
 }): Promise<{ id: string | null; error: string | null }> {
   const supabase = await createClient()
@@ -527,7 +528,7 @@ export async function createTemplate(data: {
 
   const { data: template, error } = await supabase
     .from('task_templates')
-    .insert({ name: data.name, description: data.description, created_by: user.id })
+    .insert({ name: data.name, description: data.description, category: data.category ?? null, created_by: user.id })
     .select()
     .single()
 
@@ -562,23 +563,23 @@ export async function addTemplateItem(data: {
   priority: string
   orderIndex: number
   relativeDueDays: number | null
-}): Promise<{ error: string | null }> {
+}): Promise<{ item: { id: string; title: string; priority: string; order_index: number; relative_due_days: number | null } | null; error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  if (!user) return { item: null, error: 'Unauthorized' }
 
-  const { error } = await supabase.from('task_template_items').insert({
+  const { data: item, error } = await supabase.from('task_template_items').insert({
     template_id:       data.templateId,
     title:             data.title,
     priority:          data.priority,
     order_index:       data.orderIndex,
     relative_due_days: data.relativeDueDays,
-  })
+  }).select('id, title, priority, order_index, relative_due_days').single()
 
-  if (error) return { error: error.message }
+  if (error) return { item: null, error: error.message }
 
   revalidatePath('/templates')
-  return { error: null }
+  return { item, error: null }
 }
 
 export async function updateTemplate(data: {
