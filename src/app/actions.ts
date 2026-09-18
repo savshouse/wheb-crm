@@ -431,18 +431,13 @@ export async function applyTemplateToTask(
     .filter(i => !i.parent_item_id)
     .sort((a, b) => a.order_index - b.order_index)
 
-  // Flatten all items into DFS order: step 1, 1a, 1b, 1c, step 2, 2a, 2b, …
-  // All created as direct sub-tasks of the main task so they're all visible in the task panel
-  const flatItems: typeof items = []
-  for (const top of topLevel) {
-    flatItems.push(top)
-    const children = (childrenByParent[top.id] ?? []).sort((a, b) => a.order_index - b.order_index)
-    flatItems.push(...children)
-  }
-
+  // Create top-level items as sub-tasks of the main task, capturing their new IDs
+  // Then create each item's children as sub-tasks of that item
   const failedItems: string[] = []
-  for (const item of flatItems) {
-    const { error } = await supabase.from('tasks').insert({
+  let totalItems = items.length
+
+  for (const item of topLevel) {
+    const { data: created, error } = await supabase.from('tasks').insert({
       title:          item.title,
       client_id:      clientId,
       parent_task_id: taskId,
@@ -450,12 +445,27 @@ export async function applyTemplateToTask(
       due_date:       calcDueDate(item.relative_due_days),
       created_by:     user.id,
       status:         'open',
-    })
-    if (error) failedItems.push(`"${item.title}" (${error.message})`)
+    }).select('id').single()
+
+    if (error) { failedItems.push(`"${item.title}" (${error.message})`); continue }
+
+    const children = (childrenByParent[item.id] ?? []).sort((a, b) => a.order_index - b.order_index)
+    for (const child of children) {
+      const { error: childErr } = await supabase.from('tasks').insert({
+        title:          child.title,
+        client_id:      clientId,
+        parent_task_id: created!.id,
+        priority:       child.priority,
+        due_date:       calcDueDate(child.relative_due_days),
+        created_by:     user.id,
+        status:         'open',
+      })
+      if (childErr) failedItems.push(`"${child.title}" (${childErr.message})`)
+    }
   }
 
   if (failedItems.length > 0) {
-    return { error: `${flatItems.length - failedItems.length} of ${flatItems.length} tasks created. Failed: ${failedItems.join('; ')}` }
+    return { error: `${totalItems - failedItems.length} of ${totalItems} tasks created. Failed: ${failedItems.join('; ')}` }
   }
 
   revalidatePath(`/clients/${clientId}`)

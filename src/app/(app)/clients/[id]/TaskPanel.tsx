@@ -29,10 +29,16 @@ const valueLabel: Record<string, string> = {
   open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled',
 }
 
+type SubSubTask = {
+  id: string; title: string; status: string
+  due_date: string | null; priority: 'low' | 'medium' | 'high'
+}
+
 type SubTask = {
   id: string; title: string; status: string; assigned_to: string | null
   due_date: string | null; priority: 'low' | 'medium' | 'high'
   description: string | null; assignee: BasicProfile | null
+  sub_tasks?: SubSubTask[]
 }
 
 type TaskWithSubs = {
@@ -598,6 +604,22 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                             className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors">
                             <Pencil size={11} />
                           </button>
+                        </div>
+                      )}
+                      {/* Sub-sub-tasks (template step children) */}
+                      {sub.sub_tasks && sub.sub_tasks.length > 0 && (
+                        <div className="mt-1 ml-5 space-y-0.5">
+                          {sub.sub_tasks.map(ss => (
+                            <div key={ss.id} className="flex items-center gap-2 py-0.5">
+                              <button
+                                onClick={() => handleStatusChange(ss.id, ss.status === 'completed' ? 'open' : 'completed')}
+                                className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${ss.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                              />
+                              <p className={`text-xs flex-1 min-w-0 truncate ${ss.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'}`}>{ss.title}</p>
+                              {ss.due_date && <span className={`text-xs shrink-0 ${dueDateClass(ss.due_date)}`}>{format(parseISO(ss.due_date), 'd MMM')}</span>}
+                              <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[ss.priority]}`}>{ss.priority[0].toUpperCase()}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

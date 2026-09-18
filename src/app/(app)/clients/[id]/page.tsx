@@ -127,19 +127,23 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
   const allOpenTasks = tasks?.filter(t => t.status !== 'completed' && t.status !== 'cancelled') ?? []
   const completedTasks = tasks?.filter(t => t.status === 'completed') ?? []
 
-  // Build sub-task map for TaskPanel — sub-tasks sorted oldest-first so template order is preserved
-  const rootOpenTasks = allOpenTasks.filter(t => !t.parent_task_id)
-  const subTaskMap = allOpenTasks.reduce((acc: Record<string, typeof allOpenTasks>, t) => {
+  // Build two-level sub-task tree for TaskPanel, sorted oldest-first so template order is preserved
+  const rootOpenTasks = allOpenTasks.filter((t: any) => !t.parent_task_id)
+  const subTaskMap = allOpenTasks.reduce((acc: Record<string, any[]>, t: any) => {
     if (t.parent_task_id) {
       if (!acc[t.parent_task_id]) acc[t.parent_task_id] = []
       acc[t.parent_task_id].push(t)
     }
     return acc
   }, {})
-  Object.keys(subTaskMap).forEach(k => {
-    subTaskMap[k].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  })
-  const openTasksWithSubs = rootOpenTasks.map(t => ({ ...t, sub_tasks: subTaskMap[t.id] ?? [] }))
+  const sortByCreated = (arr: any[]) => [...arr].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const openTasksWithSubs = rootOpenTasks.map((t: any) => ({
+    ...t,
+    sub_tasks: sortByCreated(subTaskMap[t.id] ?? []).map((sub: any) => ({
+      ...sub,
+      sub_tasks: sortByCreated(subTaskMap[sub.id] ?? []),
+    })),
+  }))
 
   type MeetingRow = Meeting & { creator: BasicProfile | null; tasks: { id: string }[] }
   type TaskRow    = Task & { assignee: BasicProfile | null; meeting: { title: string } | null }
