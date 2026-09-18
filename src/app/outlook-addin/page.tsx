@@ -11,7 +11,7 @@ const supabase = createClient(
 
 type Client  = { id: string; name: string; type: string }
 type Meeting = { id: string; title: string; meeting_date: string; notes: string | null }
-type Task    = { id: string; title: string; status: string; priority: string; due_date: string | null; description: string | null }
+type Task    = { id: string; title: string; status: string; priority: string; due_date: string | null; description: string | null; parent_task_id: string | null }
 
 const PRIO_DOT: Record<string, string> = {
   high: '#ef4444', medium: '#f59e0b', low: '#22c55e',
@@ -34,6 +34,7 @@ export default function OutlookAddinPage() {
   const [selected, setSelected]     = useState<Client | null>(null)
   const [meetings, setMeetings]     = useState<Meeting[]>([])
   const [tasks, setTasks]           = useState<Task[]>([])
+  const [subTaskMap, setSubTaskMap] = useState<Record<string, Task[]>>({})
   const [loading, setLoading]       = useState(false)
   const [ofContext, setOfContext]   = useState<string | null>(null)
 
@@ -76,20 +77,28 @@ export default function OutlookAddinPage() {
 
   async function doSearch(q: string) {
     if (!q.trim() || !session) return
-    setLoading(true); setSelected(null); setEditingId(null)
+    setLoading(true); setSelected(null); setEditingId(null); setSubTaskMap({})
     const { data } = await supabase.from('clients').select('id, name, type').ilike('name', `%${q}%`).limit(8)
     setResults((data ?? []) as Client[])
     setLoading(false)
   }
 
   async function selectClient(c: Client) {
-    setSelected(c); setResults([]); setLoading(true); setEditingId(null)
-    const [{ data: m }, { data: t }] = await Promise.all([
+    setSelected(c); setResults([]); setLoading(true); setEditingId(null); setSubTaskMap({})
+    const [{ data: m }, { data: allT }] = await Promise.all([
       supabase.from('meetings').select('id,title,meeting_date,notes').eq('client_id', c.id).order('meeting_date', { ascending: false }).limit(5),
-      supabase.from('tasks').select('id,title,status,priority,due_date,description').eq('client_id', c.id).is('parent_task_id', null).in('status', ['open', 'in_progress']).order('due_date', { ascending: true, nullsFirst: false }).limit(10),
+      supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').eq('client_id', c.id).in('status', ['open', 'in_progress']).order('due_date', { ascending: true, nullsFirst: false }).limit(50),
     ])
     setMeetings((m ?? []) as Meeting[])
-    setTasks((t ?? []) as Task[])
+    const typed = (allT ?? []) as Task[]
+    const parents = typed.filter(t => !t.parent_task_id)
+    const subMap: Record<string, Task[]> = {}
+    typed.filter(t => t.parent_task_id).forEach(s => {
+      if (!subMap[s.parent_task_id!]) subMap[s.parent_task_id!] = []
+      subMap[s.parent_task_id!].push(s)
+    })
+    setTasks(parents)
+    setSubTaskMap(subMap)
     setLoading(false)
   }
 
@@ -112,10 +121,74 @@ export default function OutlookAddinPage() {
       setSaveMsg('Error saving')
     } else {
       setSaveMsg('Saved!')
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...edit, due_date: edit.due_date || null, description: edit.description || null } : t))
+      const patch = { ...edit, due_date: edit.due_date || null, description: edit.description || null }
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t))
+      setSubTaskMap(prev => {
+        const next = { ...prev }
+        for (const key in next) next[key] = next[key].map(t => t.id === taskId ? { ...t, ...patch } : t)
+        return next
+      })
       setTimeout(() => { setEditingId(null); setSaveMsg('') }, 800)
     }
     setSaving(false)
+  }
+
+  function renderEditForm(t: Task) {
+    return (
+      <div style={{ background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', margin: '4px 0' }}>
+        <input value={edit.title} onChange={e => setEdit(v => ({ ...v, title: e.target.value }))} style={{ ...inputSt, fontWeight: 600, marginBottom: 8 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+          <div>
+            <label style={labelSt}>Status</label>
+            <select value={edit.status} onChange={e => setEdit(v => ({ ...v, status: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }}>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelSt}>Priority</label>
+            <select value={edit.priority} onChange={e => setEdit(v => ({ ...v, priority: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <label style={labelSt}>Due date</label>
+          <input type="date" value={edit.due_date} onChange={e => setEdit(v => ({ ...v, due_date: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }} />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelSt}>Notes</label>
+          <textarea value={edit.description} onChange={e => setEdit(v => ({ ...v, description: e.target.value }))}
+            rows={3} placeholder="Add notes…" style={{ ...inputSt, resize: 'vertical' as const, fontFamily: 'system-ui, sans-serif' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => saveEdit(t.id)} disabled={saving} style={{ ...btnSt, padding: '6px 14px', fontSize: 12 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={() => setEditingId(null)} style={{ background: 'none', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          {saveMsg && <span style={{ fontSize: 11, color: saveMsg === 'Saved!' ? '#16a34a' : '#dc2626' }}>{saveMsg}</span>}
+        </div>
+      </div>
+    )
+  }
+
+  function renderRow(t: Task, isSub = false) {
+    return (
+      <button onClick={() => startEdit(t)}
+        style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 7, padding: isSub ? '4px 2px' : '6px 2px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+        <span style={{ width: isSub ? 5 : 7, height: isSub ? 5 : 7, borderRadius: '50%', background: PRIO_DOT[t.priority] ?? '#94a3b8', flexShrink: 0, marginTop: 1 }} />
+        <span style={{ flex: 1, fontSize: isSub ? 11 : 12, color: '#1e293b' }}>{t.title}</span>
+        {t.description && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>📝</span>}
+        {t.due_date && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{format(parseISO(t.due_date), 'd MMM')}</span>}
+        <span style={{ fontSize: 10, color: '#2563eb', flexShrink: 0 }}>Edit ✎</span>
+      </button>
+    )
   }
 
   if (!session) {
@@ -182,70 +255,31 @@ export default function OutlookAddinPage() {
           {/* Open tasks */}
           {tasks.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={sectionLabel}>Open tasks ({tasks.length})</div>
-              {tasks.map(t => (
-                <div key={t.id} style={{ borderBottom: '1px solid #f1f5f9', marginBottom: 2 }}>
-                  {editingId === t.id ? (
-                    /* ── Inline edit card ── */
-                    <div style={{ background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', margin: '4px 0' }}>
-                      <input
-                        value={edit.title}
-                        onChange={e => setEdit(v => ({ ...v, title: e.target.value }))}
-                        style={{ ...inputSt, fontWeight: 600, marginBottom: 8 }}
-                      />
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-                        <div>
-                          <label style={labelSt}>Status</label>
-                          <select value={edit.status} onChange={e => setEdit(v => ({ ...v, status: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }}>
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={labelSt}>Priority</label>
-                          <select value={edit.priority} onChange={e => setEdit(v => ({ ...v, priority: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }}>
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: 8 }}>
-                        <label style={labelSt}>Due date</label>
-                        <input type="date" value={edit.due_date} onChange={e => setEdit(v => ({ ...v, due_date: e.target.value }))} style={{ ...inputSt, padding: '5px 8px' }} />
-                      </div>
-                      <div style={{ marginBottom: 10 }}>
-                        <label style={labelSt}>Notes</label>
-                        <textarea value={edit.description} onChange={e => setEdit(v => ({ ...v, description: e.target.value }))}
-                          rows={3} placeholder="Add notes…" style={{ ...inputSt, resize: 'vertical' as const, fontFamily: 'system-ui, sans-serif' }} />
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button onClick={() => saveEdit(t.id)} disabled={saving}
-                          style={{ ...btnSt, padding: '6px 14px', fontSize: 12 }}>
-                          {saving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button onClick={() => setEditingId(null)}
-                          style={{ background: 'none', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
-                          Cancel
-                        </button>
-                        {saveMsg && <span style={{ fontSize: 11, color: saveMsg === 'Saved!' ? '#16a34a' : '#dc2626' }}>{saveMsg}</span>}
-                      </div>
+              <div style={sectionLabel}>
+                Open tasks ({tasks.length + Object.values(subTaskMap).reduce((n, a) => n + a.length, 0)})
+              </div>
+              {tasks.map(t => {
+                const subs = subTaskMap[t.id] ?? []
+                return (
+                  <div key={t.id} style={{ marginBottom: 4 }}>
+                    {/* Parent task */}
+                    <div style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      {editingId === t.id ? renderEditForm(t) : renderRow(t)}
                     </div>
-                  ) : (
-                    /* ── Collapsed task row ── */
-                    <button onClick={() => startEdit(t)}
-                      style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 7, padding: '6px 2px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: PRIO_DOT[t.priority] ?? '#94a3b8', flexShrink: 0, marginTop: 1 }} />
-                      <span style={{ flex: 1, fontSize: 12, color: '#1e293b' }}>{t.title}</span>
-                      {t.description && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>📝</span>}
-                      {t.due_date && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{format(parseISO(t.due_date), 'd MMM')}</span>}
-                      <span style={{ fontSize: 10, color: '#2563eb', flexShrink: 0 }}>Edit ✎</span>
-                    </button>
-                  )}
-                </div>
-              ))}
+
+                    {/* Sub-tasks */}
+                    {subs.length > 0 && (
+                      <div style={{ marginLeft: 14, paddingLeft: 8, borderLeft: '2px solid #e2e8f0', marginBottom: 4 }}>
+                        {subs.map(sub => (
+                          <div key={sub.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                            {editingId === sub.id ? renderEditForm(sub) : renderRow(sub, true)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 

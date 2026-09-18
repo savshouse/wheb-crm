@@ -59,6 +59,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [saving, setSaving]           = useState(false)
   const [dirty, setDirty]             = useState(false)
   const dirtyRef                       = useRef(false)
+  const isMountedRef                   = useRef(false)
 
   // Sub-task state
   const [subTasks, setSubTasks]       = useState<any[]>([])
@@ -193,7 +194,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     })
   }, [])
 
-  useEffect(() => { setDirty(true); dirtyRef.current = true }, [title, priority, dueDate, description])
+  useEffect(() => {
+    if (!isMountedRef.current) { isMountedRef.current = true; return }
+    setDirty(true)
+    dirtyRef.current = true
+  }, [title, priority, dueDate, description])
 
   // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
   useEffect(() => {

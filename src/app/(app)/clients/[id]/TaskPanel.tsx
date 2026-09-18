@@ -707,8 +707,9 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
           profiles={profiles}
           currentUserId={currentUserId}
           onClose={() => setModalTask(null)}
-          onSaved={() => { setModalTask(null); router.refresh() }}
+          onSaved={(updated) => { setModalTask(updated); router.refresh() }}
           onBack={() => setModalTask(null)}
+          onDeleted={() => { setModalTask(null); router.refresh() }}
         />
       )}
     </div>
