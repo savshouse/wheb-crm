@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { performBackup } from '@/lib/backup'
 
 // ─── Clients ─────────────────────────────────────────────────
 
@@ -894,4 +895,29 @@ export async function updateUserRole(
   if (error) return { error: error.message }
   revalidatePath('/admin/users')
   return { error: null }
+}
+
+// ─── Backup ───────────────────────────────────────────────────
+
+export async function triggerBackup(): Promise<{
+  error: string | null
+  url?: string
+  pathname?: string
+  counts?: Record<string, number>
+  exportedAt?: string
+}> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return { error: 'Admin access required' }
+
+  try {
+    const result = await performBackup()
+    revalidatePath('/admin/backups')
+    return { error: null, ...result }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Backup failed' }
+  }
 }

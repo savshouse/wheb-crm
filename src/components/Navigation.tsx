@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   BarChart2,
   Download,
+  HardDrive,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -133,6 +134,17 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
             >
               <Download size={18} className="shrink-0" />
               Export Data
+            </Link>
+            <Link
+              href="/admin/backups"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/admin/backups')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <HardDrive size={18} className="shrink-0" />
+              Backups
             </Link>
           </>
         )}
