@@ -422,6 +422,7 @@ export async function applyTemplateToTask(
 
   // Create top-level steps as sub-tasks of the main task, one at a time to capture their new IDs
   const templateItemToTaskId: Record<string, string> = {}
+  const failedItems: string[] = []
   for (const item of topLevel) {
     const { data: created, error } = await supabase.from('tasks').insert({
       title:          item.title,
@@ -432,8 +433,11 @@ export async function applyTemplateToTask(
       created_by:     user.id,
       status:         'open',
     }).select('id').single()
-    if (error) return { error: error.message }
-    if (created) templateItemToTaskId[item.id] = created.id
+    if (error) {
+      failedItems.push(`"${item.title}" (${error.message})`)
+    } else if (created) {
+      templateItemToTaskId[item.id] = created.id
+    }
   }
 
   // Create child steps as sub-tasks of their newly-created parent tasks
@@ -456,8 +460,12 @@ export async function applyTemplateToTask(
 
     if (childRows.length > 0) {
       const { error } = await supabase.from('tasks').insert(childRows)
-      if (error) return { error: error.message }
+      if (error) failedItems.push(`child tasks (${error.message})`)
     }
+  }
+
+  if (failedItems.length > 0) {
+    return { error: `${topLevel.length - failedItems.length} of ${topLevel.length} tasks created. Failed: ${failedItems.join('; ')}` }
   }
 
   revalidatePath(`/clients/${clientId}`)

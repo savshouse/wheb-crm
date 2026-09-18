@@ -81,6 +81,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   const [newTaskPriority, setNewTaskPriority] = useState('medium')
   const [newTaskTemplate, setNewTaskTemplate] = useState('')
   const [addingTask, setAddingTask] = useState(false)
+  const [templateError, setTemplateError] = useState<string | null>(null)
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
   const [addingSubTask, setAddingSubTask] = useState<string | null>(null)
   const [subTaskTitle, setSubTaskTitle] = useState('')
@@ -276,9 +277,13 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
       title: newTaskTitle, client_id: clientId, assigned_to: newTaskAssignee || null,
       due_date: newTaskDue || null, priority: newTaskPriority, created_by: user.id, status: 'open',
     }).select().single()
-    if (task && newTaskTemplate) await applyTemplateToTask(task.id, newTaskTemplate, clientId, newTaskDue || undefined)
+    if (task && newTaskTemplate) {
+      const { error: tmplErr } = await applyTemplateToTask(task.id, newTaskTemplate, clientId, newTaskDue || undefined)
+      if (tmplErr) { setTemplateError(tmplErr); setAddingTask(false); router.refresh(); return }
+    }
     setNewTaskTitle(''); setNewTaskDue(''); setNewTaskPriority('medium')
     setNewTaskAssignee(currentUserId); setNewTaskTemplate('')
+    setTemplateError(null)
     setShowAddTask(false); setAddingTask(false)
     router.refresh()
   }
@@ -362,6 +367,13 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
             </button>
           </div>
         </form>
+      )}
+
+      {templateError && (
+        <div className="mx-3 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+          <strong>Template warning:</strong> {templateError}
+          <button onClick={() => setTemplateError(null)} className="ml-2 underline">Dismiss</button>
+        </div>
       )}
 
       {/* Task list */}
