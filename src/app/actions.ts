@@ -583,6 +583,68 @@ export async function createTemplate(data: {
   return { id: template.id, error: null }
 }
 
+export async function importTemplate(data: {
+  name: string
+  description: string | null
+  category: string | null
+  items: Array<{
+    title: string
+    priority: string
+    relative_due_days: number | null
+    level: number
+  }>
+}): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { id: null, error: 'Unauthorized' }
+
+  const { data: tmpl, error: tmplErr } = await supabase
+    .from('task_templates')
+    .insert({ name: data.name, description: data.description, category: data.category, created_by: user.id })
+    .select('id')
+    .single()
+  if (tmplErr || !tmpl) return { id: null, error: tmplErr?.message ?? 'Failed to create template' }
+
+  let lastTopLevelId: string | null = null
+  let topLevelOrder = 0
+  const childOrderMap: Record<string, number> = {}
+
+  for (const item of data.items) {
+    if (item.level === 0) {
+      const { data: created, error } = await supabase
+        .from('task_template_items')
+        .insert({
+          template_id:       tmpl.id,
+          title:             item.title,
+          priority:          item.priority,
+          order_index:       topLevelOrder++,
+          relative_due_days: item.relative_due_days,
+          parent_item_id:    null,
+        })
+        .select('id')
+        .single()
+      if (!error && created) lastTopLevelId = created.id
+    } else {
+      if (!lastTopLevelId) continue
+      const childOrder = childOrderMap[lastTopLevelId] ?? 0
+      const { error } = await supabase
+        .from('task_template_items')
+        .insert({
+          template_id:       tmpl.id,
+          title:             item.title,
+          priority:          item.priority,
+          order_index:       childOrder,
+          relative_due_days: item.relative_due_days,
+          parent_item_id:    lastTopLevelId,
+        })
+      if (!error) childOrderMap[lastTopLevelId] = childOrder + 1
+    }
+  }
+
+  revalidatePath('/templates')
+  return { id: tmpl.id, error: null }
+}
+
 export async function deleteTemplate(templateId: string): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition, Fragment } from 'react'
-import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem } from '@/app/actions'
-import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info } from 'lucide-react'
+import { useState, useTransition, Fragment, useRef } from 'react'
+import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem, importTemplate } from '@/app/actions'
+import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info, Download, Upload } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
 import { createClient } from '@/lib/supabase/client'
 
@@ -59,6 +59,17 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const [addItemTitle, setAddItemTitle]       = useState('')
   const [addItemPriority, setAddItemPriority] = useState('medium')
   const [addItemDays, setAddItemDays]         = useState('')
+
+  // Import state
+  const [showImport, setShowImport]         = useState(false)
+  const [importName, setImportName]         = useState('')
+  const [importDesc, setImportDesc]         = useState('')
+  const [importCat, setImportCat]           = useState('')
+  const [importParsed, setImportParsed]     = useState<Array<{ title: string; priority: string; relative_due_days: number | null; level: number }> | null>(null)
+  const [importFileName, setImportFileName] = useState('')
+  const [importError, setImportError]       = useState('')
+  const [importing, setImporting]           = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Derive all categories
   const allCategories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[]
@@ -216,6 +227,93 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
     })
   }
 
+  // ── Export ──────────────────────────────────────────────────────
+  function handleExportTemplate(template: Template) {
+    const sorted = [...template.items].sort((a, b) => a.order_index - b.order_index)
+    const topLevel = sorted.filter(i => !i.parent_item_id)
+    const esc = (v: string) => v.includes(',') || v.includes('"') || v.includes('\n')
+      ? `"${v.replace(/"/g, '""')}"` : v
+    const rows = ['level,title,priority,relative_due_days']
+    for (const parent of topLevel) {
+      rows.push(`0,${esc(parent.title)},${parent.priority},${parent.relative_due_days ?? ''}`)
+      sorted.filter(c => c.parent_item_id === parent.id).forEach(child => {
+        rows.push(`1,${esc(child.title)},${child.priority},${child.relative_due_days ?? ''}`)
+      })
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `wheb-template-${template.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ── Import ──────────────────────────────────────────────────────
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportFileName(file.name)
+    setImportError('')
+    const reader = new FileReader()
+    reader.onload = evt => {
+      const text = evt.target?.result as string
+      const lines = text.trim().split('\n').filter(l => l.trim())
+      if (lines.length < 2) { setImportError('CSV must have a header row and at least one step.'); return }
+      const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/^"|"$/g, ''))
+      const levelIdx = header.indexOf('level')
+      const titleIdx = header.indexOf('title')
+      const priIdx   = header.indexOf('priority')
+      const daysIdx  = header.indexOf('relative_due_days')
+      if (titleIdx === -1) { setImportError('CSV must have a "title" column.'); return }
+      const parsed = lines.slice(1).map(line => {
+        const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'))
+        const days = daysIdx !== -1 && cols[daysIdx] ? parseInt(cols[daysIdx]) : null
+        return {
+          level:             levelIdx !== -1 ? (parseInt(cols[levelIdx]) || 0) : 0,
+          title:             cols[titleIdx] ?? '',
+          priority:          (['low','medium','high'].includes(cols[priIdx] ?? '') ? cols[priIdx] : 'medium') as string,
+          relative_due_days: isNaN(days as number) ? null : days,
+        }
+      }).filter(r => r.title.trim())
+      if (!parsed.length) { setImportError('No valid rows found.'); return }
+      setImportParsed(parsed)
+      // Pre-fill name from filename if empty
+      if (!importName) setImportName(file.name.replace(/\.csv$/i, '').replace(/[-_]+/g, ' '))
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleImportSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!importParsed || !importName.trim()) return
+    setImporting(true)
+    const { id, error } = await importTemplate({
+      name:        importName.trim(),
+      description: importDesc || null,
+      category:    importCat  || null,
+      items:       importParsed,
+    })
+    if (error || !id) { setImportError(error ?? 'Import failed'); setImporting(false); return }
+    // Fetch the newly created items and add to state
+    const { data: items } = await createClient()
+      .from('task_template_items')
+      .select('id, title, priority, order_index, relative_due_days, parent_item_id')
+      .eq('template_id', id)
+      .order('order_index')
+    setTemplates(prev => [...prev, {
+      id,
+      name:        importName.trim(),
+      description: importDesc || null,
+      category:    importCat  || null,
+      items:       (items ?? []) as Item[],
+    }])
+    setShowImport(false); setImportName(''); setImportDesc(''); setImportCat('')
+    setImportParsed(null); setImportFileName(''); setImportError('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setImporting(false)
+  }
+
   const inputClass = 'px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
   return (
@@ -227,7 +325,13 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowNew(!showNew)}
+            onClick={() => { setShowImport(!showImport); setShowNew(false) }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <Upload size={15} />Import CSV
+          </button>
+          <button
+            onClick={() => { setShowNew(!showNew); setShowImport(false) }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus size={15} />New template
@@ -243,6 +347,62 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
           <span className="font-semibold">How to apply a template:</span> Open any client or person, click the <strong>+</strong> button in the Tasks panel on the right, enter a task title, then select a template from the <em>"Apply template"</em> dropdown. All steps are created as sub-tasks automatically.
         </div>
       </div>
+
+      {/* Import form */}
+      {showImport && (
+        <form onSubmit={handleImportSubmit} className="bg-white rounded-xl border border-blue-200 p-5 mb-6 space-y-4">
+          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Upload size={14} />Import template from CSV</h2>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Template name *</label>
+              <input value={importName} onChange={e => setImportName(e.target.value)} required placeholder="e.g. Mortgage Application" className={`w-full ${inputClass}`} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+              <input value={importCat} onChange={e => setImportCat(e.target.value)} placeholder="e.g. Mortgage" className={`w-full ${inputClass}`} list="cat-suggestions" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+              <input value={importDesc} onChange={e => setImportDesc(e.target.value)} placeholder="Optional description" className={`w-full ${inputClass}`} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">CSV file</label>
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-300 file:text-xs file:font-medium file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100 cursor-pointer" />
+            <p className="text-xs text-slate-400 mt-1">Expected columns: <code className="bg-slate-100 px-1 rounded">level</code>, <code className="bg-slate-100 px-1 rounded">title</code>, <code className="bg-slate-100 px-1 rounded">priority</code>, <code className="bg-slate-100 px-1 rounded">relative_due_days</code> — use level 0 for steps, level 1 for sub-steps</p>
+          </div>
+
+          {importError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{importError}</p>
+          )}
+
+          {importParsed && (
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-2">Preview — {importParsed.length} rows parsed from {importFileName}</p>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 divide-y divide-slate-100">
+                {importParsed.map((row, i) => (
+                  <div key={i} className={`flex items-center gap-2 px-3 py-1.5 ${row.level === 1 ? 'pl-8 bg-slate-50/60' : ''}`}>
+                    <span className="text-xs text-slate-400 shrink-0 w-4">{row.level === 0 ? '●' : '○'}</span>
+                    <span className="text-xs text-slate-700 flex-1">{row.title}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[row.priority as keyof typeof priorityColour] ?? 'bg-slate-100 text-slate-600'}`}>{row.priority}</span>
+                    {row.relative_due_days != null && <span className="text-xs text-slate-400">+{row.relative_due_days}d</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={importing || !importParsed || !importName.trim()} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {importing ? 'Importing…' : `Import${importParsed ? ` (${importParsed.length} steps)` : ''}`}
+            </button>
+            <button type="button" onClick={() => { setShowImport(false); setImportParsed(null); setImportError(''); setImportFileName(''); if (fileInputRef.current) fileInputRef.current.value = '' }} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50">Cancel</button>
+          </div>
+        </form>
+      )}
 
       {/* New template form */}
       {showNew && (
@@ -364,6 +524,7 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
 
                         {!isEditing && (
                           <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => handleExportTemplate(template)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="Export as CSV"><Download size={13} /></button>
                             <button onClick={() => startEditTemplate(template)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit"><Pencil size={13} /></button>
                             <button onClick={() => handleDeleteTemplate(template.id)} disabled={isPending} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={13} /></button>
                           </div>
