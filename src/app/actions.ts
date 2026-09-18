@@ -773,3 +773,55 @@ export async function bulkCreatePeople(people: Array<{
   revalidatePath('/clients')
   return { count: data?.length ?? 0, error: null }
 }
+
+// ─── Admin ─────────────────────────────────────────────────────
+
+export async function deleteTask(taskId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return { error: 'Admin access required' }
+
+  // Gather sub-task IDs
+  const { data: subTasks } = await supabase.from('tasks').select('id').eq('parent_task_id', taskId)
+  const subIds = (subTasks ?? []).map((t: any) => t.id)
+
+  // Delete comments and history for sub-tasks
+  if (subIds.length) {
+    await supabase.from('task_comments').delete().in('task_id', subIds)
+    await supabase.from('task_history').delete().in('task_id', subIds)
+    await supabase.from('tasks').delete().in('id', subIds)
+  }
+
+  // Delete parent task's comments, history, then the task itself
+  await supabase.from('task_comments').delete().eq('task_id', taskId)
+  await supabase.from('task_history').delete().eq('task_id', taskId)
+  const { error } = await supabase.from('tasks').delete().eq('id', taskId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/tasks')
+  return { error: null }
+}
+
+export async function updateUserRole(
+  userId: string,
+  role: 'admin' | 'manager' | 'staff'
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return { error: 'Admin access required' }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/users')
+  return { error: null }
+}

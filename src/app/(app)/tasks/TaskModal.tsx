@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
-import { updateTask, updateTaskStatus, reassignTask, createSubTask } from '@/app/actions'
+import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 
 const priorityColour = {
@@ -71,6 +71,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [comments, setComments]       = useState<any[]>([])
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
+
+  // Admin delete
+  const [isAdmin, setIsAdmin]           = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting]         = useState(false)
 
   // Sub-task comments
   const [subCommentsMap, setSubCommentsMap]   = useState<Record<string, any[]>>({})
@@ -159,6 +164,15 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('profiles').select('role').eq('id', user.id).single()
+        .then(({ data }) => { if (data?.role === 'admin') setIsAdmin(true) })
+    })
+  }, [])
+
   useEffect(() => { setDirty(true); dirtyRef.current = true }, [title, priority, dueDate, description])
 
   // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
@@ -237,6 +251,13 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setSaving(false)
     setDirty(false)
     onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    const { error } = await deleteTask(task.id)
+    if (error) { alert(`Delete failed: ${error}`); setDeleting(false); return }
+    onClose()
   }
 
   // ── Sub-task expand/collapse ─────────────────────────────────
@@ -694,24 +715,57 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
-          {task.client && (
-            <Link href={`/clients/${task.client.id}`} className="text-xs text-slate-500 hover:text-blue-600 underline" onClick={onClose}>
-              Open client page →
-            </Link>
+        <div className="px-6 py-4 border-t border-slate-200 shrink-0">
+          {confirmDelete ? (
+            <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <AlertTriangle size={16} className="text-red-600 shrink-0" />
+              <p className="text-sm text-red-700 flex-1">Permanently delete this task and all sub-tasks? This cannot be undone.</p>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs px-3 py-1.5 rounded bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+              >
+                <Trash2 size={11} />{deleting ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {task.client && (
+                  <Link href={`/clients/${task.client.id}`} className="text-xs text-slate-500 hover:text-blue-600 underline" onClick={onClose}>
+                    Open client page →
+                  </Link>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    Delete task
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                  {dirty ? 'Discard' : 'Close'}
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !dirty}
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+                >
+                  <Check size={14} />{saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
           )}
-          <div className="flex gap-2 ml-auto">
-            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-              {dirty ? 'Discard' : 'Close'}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !dirty}
-              className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-1.5"
-            >
-              <Check size={14} />{saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
         </div>
       </div>
     </>

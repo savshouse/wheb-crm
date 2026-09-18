@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LayoutTemplate,
   BarChart2,
+  Download,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -114,13 +115,24 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
             <Link
               href="/admin/users"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin')
+                isActive('/admin/users')
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               }`}
             >
               <Settings size={18} className="shrink-0" />
               Users & Roles
+            </Link>
+            <Link
+              href="/admin/export"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/admin/export')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Download size={18} className="shrink-0" />
+              Export Data
             </Link>
           </>
         )}
