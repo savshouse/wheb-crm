@@ -62,6 +62,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [expandedSub, setExpandedSub] = useState<string | null>(null)
   const [subEdits, setSubEdits]       = useState<Record<string, SubEdit>>({})
   const [subSaving, setSubSaving]     = useState<string | null>(null)
+  const [subChildren, setSubChildren] = useState<Record<string, any[]>>({})
 
   // Audit history
   const [history, setHistory]         = useState<any[]>([])
@@ -99,7 +100,23 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       .select('id, title, status, priority, due_date, description, assigned_to')
       .eq('parent_task_id', task.id)
       .order('created_at')
-      .then(({ data }) => setSubTasks(data ?? []))
+      .then(async ({ data }) => {
+        const subs = data ?? []
+        setSubTasks(subs)
+        if (subs.length > 0) {
+          const { data: grandchildren } = await supabase
+            .from('tasks')
+            .select('id, title, status, priority, due_date, parent_task_id')
+            .in('parent_task_id', subs.map(s => s.id))
+            .order('created_at')
+          const map: Record<string, any[]> = {}
+          for (const gc of grandchildren ?? []) {
+            if (!map[gc.parent_task_id]) map[gc.parent_task_id] = []
+            map[gc.parent_task_id].push(gc)
+          }
+          setSubChildren(map)
+        }
+      })
 
     supabase
       .from('task_history')
@@ -461,6 +478,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                       <span className={`text-sm flex-1 min-w-0 truncate ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                         {sub.title}
                       </span>
+                      {subChildren[sub.id]?.length > 0 && (
+                        <span className="shrink-0 text-xs bg-slate-200 text-slate-500 rounded px-1.5 py-0.5 font-medium">
+                          {subChildren[sub.id].filter(c => c.status === 'completed').length}/{subChildren[sub.id].length}
+                        </span>
+                      )}
                       {sub.due_date && (
                         <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>
                           {format(parseISO(sub.due_date), 'd MMM')}
@@ -529,6 +551,23 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                             <Check size={11} />{isSavingSub ? 'Saving…' : 'Save'}
                           </button>
                         </div>
+
+                        {/* Sub-sub-tasks (template step children) */}
+                        {subChildren[sub.id]?.length > 0 && (
+                          <div className="border-t border-blue-100 pt-2.5 mt-1">
+                            <p className="text-xs font-medium text-slate-500 mb-1.5">Steps</p>
+                            <div className="space-y-1 border-l-2 border-slate-200 pl-2">
+                              {subChildren[sub.id].map((gc: any) => (
+                                <div key={gc.id} className="flex items-center gap-2 py-0.5">
+                                  <div className={`w-3 h-3 rounded-sm border-2 shrink-0 ${gc.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'}`} />
+                                  <span className={`text-xs flex-1 min-w-0 truncate ${gc.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-600'}`}>{gc.title}</span>
+                                  {gc.due_date && <span className={`text-xs shrink-0 ${dueDateClass(gc.due_date)}`}>{format(parseISO(gc.due_date), 'd MMM')}</span>}
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1.5">Open the step from the client page to edit it.</p>
+                          </div>
+                        )}
 
                         {/* Sub-task comments */}
                         <div className="border-t border-blue-100 pt-2.5 mt-1">

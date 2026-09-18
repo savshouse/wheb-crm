@@ -32,6 +32,7 @@ const valueLabel: Record<string, string> = {
 type SubSubTask = {
   id: string; title: string; status: string
   due_date: string | null; priority: 'low' | 'medium' | 'high'
+  description: string | null
 }
 
 type SubTask = {
@@ -129,6 +130,36 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   const [expandedDesc, setExpandedDesc] = useState<Set<string>>(new Set())
   function toggleDesc(id: string) {
     setExpandedDesc(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  // Sub-sub-task editing
+  const [editingSubSubId, setEditingSubSubId] = useState<string | null>(null)
+  const [editSubSubTitle, setEditSubSubTitle] = useState('')
+  const [editSubSubDue, setEditSubSubDue] = useState('')
+  const [editSubSubPriority, setEditSubSubPriority] = useState('medium')
+  const [editSubSubDesc, setEditSubSubDesc] = useState('')
+  const [savingSubSubEdit, setSavingSubSubEdit] = useState(false)
+
+  function startSubSubEdit(ss: SubSubTask) {
+    setEditingSubSubId(ss.id)
+    setEditSubSubTitle(ss.title)
+    setEditSubSubDue(ss.due_date ?? '')
+    setEditSubSubPriority(ss.priority)
+    setEditSubSubDesc(ss.description ?? '')
+  }
+
+  async function saveSubSubEdit() {
+    if (!editingSubSubId) return
+    setSavingSubSubEdit(true)
+    await updateTask(editingSubSubId, clientId, {
+      title: editSubSubTitle.trim() || 'Untitled',
+      due_date: editSubSubDue || null,
+      priority: editSubSubPriority,
+      description: editSubSubDesc.trim() || null,
+    })
+    setSavingSubSubEdit(false)
+    setEditingSubSubId(null)
+    router.refresh()
   }
 
   // Sub-task editing
@@ -598,6 +629,11 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                             className={`w-3.5 h-3.5 rounded border-2 shrink-0 transition-colors ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
                           />
                           <p className={`text-xs flex-1 min-w-0 truncate ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</p>
+                          {sub.sub_tasks && sub.sub_tasks.length > 0 && (
+                            <span className="shrink-0 text-xs bg-slate-200 text-slate-500 rounded px-1.5 py-0.5 font-medium">
+                              {sub.sub_tasks.filter(ss => ss.status === 'completed').length}/{sub.sub_tasks.length}
+                            </span>
+                          )}
                           {sub.due_date && <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>{format(parseISO(sub.due_date), 'd MMM')}</span>}
                           <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[sub.priority]}`}>{sub.priority[0].toUpperCase()}</span>
                           <button onClick={() => startSubEdit(sub)} title="Edit sub-task"
@@ -606,18 +642,61 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                           </button>
                         </div>
                       )}
-                      {/* Sub-sub-tasks (template step children) */}
+                      {/* Sub-sub-tasks (template step children) — fully editable */}
                       {sub.sub_tasks && sub.sub_tasks.length > 0 && (
-                        <div className="mt-1 ml-5 space-y-0.5">
+                        <div className="mt-1.5 ml-5 space-y-0.5 border-l-2 border-slate-200 pl-2">
                           {sub.sub_tasks.map(ss => (
-                            <div key={ss.id} className="flex items-center gap-2 py-0.5">
-                              <button
-                                onClick={() => handleStatusChange(ss.id, ss.status === 'completed' ? 'open' : 'completed')}
-                                className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${ss.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
-                              />
-                              <p className={`text-xs flex-1 min-w-0 truncate ${ss.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'}`}>{ss.title}</p>
-                              {ss.due_date && <span className={`text-xs shrink-0 ${dueDateClass(ss.due_date)}`}>{format(parseISO(ss.due_date), 'd MMM')}</span>}
-                              <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[ss.priority]}`}>{ss.priority[0].toUpperCase()}</span>
+                            <div key={ss.id}>
+                              {editingSubSubId === ss.id ? (
+                                <div className="space-y-1.5 py-1">
+                                  <input
+                                    value={editSubSubTitle}
+                                    onChange={e => setEditSubSubTitle(e.target.value)}
+                                    className="w-full px-2 py-1 text-xs rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    autoFocus
+                                    onKeyDown={e => { if (e.key === 'Escape') setEditingSubSubId(null) }}
+                                  />
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <select value={editSubSubPriority} onChange={e => setEditSubSubPriority(e.target.value)}
+                                      className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
+                                      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                                    </select>
+                                    <input type="date" value={editSubSubDue} onChange={e => setEditSubSubDue(e.target.value)}
+                                      className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
+                                  </div>
+                                  <textarea
+                                    value={editSubSubDesc}
+                                    onChange={e => setEditSubSubDesc(e.target.value)}
+                                    placeholder="Notes…" rows={2}
+                                    className="w-full px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                                  />
+                                  <div className="flex gap-1.5">
+                                    <button onClick={saveSubSubEdit} disabled={savingSubSubEdit}
+                                      className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                                      <Check size={11} />{savingSubSubEdit ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button onClick={() => setEditingSubSubId(null)}
+                                      className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-1">
+                                      <X size={11} />Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 py-0.5">
+                                  <button
+                                    onClick={() => handleStatusChange(ss.id, ss.status === 'completed' ? 'open' : 'completed')}
+                                    className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${ss.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                                  />
+                                  <p className={`text-xs flex-1 min-w-0 truncate ${ss.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'}`}>{ss.title}</p>
+                                  {ss.description && <span title={ss.description} className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                  {ss.due_date && <span className={`text-xs shrink-0 ${dueDateClass(ss.due_date)}`}>{format(parseISO(ss.due_date), 'd MMM')}</span>}
+                                  <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[ss.priority]}`}>{ss.priority[0].toUpperCase()}</span>
+                                  <button onClick={() => startSubSubEdit(ss)} title="Edit"
+                                    className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors">
+                                    <Pencil size={10} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
