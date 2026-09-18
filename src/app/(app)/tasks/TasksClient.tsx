@@ -57,6 +57,9 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-900">{task.title}</p>
+                    {task.description && (
+                      <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.description}</p>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                       {task.client && (
                         <Link
@@ -102,6 +105,7 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
           onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </>

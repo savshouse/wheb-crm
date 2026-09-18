@@ -133,6 +133,7 @@ export default function TasksRecentView({ profiles, currentUserId, onTaskSaved }
               setTasks(prev => prev.filter(t => t.id !== updated.id))
             }
           }}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </>

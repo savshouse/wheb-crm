@@ -7,6 +7,7 @@ import { CheckSquare, Clock, Plus, ChevronDown, ChevronRight, LayoutTemplate, Hi
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { BasicProfile } from '@/lib/types'
+import TaskModal from '@/app/(app)/tasks/TaskModal'
 
 type HistoryEntry = {
   id: string
@@ -162,43 +163,8 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     router.refresh()
   }
 
-  // Sub-task editing
-  const [editingSubId, setEditingSubId] = useState<string | null>(null)
-  const [editSubTitle, setEditSubTitle] = useState('')
-  const [editSubDue, setEditSubDue] = useState('')
-  const [editSubPriority, setEditSubPriority] = useState('medium')
-  const [editSubAssignee, setEditSubAssignee] = useState('')
-  const [editSubDescription, setEditSubDescription] = useState('')
-  const [savingSubEdit, setSavingSubEdit] = useState(false)
-
-  function startSubEdit(sub: SubTask) {
-    setEditingSubId(sub.id)
-    setEditSubTitle(sub.title)
-    setEditSubDue(sub.due_date ?? '')
-    setEditSubPriority(sub.priority)
-    setEditSubAssignee(sub.assigned_to ?? '')
-    setEditSubDescription(sub.description ?? '')
-  }
-
-  async function saveSubEdit(originalSub: SubTask) {
-    if (!editingSubId) return
-    setSavingSubEdit(true)
-    const promises: Promise<any>[] = [
-      updateTask(editingSubId, clientId, {
-        title:       editSubTitle.trim() || 'Untitled',
-        due_date:    editSubDue || null,
-        priority:    editSubPriority,
-        description: editSubDescription.trim() || null,
-      }),
-    ]
-    if (editSubAssignee !== (originalSub.assigned_to ?? '')) {
-      promises.push(reassignTask(editingSubId, editSubAssignee, clientId))
-    }
-    await Promise.all(promises)
-    setSavingSubEdit(false)
-    setEditingSubId(null)
-    router.refresh()
-  }
+  // Sub-task focused modal
+  const [modalTask, setModalTask] = useState<any | null>(null)
 
   // Task chat state
   const [expandedChat, setExpandedChat] = useState<Set<string>>(new Set())
@@ -585,50 +551,17 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                 <div className="border-t border-slate-100 bg-slate-50 divide-y divide-slate-100">
                   {task.sub_tasks?.map(sub => (
                     <div key={sub.id} className="px-3 py-2">
-                      {editingSubId === sub.id ? (
-                        <div className="space-y-1.5">
-                          <input
-                            value={editSubTitle} onChange={e => setEditSubTitle(e.target.value)}
-                            className="w-full px-2 py-1 text-xs rounded-lg border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
-                            autoFocus
-                            onKeyDown={e => { if (e.key === 'Escape') setEditingSubId(null) }}
-                          />
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <select value={editSubPriority} onChange={e => setEditSubPriority(e.target.value)}
-                              className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
-                              <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                            </select>
-                            <input type="date" value={editSubDue} onChange={e => setEditSubDue(e.target.value)}
-                              className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
-                          </div>
-                          <select value={editSubAssignee} onChange={e => setEditSubAssignee(e.target.value)}
-                            className="w-full px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
-                            <option value="">Unassigned</option>
-                            {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
-                          </select>
-                          <textarea
-                            value={editSubDescription} onChange={e => setEditSubDescription(e.target.value)}
-                            placeholder="Notes…" rows={2}
-                            className="w-full px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                          />
-                          <div className="flex gap-1.5">
-                            <button onClick={() => saveSubEdit(sub)} disabled={savingSubEdit}
-                              className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
-                              <Check size={11} />{savingSubEdit ? 'Saving…' : 'Save'}
-                            </button>
-                            <button onClick={() => setEditingSubId(null)}
-                              className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-1">
-                              <X size={11} />Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleStatusChange(sub.id, sub.status === 'completed' ? 'open' : 'completed')}
                             className={`w-3.5 h-3.5 rounded border-2 shrink-0 transition-colors ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
                           />
-                          <p className={`text-xs flex-1 min-w-0 truncate ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</p>
+                          <button
+                            onClick={() => setModalTask({ ...sub, client: { id: clientId, name: '' }, meeting: null })}
+                            className={`text-xs flex-1 min-w-0 text-left truncate transition-colors ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-blue-600 hover:underline'}`}
+                          >
+                            {sub.title}
+                          </button>
                           {sub.sub_tasks && sub.sub_tasks.length > 0 && (
                             <span className="shrink-0 text-xs bg-slate-200 text-slate-500 rounded px-1.5 py-0.5 font-medium">
                               {sub.sub_tasks.filter(ss => ss.status === 'completed').length}/{sub.sub_tasks.length}
@@ -636,12 +569,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                           )}
                           {sub.due_date && <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>{format(parseISO(sub.due_date), 'd MMM')}</span>}
                           <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[sub.priority]}`}>{sub.priority[0].toUpperCase()}</span>
-                          <button onClick={() => startSubEdit(sub)} title="Edit sub-task"
-                            className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors">
-                            <Pencil size={11} />
-                          </button>
                         </div>
-                      )}
                       {/* Sub-sub-tasks (template step children) — fully editable */}
                       {sub.sub_tasks && sub.sub_tasks.length > 0 && (
                         <div className="mt-1.5 ml-5 space-y-0.5 border-l-2 border-slate-200 pl-2">
@@ -771,6 +699,17 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
           )
         })}
       </div>
+
+      {/* Sub-task focused modal */}
+      {modalTask && (
+        <TaskModal
+          task={modalTask}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onClose={() => setModalTask(null)}
+          onSaved={() => { setModalTask(null); router.refresh() }}
+        />
+      )}
     </div>
   )
 }

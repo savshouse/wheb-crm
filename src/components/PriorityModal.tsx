@@ -266,6 +266,7 @@ export default function PriorityModal({ currentUserId }: { currentUserId: string
             setModalTask(updated)
             setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
           }}
+          onOpenSubTask={(sub) => setModalTask({ ...sub, client: modalTask.client, meeting: null })}
         />
       )}
     </>

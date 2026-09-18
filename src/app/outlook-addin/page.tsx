@@ -179,11 +179,18 @@ export default function OutlookAddinPage() {
             <div style={{ marginBottom: 14 }}>
               <div style={sectionLabel}>Open tasks ({tasks.length})</div>
               {tasks.map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <a
+                  key={t.id}
+                  href={`https://wheb-crm.vercel.app/clients/${selected.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 0', borderBottom: '1px solid #f1f5f9', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                >
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: PRIO_DOT[t.priority] ?? '#94a3b8', flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 12 }}>{t.title}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#1e40af' }}>{t.title}</span>
                   {t.due_date && <span style={{ fontSize: 11, color: '#94a3b8' }}>{format(parseISO(t.due_date), 'd MMM')}</span>}
-                </div>
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>↗</span>
+                </a>
               ))}
             </div>
           )}

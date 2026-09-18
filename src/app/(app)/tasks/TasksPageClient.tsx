@@ -152,6 +152,7 @@ export default function TasksPageClient({
           currentUserId={currentUserId}
           onClose={handleUrlTaskClose}
           onSaved={(updated) => { setUrlTask(updated); updateTaskInLists(updated) }}
+          onOpenSubTask={(sub) => setUrlTask({ ...sub, client: urlTask.client, meeting: null })}
         />
       )}
 

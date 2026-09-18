@@ -134,6 +134,7 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
           onSaved={(updated) => setOpenTask(updated)}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </div>

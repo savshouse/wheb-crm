@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -43,9 +43,10 @@ type Props = {
   currentUserId: string
   onClose: () => void
   onSaved: (updated: any) => void
+  onOpenSubTask?: (sub: any) => void
 }
 
-export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved }: Props) {
+export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved, onOpenSubTask }: Props) {
   // Parent task fields
   const [title, setTitle]             = useState(task.title)
   const [priority, setPriority]       = useState(task.priority)
@@ -491,6 +492,15 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                       <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${priorityColour[sub.priority as keyof typeof priorityColour]}`}>
                         {sub.priority[0].toUpperCase()}
                       </span>
+                      {onOpenSubTask && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onOpenSubTask({ ...sub, client: task.client, meeting: null }) }}
+                          className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors"
+                          title="Open in focused view"
+                        >
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
                     </div>
 
                     {/* Expanded edit form */}

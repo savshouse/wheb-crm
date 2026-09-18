@@ -57,14 +57,19 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
                 {colTasks.length === 0 && (
                   <p className="text-xs text-slate-400 text-center py-6">No tasks</p>
                 )}
-                {colTasks.map((task: any) => (
+                {colTasks.map((task: any) => {
+                  const isOverdue = task.due_date && isPast(parseISO(task.due_date)) && !isToday(parseISO(task.due_date))
+                  return (
                   <button
                     key={task.id}
                     onClick={() => setOpenTask(task)}
-                    className="w-full text-left bg-white rounded-lg border border-slate-200 p-3 hover:border-blue-300 hover:shadow-sm transition-all"
+                    className={`w-full text-left bg-white rounded-lg border p-3 hover:shadow-sm transition-all ${isOverdue ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-blue-300'}`}
                   >
-                    <p className="text-xs font-medium text-slate-900 leading-snug mb-2">{task.title}</p>
-                    <div className="flex flex-wrap gap-x-2 gap-y-1 mb-1.5">
+                    <p className="text-xs font-medium text-slate-900 leading-snug">{task.title}</p>
+                    {task.description && (
+                      <p className="text-xs text-slate-400 mt-0.5 mb-1 line-clamp-1">{task.description}</p>
+                    )}
+                    <div className={`flex flex-wrap gap-x-2 gap-y-1 mb-1.5 ${!task.description ? 'mt-2' : ''}`}>
                       {task.client && (
                         <span className="flex items-center gap-0.5 text-xs text-slate-400">
                           <Building2 size={10} />
@@ -88,7 +93,8 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
                       {task.priority}
                     </span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )
@@ -102,6 +108,7 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
           onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </>

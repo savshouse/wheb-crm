@@ -14,6 +14,7 @@ import MeetingHistoryToggle from './MeetingHistoryToggle'
 import ClientActivityLog from './ClientActivityLog'
 import PersonBenefits from './PersonBenefits'
 import EmployerBenefits from './EmployerBenefits'
+import RemindersBell from '@/components/RemindersBell'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -237,6 +238,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <RemindersBell />
             <Link
               href={`/clients/${id}/edit`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"

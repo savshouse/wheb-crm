@@ -121,6 +121,7 @@ export default function TasksCalendarView({ tasks, profiles, currentUserId, onTa
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
           onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </>

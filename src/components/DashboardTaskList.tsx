@@ -77,6 +77,7 @@ export default function DashboardTaskList({ tasks, profiles, currentUserId }: Pr
           currentUserId={currentUserId}
           onClose={() => setOpenTask(null)}
           onSaved={(updated) => setOpenTask(updated)}
+          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
         />
       )}
     </>
