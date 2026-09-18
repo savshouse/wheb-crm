@@ -74,7 +74,7 @@ export async function performBackup(): Promise<BackupResult> {
   const pathname = `backups/wheb-backup-${datePart}.json`
 
   const blob = await put(pathname, json, {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json',
     addRandomSuffix: false,
   })

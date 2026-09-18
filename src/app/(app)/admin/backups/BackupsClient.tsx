@@ -113,7 +113,7 @@ export default function BackupsClient({ backups: initial }: { backups: Backup[] 
                   <span className="text-xs text-slate-400 shrink-0">{formatBytes(b.size)}</span>
                 )}
                 <a
-                  href={b.url}
+                  href={`/api/backup/download?url=${encodeURIComponent(b.url)}`}
                   download
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg transition-colors shrink-0"
                 >
