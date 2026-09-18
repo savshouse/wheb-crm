@@ -67,6 +67,12 @@ export default function TasksPageClient({
     router.replace(url.pathname + url.search)
   }
 
+  function deleteTaskFromLists(id: string) {
+    setMyTasks(prev => prev.filter((t: any) => t.id !== id))
+    setTeamTasks(prev => prev.filter((t: any) => t.id !== id))
+    setCompletedTasks(prev => prev.filter((t: any) => t.id !== id))
+  }
+
   // Called by any TaskModal after a save so the lists update immediately
   // without waiting for the Supabase subscription to fire.
   function updateTaskInLists(task: any) {
@@ -96,6 +102,16 @@ export default function TasksPageClient({
     const supabase = createClient()
     const channel = supabase
       .channel('tasks-page-live')
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'tasks' },
+        ({ old: raw }) => {
+          const id = raw.id
+          setMyTasks(prev => prev.filter((t: any) => t.id !== id))
+          setTeamTasks(prev => prev.filter((t: any) => t.id !== id))
+          setCompletedTasks(prev => prev.filter((t: any) => t.id !== id))
+        },
+      )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'tasks' },
@@ -195,6 +211,7 @@ export default function TasksPageClient({
                   currentUserId={currentUserId}
                   highlightOverdue={highlightOverdue}
                   onTaskSaved={updateTaskInLists}
+                  onTaskDeleted={deleteTaskFromLists}
                 />
               )}
             </section>
@@ -216,6 +233,7 @@ export default function TasksPageClient({
                   profiles={profiles}
                   currentUserId={currentUserId}
                   onTaskSaved={updateTaskInLists}
+                  onTaskDeleted={deleteTaskFromLists}
                 />
               )}
             </section>
@@ -239,6 +257,7 @@ export default function TasksPageClient({
           profiles={profiles}
           currentUserId={currentUserId}
           onTaskSaved={updateTaskInLists}
+          onTaskDeleted={deleteTaskFromLists}
         />
       )}
 

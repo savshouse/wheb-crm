@@ -24,14 +24,21 @@ function dueDateLabel(dateStr: string | null) {
 
 type Props = {
   tasks: any[]
+  onTaskDeleted?: (taskId: string) => void
   profiles: any[]
   currentUserId: string
   highlightOverdue?: boolean
   onTaskSaved?: (task: any) => void
 }
 
-export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, onTaskSaved }: Props) {
-  const [openTask, setOpenTask] = useState<any | null>(null)
+export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, onTaskSaved, onTaskDeleted }: Props) {
+  const [taskStack, setTaskStack] = useState<any[]>([])
+  const openTask = taskStack[taskStack.length - 1] ?? null
+
+  function openRootTask(task: any) { setTaskStack([task]) }
+  function openSubTask(sub: any) { setTaskStack(prev => [...prev, { ...sub, client: openTask?.client ?? null, meeting: null }]) }
+  function closeModal() { setTaskStack([]) }
+  function goBack() { setTaskStack(prev => prev.slice(0, -1)) }
 
   return (
     <>
@@ -46,7 +53,7 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
               className={`bg-white rounded-xl border p-4 flex items-start gap-4 transition-all cursor-pointer ${
                 highlight ? 'border-red-200 hover:border-red-300 hover:shadow-sm' : 'border-slate-200 hover:border-blue-300 hover:shadow-sm'
               }`}
-              onClick={() => setOpenTask(task)}
+              onClick={() => openRootTask(task)}
             >
               {/* Status button — stop propagation so clicking it doesn't open modal */}
               <div onClick={e => e.stopPropagation()}>
@@ -103,9 +110,11 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
           task={openTask}
           profiles={profiles}
           currentUserId={currentUserId}
-          onClose={() => setOpenTask(null)}
-          onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
-          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
+          onClose={closeModal}
+          onSaved={(updated) => { setTaskStack(prev => [...prev.slice(0, -1), updated]); onTaskSaved?.(updated) }}
+          onOpenSubTask={openSubTask}
+          onBack={taskStack.length > 1 ? goBack : undefined}
+          onDeleted={(id) => { closeModal(); onTaskDeleted?.(id) }}
         />
       )}
     </>

@@ -44,9 +44,11 @@ type Props = {
   onClose: () => void
   onSaved: (updated: any) => void
   onOpenSubTask?: (sub: any) => void
+  onBack?: () => void
+  onDeleted?: (taskId: string) => void
 }
 
-export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved, onOpenSubTask }: Props) {
+export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved, onOpenSubTask, onBack, onDeleted }: Props) {
   // Parent task fields
   const [title, setTitle]             = useState(task.title)
   const [priority, setPriority]       = useState(task.priority)
@@ -275,6 +277,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setDeleting(true)
     const { error } = await deleteTask(task.id)
     if (error) { alert(`Delete failed: ${error}`); setDeleting(false); return }
+    onDeleted?.(task.id)
     onClose()
   }
 
@@ -361,10 +364,20 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const selectCls = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
   const inputCls  = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
+  function safeClose() {
+    if (dirty && !window.confirm('You have unsaved changes. Close without saving?')) return
+    onClose()
+  }
+
+  function safeBack() {
+    if (dirty && !window.confirm('You have unsaved changes. Go back without saving?')) return
+    onBack!()
+  }
+
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/30 z-40" onClick={safeClose} />
 
       {/* Slide-over panel */}
       <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white z-50 shadow-2xl flex flex-col">
@@ -372,14 +385,19 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2">
-            {task.client && (
-              <Link href={`/clients/${task.client.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium" onClick={onClose}>
+            {onBack && (
+              <button onClick={safeBack} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium mr-1">
+                <ChevronRight size={14} className="rotate-180" />Back
+              </button>
+            )}
+            {task.client && task.client.name && (
+              <Link href={`/clients/${task.client.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium" onClick={safeClose}>
                 <Building2 size={12} />{task.client.name}
               </Link>
             )}
             {task.meeting && <span className="text-xs text-slate-400">· From: {task.meeting.title}</span>}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
+          <button onClick={safeClose} className="text-slate-400 hover:text-slate-700 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -569,13 +587,23 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                             <div className="space-y-1 border-l-2 border-slate-200 pl-2">
                               {subChildren[sub.id].map((gc: any) => (
                                 <div key={gc.id} className="flex items-center gap-2 py-0.5">
-                                  <div className={`w-3 h-3 rounded-sm border-2 shrink-0 ${gc.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'}`} />
+                                  <button
+                                    onClick={async () => {
+                                      const newStatus = gc.status === 'completed' ? 'open' : 'completed'
+                                      await updateTaskStatus(gc.id, newStatus, task.client?.id ?? null)
+                                      setSubChildren(prev => ({
+                                        ...prev,
+                                        [sub.id]: prev[sub.id].map((s: any) => s.id === gc.id ? { ...s, status: newStatus } : s),
+                                      }))
+                                    }}
+                                    className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${gc.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                                    title={gc.status === 'completed' ? 'Mark incomplete' : 'Mark complete'}
+                                  />
                                   <span className={`text-xs flex-1 min-w-0 truncate ${gc.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-600'}`}>{gc.title}</span>
                                   {gc.due_date && <span className={`text-xs shrink-0 ${dueDateClass(gc.due_date)}`}>{format(parseISO(gc.due_date), 'd MMM')}</span>}
                                 </div>
                               ))}
                             </div>
-                            <p className="text-xs text-slate-400 mt-1.5">Open the step from the client page to edit it.</p>
                           </div>
                         )}
 

@@ -30,10 +30,17 @@ type Props = {
   profiles: any[]
   currentUserId: string
   onTaskSaved?: (task: any) => void
+  onTaskDeleted?: (taskId: string) => void
 }
 
-export default function TasksKanbanView({ tasks, completedTasks, profiles, currentUserId, onTaskSaved }: Props) {
-  const [openTask, setOpenTask] = useState<any | null>(null)
+export default function TasksKanbanView({ tasks, completedTasks, profiles, currentUserId, onTaskSaved, onTaskDeleted }: Props) {
+  const [taskStack, setTaskStack] = useState<any[]>([])
+  const openTask = taskStack[taskStack.length - 1] ?? null
+
+  function openRootTask(task: any) { setTaskStack([task]) }
+  function openSubTask(sub: any) { setTaskStack(prev => [...prev, { ...sub, client: openTask?.client ?? null, meeting: null }]) }
+  function closeModal() { setTaskStack([]) }
+  function goBack() { setTaskStack(prev => prev.slice(0, -1)) }
 
   const byStatus: Record<string, any[]> = {
     open:        tasks.filter(t => t.status === 'open'),
@@ -62,7 +69,7 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
                   return (
                   <button
                     key={task.id}
-                    onClick={() => setOpenTask(task)}
+                    onClick={() => openRootTask(task)}
                     className={`w-full text-left bg-white rounded-lg border p-3 hover:shadow-sm transition-all ${isOverdue ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-blue-300'}`}
                   >
                     <p className="text-xs font-medium text-slate-900 leading-snug">{task.title}</p>
@@ -106,9 +113,11 @@ export default function TasksKanbanView({ tasks, completedTasks, profiles, curre
           task={openTask}
           profiles={profiles}
           currentUserId={currentUserId}
-          onClose={() => setOpenTask(null)}
-          onSaved={(updated) => { setOpenTask(updated); onTaskSaved?.(updated) }}
-          onOpenSubTask={(sub) => setOpenTask({ ...sub, client: openTask.client, meeting: null })}
+          onClose={closeModal}
+          onSaved={(updated) => { setTaskStack(prev => [...prev.slice(0, -1), updated]); onTaskSaved?.(updated) }}
+          onOpenSubTask={openSubTask}
+          onBack={taskStack.length > 1 ? goBack : undefined}
+          onDeleted={(id) => { closeModal(); onTaskDeleted?.(id) }}
         />
       )}
     </>

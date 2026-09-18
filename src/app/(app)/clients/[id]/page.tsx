@@ -238,7 +238,6 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <RemindersBell />
             <Link
               href={`/clients/${id}/edit`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
@@ -253,6 +252,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
               <Plus size={15} />
               Log meeting
             </Link>
+            <RemindersBell />
           </div>
         </div>
       </div>
