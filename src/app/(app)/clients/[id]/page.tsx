@@ -127,7 +127,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
   const allOpenTasks = tasks?.filter(t => t.status !== 'completed' && t.status !== 'cancelled') ?? []
   const completedTasks = tasks?.filter(t => t.status === 'completed') ?? []
 
-  // Build sub-task tree for TaskPanel
+  // Build sub-task map for TaskPanel — sub-tasks sorted oldest-first so template order is preserved
   const rootOpenTasks = allOpenTasks.filter(t => !t.parent_task_id)
   const subTaskMap = allOpenTasks.reduce((acc: Record<string, typeof allOpenTasks>, t) => {
     if (t.parent_task_id) {
@@ -136,6 +136,9 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
     }
     return acc
   }, {})
+  Object.keys(subTaskMap).forEach(k => {
+    subTaskMap[k].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  })
   const openTasksWithSubs = rootOpenTasks.map(t => ({ ...t, sub_tasks: subTaskMap[t.id] ?? [] }))
 
   type MeetingRow = Meeting & { creator: BasicProfile | null; tasks: { id: string }[] }

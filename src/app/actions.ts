@@ -418,14 +418,31 @@ export async function applyTemplateToTask(
     return d.toISOString().split('T')[0]
   }
 
-  const topLevel = items.filter(i => !i.parent_item_id)
-  const children  = items.filter(i => i.parent_item_id)
+  // Build a lookup of children grouped by parent item id
+  const childrenByParent: Record<string, typeof items> = {}
+  for (const item of items) {
+    if (item.parent_item_id) {
+      if (!childrenByParent[item.parent_item_id]) childrenByParent[item.parent_item_id] = []
+      childrenByParent[item.parent_item_id].push(item)
+    }
+  }
 
-  // Create top-level steps as sub-tasks of the main task, one at a time to capture their new IDs
-  const templateItemToTaskId: Record<string, string> = {}
+  const topLevel = items
+    .filter(i => !i.parent_item_id)
+    .sort((a, b) => a.order_index - b.order_index)
+
+  // Flatten all items into DFS order: step 1, 1a, 1b, 1c, step 2, 2a, 2b, …
+  // All created as direct sub-tasks of the main task so they're all visible in the task panel
+  const flatItems: typeof items = []
+  for (const top of topLevel) {
+    flatItems.push(top)
+    const children = (childrenByParent[top.id] ?? []).sort((a, b) => a.order_index - b.order_index)
+    flatItems.push(...children)
+  }
+
   const failedItems: string[] = []
-  for (const item of topLevel) {
-    const { data: created, error } = await supabase.from('tasks').insert({
+  for (const item of flatItems) {
+    const { error } = await supabase.from('tasks').insert({
       title:          item.title,
       client_id:      clientId,
       parent_task_id: taskId,
@@ -433,40 +450,12 @@ export async function applyTemplateToTask(
       due_date:       calcDueDate(item.relative_due_days),
       created_by:     user.id,
       status:         'open',
-    }).select('id').single()
-    if (error) {
-      failedItems.push(`"${item.title}" (${error.message})`)
-    } else if (created) {
-      templateItemToTaskId[item.id] = created.id
-    }
-  }
-
-  // Create child steps as sub-tasks of their newly-created parent tasks
-  if (children.length > 0) {
-    const childRows = children
-      .map(item => {
-        const parentTaskId = templateItemToTaskId[item.parent_item_id]
-        if (!parentTaskId) return null
-        return {
-          title:          item.title,
-          client_id:      clientId,
-          parent_task_id: parentTaskId,
-          priority:       item.priority,
-          due_date:       calcDueDate(item.relative_due_days),
-          created_by:     user.id,
-          status:         'open',
-        }
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null)
-
-    if (childRows.length > 0) {
-      const { error } = await supabase.from('tasks').insert(childRows)
-      if (error) failedItems.push(`child tasks (${error.message})`)
-    }
+    })
+    if (error) failedItems.push(`"${item.title}" (${error.message})`)
   }
 
   if (failedItems.length > 0) {
-    return { error: `${topLevel.length - failedItems.length} of ${topLevel.length} tasks created. Failed: ${failedItems.join('; ')}` }
+    return { error: `${flatItems.length - failedItems.length} of ${flatItems.length} tasks created. Failed: ${failedItems.join('; ')}` }
   }
 
   revalidatePath(`/clients/${clientId}`)
