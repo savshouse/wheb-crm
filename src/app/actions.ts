@@ -871,7 +871,6 @@ export async function deleteTask(taskId: string): Promise<{ error: string | null
   const { error } = await supabase.from('tasks').delete().eq('id', taskId)
   if (error) return { error: error.message }
 
-  revalidatePath('/tasks')
   return { error: null }
 }
 

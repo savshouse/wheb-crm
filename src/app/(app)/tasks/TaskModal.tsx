@@ -498,7 +498,16 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                         ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
                         : <ChevronRight size={14} className="text-slate-400 shrink-0" />
                       }
-                      <div className={`w-3.5 h-3.5 rounded border-2 shrink-0 ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300'}`} />
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const newStatus = sub.status === 'completed' ? 'open' : 'completed'
+                          await updateTaskStatus(sub.id, newStatus, task.client?.id ?? null)
+                          setSubTasks(prev => prev.map((s: any) => s.id === sub.id ? { ...s, status: newStatus } : s))
+                        }}
+                        className={`w-3.5 h-3.5 rounded border-2 shrink-0 transition-colors ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                        title={sub.status === 'completed' ? 'Mark incomplete' : 'Mark complete'}
+                      />
                       <span className={`text-sm flex-1 min-w-0 truncate ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                         {sub.title}
                       </span>

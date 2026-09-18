@@ -97,6 +97,9 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   const [subTaskDue, setSubTaskDue] = useState('')
   const [subTaskPriority, setSubTaskPriority] = useState('medium')
 
+  // Local override for sub-task statuses (so completed ones show strikethrough instead of disappearing)
+  const [localSubStatus, setLocalSubStatus] = useState<Record<string, string>>({})
+
   // Task editing
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -549,16 +552,22 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
               {/* Sub-tasks */}
               {expanded && (
                 <div className="border-t border-slate-100 bg-slate-50 divide-y divide-slate-100">
-                  {task.sub_tasks?.map(sub => (
+                  {task.sub_tasks?.map(sub => {
+                    const subStatus = localSubStatus[sub.id] ?? sub.status
+                    return (
                     <div key={sub.id} className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleStatusChange(sub.id, sub.status === 'completed' ? 'open' : 'completed')}
-                            className={`w-3.5 h-3.5 rounded border-2 shrink-0 transition-colors ${sub.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                            onClick={() => {
+                              const newStatus = subStatus === 'completed' ? 'open' : 'completed'
+                              setLocalSubStatus(prev => ({ ...prev, [sub.id]: newStatus }))
+                              handleStatusChange(sub.id, newStatus)
+                            }}
+                            className={`w-3.5 h-3.5 rounded border-2 shrink-0 transition-colors ${subStatus === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
                           />
                           <button
                             onClick={() => setModalTask({ ...sub, client: { id: clientId, name: '' }, meeting: null })}
-                            className={`text-xs flex-1 min-w-0 text-left truncate transition-colors ${sub.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-blue-600 hover:underline'}`}
+                            className={`text-xs flex-1 min-w-0 text-left truncate transition-colors ${subStatus === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-blue-600 hover:underline'}`}
                           >
                             {sub.title}
                           </button>
@@ -630,7 +639,8 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                   {addingSubTask === task.id && (
                     <div className="px-3 py-2 space-y-2 bg-white">
                       <input value={subTaskTitle} onChange={e => setSubTaskTitle(e.target.value)} placeholder="Sub-task title..."

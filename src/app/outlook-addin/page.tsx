@@ -85,20 +85,23 @@ export default function OutlookAddinPage() {
 
   async function selectClient(c: Client) {
     setSelected(c); setResults([]); setLoading(true); setEditingId(null); setSubTaskMap({})
-    const [{ data: m }, { data: allT }] = await Promise.all([
+    const [{ data: m }, { data: parentT }] = await Promise.all([
       supabase.from('meetings').select('id,title,meeting_date,notes').eq('client_id', c.id).order('meeting_date', { ascending: false }).limit(5),
-      supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').eq('client_id', c.id).in('status', ['open', 'in_progress']).order('due_date', { ascending: true, nullsFirst: false }).limit(50),
+      supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').eq('client_id', c.id).is('parent_task_id', null).in('status', ['open', 'in_progress']).order('due_date', { ascending: true, nullsFirst: false }).limit(50),
     ])
     setMeetings((m ?? []) as Meeting[])
-    const typed = (allT ?? []) as Task[]
-    const parents = typed.filter(t => !t.parent_task_id)
-    const subMap: Record<string, Task[]> = {}
-    typed.filter(t => t.parent_task_id).forEach(s => {
-      if (!subMap[s.parent_task_id!]) subMap[s.parent_task_id!] = []
-      subMap[s.parent_task_id!].push(s)
-    })
+    const parents = (parentT ?? []) as Task[]
     setTasks(parents)
-    setSubTaskMap(subMap)
+    const parentIds = parents.map(t => t.id)
+    if (parentIds.length > 0) {
+      const { data: subT } = await supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').in('parent_task_id', parentIds).in('status', ['open', 'in_progress'])
+      const subMap: Record<string, Task[]> = {}
+      ;(subT ?? []).forEach((s: Task) => {
+        if (!subMap[s.parent_task_id!]) subMap[s.parent_task_id!] = []
+        subMap[s.parent_task_id!].push(s)
+      })
+      setSubTaskMap(subMap)
+    }
     setLoading(false)
   }
 
