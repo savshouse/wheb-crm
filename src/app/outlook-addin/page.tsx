@@ -93,15 +93,24 @@ export default function OutlookAddinPage() {
     const parents = (parentT ?? []) as Task[]
     setTasks(parents)
     const parentIds = parents.map(t => t.id)
+    const subMap: Record<string, Task[]> = {}
     if (parentIds.length > 0) {
       const { data: subT } = await supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').in('parent_task_id', parentIds).in('status', ['open', 'in_progress'])
-      const subMap: Record<string, Task[]> = {}
-      ;(subT ?? []).forEach((s: Task) => {
+      const subs = (subT ?? []) as Task[]
+      subs.forEach(s => {
         if (!subMap[s.parent_task_id!]) subMap[s.parent_task_id!] = []
         subMap[s.parent_task_id!].push(s)
       })
-      setSubTaskMap(subMap)
+      const subIds = subs.map(s => s.id)
+      if (subIds.length > 0) {
+        const { data: grandT } = await supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').in('parent_task_id', subIds).in('status', ['open', 'in_progress'])
+        ;(grandT ?? []).forEach((g: Task) => {
+          if (!subMap[g.parent_task_id!]) subMap[g.parent_task_id!] = []
+          subMap[g.parent_task_id!].push(g)
+        })
+      }
     }
+    setSubTaskMap(subMap)
     setLoading(false)
   }
 
@@ -273,11 +282,25 @@ export default function OutlookAddinPage() {
                     {/* Sub-tasks */}
                     {subs.length > 0 && (
                       <div style={{ marginLeft: 14, paddingLeft: 8, borderLeft: '2px solid #e2e8f0', marginBottom: 4 }}>
-                        {subs.map(sub => (
-                          <div key={sub.id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                            {editingId === sub.id ? renderEditForm(sub) : renderRow(sub, true)}
-                          </div>
-                        ))}
+                        {subs.map(sub => {
+                          const grandChildren = subTaskMap[sub.id] ?? []
+                          return (
+                            <div key={sub.id}>
+                              <div style={{ borderBottom: '1px solid #f8fafc' }}>
+                                {editingId === sub.id ? renderEditForm(sub) : renderRow(sub, true)}
+                              </div>
+                              {grandChildren.length > 0 && (
+                                <div style={{ marginLeft: 12, paddingLeft: 6, borderLeft: '2px solid #f1f5f9' }}>
+                                  {grandChildren.map(gc => (
+                                    <div key={gc.id} style={{ borderBottom: '1px solid #fafafa' }}>
+                                      {editingId === gc.id ? renderEditForm(gc) : renderRow(gc, true)}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
