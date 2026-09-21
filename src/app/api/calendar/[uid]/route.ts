@@ -25,7 +25,7 @@ export async function GET(
 
   const { data: tasks } = await adminClient
     .from('tasks')
-    .select('id, title, description, due_date, priority, status, assigned_to, created_at, updated_at, client:clients(name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
+    .select('id, title, description, due_date, priority, status, assigned_to, created_at, updated_at, client:clients(id, name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
     .eq('assigned_to', uid)
     .is('parent_task_id', null)
     .in('status', ['open', 'in_progress'])
@@ -48,6 +48,22 @@ export async function GET(
     subsByParent[sub.parent_task_id].push(sub)
   }
 
+  // Fetch grandchildren (sub-sub-tasks)
+  const subIds = (subTasks ?? []).map((s: any) => s.id)
+  const { data: grandTasks } = subIds.length
+    ? await adminClient
+        .from('tasks')
+        .select('id, title, status, priority, due_date, parent_task_id')
+        .in('parent_task_id', subIds)
+        .order('created_at')
+    : { data: [] }
+
+  const grandsByParent: Record<string, any[]> = {}
+  for (const g of grandTasks ?? []) {
+    if (!grandsByParent[g.parent_task_id]) grandsByParent[g.parent_task_id] = []
+    grandsByParent[g.parent_task_id].push(g)
+  }
+
   const calName = `WHEB Tasks – ${profile.full_name ?? profile.email}`
 
   const lines: string[] = [
@@ -66,13 +82,16 @@ export async function GET(
     const dateStr  = task.due_date as string
     const dtStart  = londonToUtcZ(dateStr, 9, 0)
     const dtEnd    = londonToUtcZ(dateStr, 9, 30)
-    const client    = (task.client as any)?.name as string | undefined
+    const clientObj = task.client as any
+    const client    = clientObj?.name as string | undefined
+    const clientId  = clientObj?.id as string | undefined
     const assignee  = (task.assignee as any)
     const assigneeName = assignee?.full_name ?? assignee?.email ?? 'Unassigned'
     const prio      = task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9
     const statusLabel = task.status === 'in_progress' ? 'In progress' : 'Open'
     const subs      = subsByParent[task.id] ?? []
     const deepLink  = `${SITE}/tasks?task=${task.id}`
+    const clientLink = clientId ? `${SITE}/clients/${clientId}` : undefined
 
     // Build rich plain-text description
     const descParts: string[] = []
@@ -82,15 +101,25 @@ export async function GET(
       descParts.push('', 'Notes:', task.description as string)
     }
     if (subs.length) {
-      descParts.push('', `Sub-tasks (${subs.length}):`)
+      const grandCount = subs.reduce((n: number, s: any) => n + (grandsByParent[s.id]?.length ?? 0), 0)
+      descParts.push('', `Sub-tasks (${subs.length + grandCount}):`)
       for (const sub of subs) {
         const done    = sub.status === 'completed'
         const dueStr  = sub.due_date ? `  due ${format(parseISO(sub.due_date), 'd MMM')}` : ''
         const prioStr = sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1)
         descParts.push(`${done ? '☑' : '☐'} ${sub.title}${dueStr}  [${prioStr}]`)
+        const grands = grandsByParent[sub.id] ?? []
+        for (const g of grands) {
+          const gdone    = g.status === 'completed'
+          const gdueStr  = g.due_date ? `  due ${format(parseISO(g.due_date), 'd MMM')}` : ''
+          const gprioStr = g.priority.charAt(0).toUpperCase() + g.priority.slice(1)
+          descParts.push(`    ${gdone ? '☑' : '☐'} ${g.title}${gdueStr}  [${gprioStr}]`)
+        }
+        descParts.push('') // blank line after each sub-task group
       }
     }
-    descParts.push('', `Open in WHEB CRM: ${deepLink}`)
+    descParts.push(`Open in WHEB CRM: ${deepLink}`)
+    if (clientLink) descParts.push(`Client page: ${clientLink}`)
 
     const summary  = client ? `[${client}] ${task.title}` : task.title
     const dtstamp  = toIcalUtc((task.updated_at ?? task.created_at ?? new Date().toISOString()) as string)
@@ -106,13 +135,19 @@ export async function GET(
       `DTEND:${dtEnd}`,
       `SUMMARY:${esc(summary)}`,
       `DESCRIPTION:${esc(descParts.join('\n'))}`,
+      ...(clientLink ? [`LOCATION:${esc(clientLink)}`] : []),
       `PRIORITY:${prio}`,
       `URL:${deepLink}`,
       'STATUS:CONFIRMED',
       'BEGIN:VALARM',
-      'TRIGGER:-PT0M',
+      'TRIGGER:-PT15M',
       'ACTION:DISPLAY',
       `DESCRIPTION:Task due: ${esc(task.title as string)}`,
+      'END:VALARM',
+      'BEGIN:VALARM',
+      'TRIGGER:-PT0S',
+      'ACTION:DISPLAY',
+      `DESCRIPTION:Task due NOW: ${esc(task.title as string)}`,
       'END:VALARM',
       'END:VEVENT',
     )

@@ -260,6 +260,10 @@ export default function OutlookAddinPage() {
           {/* Client header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>{selected.name}</span>
+            <button onClick={() => selectClient(selected)} title="Refresh" disabled={loading}
+              style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 6px', fontSize: 13, cursor: loading ? 'default' : 'pointer', color: '#64748b' }}>
+              ↻
+            </button>
             <a href={`https://wheb-crm.vercel.app/clients/${selected.id}`} target="_blank" rel="noopener noreferrer"
               style={{ marginLeft: 'auto', fontSize: 11, color: '#2563eb', textDecoration: 'none' }}>Open in CRM ↗</a>
           </div>
