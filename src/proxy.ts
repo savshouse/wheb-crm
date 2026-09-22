@@ -30,6 +30,7 @@ export async function proxy(request: NextRequest) {
   const isPublicApi = request.nextUrl.pathname.startsWith('/api/calendar')
     || request.nextUrl.pathname.startsWith('/api/pa/')
     || request.nextUrl.pathname.startsWith('/api/rss/')
+    || request.nextUrl.pathname.startsWith('/api/cron/')
 
   if (!user && !isAuthRoute && !isPublicAsset && !isPublicApi) {
     const url = request.nextUrl.clone()

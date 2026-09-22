@@ -3,6 +3,10 @@
     {
       "path": "/api/backup",
       "schedule": "0 8 * * 5"
+    },
+    {
+      "path": "/api/cron/ms-todo-sync",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

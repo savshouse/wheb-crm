@@ -1,17 +1,20 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Save } from 'lucide-react'
+import { ArrowLeft, Camera, Save, CheckCircle, XCircle } from 'lucide-react'
 import { updateProfile } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import CropModal from './CropModal'
 
-type Profile = { id: string; full_name: string | null; email: string; role: string; avatar_url: string | null }
+type Profile = { id: string; full_name: string | null; email: string; role: string; avatar_url: string | null; ms_refresh_token: string | null }
 
 export default function ProfileForm({ profile }: { profile: Profile }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const msConnected = searchParams.get('ms_connected') === '1'
+  const msError = searchParams.get('ms_error')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -127,6 +130,53 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
             <Save size={15} />{isPending ? 'Saving...' : 'Save profile'}
           </button>
         </form>
+
+        {/* Microsoft To Do integration */}
+        <div className="mt-6 bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="text-base font-semibold text-slate-900 mb-1">Microsoft To Do</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Connect your Microsoft account to sync CRM tasks to To Do with reminders. Completing a task in To Do marks it done in the CRM too.
+          </p>
+
+          {msConnected && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+              <CheckCircle size={15} /> Microsoft To Do connected successfully.
+            </div>
+          )}
+          {msError && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              <XCircle size={15} /> Connection failed ({msError}). Please try again.
+            </div>
+          )}
+
+          {profile.ms_refresh_token ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-green-700">
+                <CheckCircle size={16} className="text-green-500" />
+                Connected — tasks sync every 15 minutes
+              </div>
+              <a
+                href="/api/auth/microsoft/disconnect"
+                className="text-xs text-slate-400 hover:text-red-500 underline"
+              >
+                Disconnect
+              </a>
+            </div>
+          ) : (
+            <a
+              href="/api/auth/microsoft"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0078D4] text-white text-sm font-medium hover:bg-[#106EBE] transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+              </svg>
+              Connect Microsoft account
+            </a>
+          )}
+        </div>
       </div>
     </>
   )
