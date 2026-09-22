@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { performBackup } from '@/lib/backup'
+import { syncTaskOnSave } from '@/lib/microsoft-graph'
 
 // ─── Clients ─────────────────────────────────────────────────
 
@@ -344,6 +345,7 @@ export async function createTask(formData: FormData) {
     new_value:    task.title,
   })
 
+  syncTaskOnSave(task.id).catch(console.error)
   revalidatePath(`/clients/${clientId}`)
 }
 
@@ -383,6 +385,7 @@ export async function createSubTask(data: {
     note:         'Sub-task created',
   })
 
+  syncTaskOnSave(task.id).catch(console.error)
   revalidatePath(`/clients/${data.clientId}`)
   revalidatePath('/tasks')
   return { error: null }
@@ -490,6 +493,7 @@ export async function updateTask(
   }).eq('id', taskId)
 
   if (error) return { error: error.message }
+  syncTaskOnSave(taskId).catch(console.error)
   revalidatePath(`/clients/${clientId}`)
   revalidatePath('/tasks')
   revalidatePath('/')
@@ -520,6 +524,7 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
     new_value:    status,
   })
 
+  syncTaskOnSave(taskId).catch(console.error)
   revalidatePath(`/clients/${clientId}`)
   revalidatePath('/tasks')
   revalidatePath('/')

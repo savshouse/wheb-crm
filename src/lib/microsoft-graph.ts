@@ -177,3 +177,61 @@ export async function disconnectMicrosoft(userId: string): Promise<void> {
     ms_todo_list_id: null,
   }).eq('id', userId)
 }
+
+// Syncs a single CRM task to the assigned user's Microsoft To Do immediately.
+// Called after any task create/update so changes appear in To Do without waiting for the cron.
+// Fire-and-forget: caller should .catch(console.error) rather than awaiting.
+export async function syncTaskOnSave(taskId: string): Promise<void> {
+  const db = adminClient()
+
+  const { data: task } = await db
+    .from('tasks')
+    .select('id, title, due_date, priority, status, description, ms_todo_task_id, assigned_to, parent_task_id, client:clients(id, name)')
+    .eq('id', taskId)
+    .single()
+
+  if (!task?.assigned_to) return
+
+  const isDone = task.status === 'completed' || task.status === 'cancelled'
+  if (isDone && !task.ms_todo_task_id) return
+
+  const { data: profile } = await db
+    .from('profiles')
+    .select('ms_refresh_token, ms_todo_list_id')
+    .eq('id', task.assigned_to as string)
+    .single()
+
+  if (!profile?.ms_refresh_token) return
+
+  const token = await getValidAccessToken(task.assigned_to as string)
+  if (!token) return
+
+  const listId = await getOrCreateWhebList(token)
+  if (listId !== profile.ms_todo_list_id) {
+    await db.from('profiles').update({ ms_todo_list_id: listId }).eq('id', task.assigned_to as string)
+  }
+
+  let parentTitle: string | null = null
+  if (task.parent_task_id) {
+    const { data: parent } = await db.from('tasks').select('title').eq('id', task.parent_task_id as string).single()
+    parentTitle = (parent?.title as string) ?? null
+  }
+
+  const clientData = (task as any).client
+  const input: TodoTaskInput = {
+    title: task.title as string,
+    bodyText: buildTodoBody(task, parentTitle, clientData?.name ?? null, clientData?.id ?? null),
+    dueDate: task.due_date as string | null,
+    importance: crmPriorityToImportance(task.priority as string),
+  }
+
+  if (!task.ms_todo_task_id) {
+    const todoId = await createTodoTask(token, listId, input)
+    await db.from('tasks').update({ ms_todo_task_id: todoId }).eq('id', taskId)
+  } else {
+    await updateTodoTask(token, listId, task.ms_todo_task_id as string, {
+      ...input,
+      status: crmStatusToTodo(task.status as string),
+    })
+  }
+}

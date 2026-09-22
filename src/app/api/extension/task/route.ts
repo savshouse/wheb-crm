@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { syncTaskOnSave } from '@/lib/microsoft-graph'
 
 function corsHeaders(origin: string): Record<string, string> {
   if (!origin.startsWith('chrome-extension://')) return {}
@@ -46,6 +47,7 @@ export async function PATCH(req: NextRequest) {
   updates.updated_at = new Date().toISOString()
   const { error } = await supabase.from('tasks').update(updates).eq('id', taskId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers })
+  syncTaskOnSave(taskId).catch(console.error)
   return NextResponse.json({ ok: true }, { headers })
 }
 
