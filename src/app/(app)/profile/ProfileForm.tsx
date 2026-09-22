@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Camera, Save, CheckCircle, XCircle } from 'lucide-react'
 import { updateProfile } from '@/app/actions'
@@ -10,11 +10,18 @@ import CropModal from './CropModal'
 
 type Profile = { id: string; full_name: string | null; email: string; role: string; avatar_url: string | null; ms_refresh_token: string | null }
 
-export default function ProfileForm({ profile }: { profile: Profile }) {
+export default function ProfileForm({
+  profile,
+  msConnected = false,
+  msDisconnected = false,
+  msError = null,
+}: {
+  profile: Profile
+  msConnected?: boolean
+  msDisconnected?: boolean
+  msError?: string | null
+}) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const msConnected = searchParams.get('ms_connected') === '1'
-  const msError = searchParams.get('ms_error')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
