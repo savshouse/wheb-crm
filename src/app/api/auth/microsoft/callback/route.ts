@@ -5,15 +5,14 @@ import { cookies } from 'next/headers'
 
 const APP_URL = 'https://wheb-crm.vercel.app'
 
-const adminClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 // GET /api/auth/microsoft/callback
 // Handles the redirect from Microsoft after the user consents.
 // Exchanges the auth code for tokens and stores them in the user's profile.
 export async function GET(req: NextRequest) {
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   const { searchParams } = req.nextUrl
   const code  = searchParams.get('code')
   const state = searchParams.get('state')

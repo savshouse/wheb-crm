@@ -4,15 +4,17 @@ const GRAPH = 'https://graph.microsoft.com/v1.0'
 const TOKEN_URL = `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`
 const SITE = 'https://wheb-crm.vercel.app'
 
-const adminClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // Returns a valid access token for the user, refreshing if needed.
 // Returns null if the user hasn't connected Microsoft.
 export async function getValidAccessToken(userId: string): Promise<string | null> {
-  const { data: profile } = await adminClient
+  const { data: profile } = await adminClient()
     .from('profiles')
     .select('ms_access_token, ms_refresh_token, ms_token_expires_at')
     .eq('id', userId)
@@ -41,7 +43,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
   const data = await resp.json()
   const newExpiry = new Date(Date.now() + (data.expires_in as number) * 1000)
 
-  await adminClient.from('profiles').update({
+  await adminClient().from('profiles').update({
     ms_access_token: data.access_token,
     ms_refresh_token: data.refresh_token ?? profile.ms_refresh_token,
     ms_token_expires_at: newExpiry.toISOString(),
@@ -168,7 +170,7 @@ export function crmStatusToTodo(s: string): 'notStarted' | 'inProgress' | 'compl
 
 // Clears the stored Microsoft tokens for a user (disconnect).
 export async function disconnectMicrosoft(userId: string): Promise<void> {
-  await adminClient.from('profiles').update({
+  await adminClient().from('profiles').update({
     ms_access_token: null,
     ms_refresh_token: null,
     ms_token_expires_at: null,

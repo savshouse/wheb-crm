@@ -2,14 +2,13 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, addDays } from 'date-fns'
 
-// Uses service role so calendar clients can fetch without a browser session.
-// The uid parameter acts as the per-user secret — it's a UUID (hard to guess).
-const adminClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function GET(req: NextRequest) {
+  // Uses service role so calendar clients can fetch without a browser session.
+  // The uid parameter acts as the per-user secret — it's a UUID (hard to guess).
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   const uid = req.nextUrl.searchParams.get('uid')
   if (!uid) {
     return new NextResponse('Missing uid parameter', { status: 400 })

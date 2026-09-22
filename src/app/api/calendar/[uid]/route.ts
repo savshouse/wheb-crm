@@ -2,17 +2,16 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO } from 'date-fns'
 
-const adminClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 const SITE = 'https://wheb-crm.vercel.app'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ uid: string }> }
 ) {
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   const { uid } = await params
 
   const { data: profile } = await adminClient

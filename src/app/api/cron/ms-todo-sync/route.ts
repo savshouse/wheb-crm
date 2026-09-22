@@ -12,11 +12,6 @@ import {
   type TodoTaskInput,
 } from '@/lib/microsoft-graph'
 
-const adminClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 // GET /api/cron/ms-todo-sync
 // Called by Vercel cron every 15 minutes.
 // For each user with a Microsoft connection:
@@ -25,6 +20,10 @@ const adminClient = createClient(
 //   3. Updates changed CRM tasks in To Do.
 //   4. Marks CRM tasks complete when they're completed in To Do.
 export async function GET(req: NextRequest) {
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   // Vercel cron sends this header; block direct calls in production.
   const authHeader = req.headers.get('authorization')
   if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -52,7 +51,7 @@ export async function GET(req: NextRequest) {
       }
 
       // --- Sync CRM → To Do ---
-      const crmTasks = await fetchAllUserTasks(user.id)
+      const crmTasks = await fetchAllUserTasks(adminClient, user.id)
       let created = 0, updated = 0
 
       for (const t of crmTasks) {
@@ -123,9 +122,9 @@ type CrmTask = {
   parentTitle: string | null
 }
 
-async function fetchAllUserTasks(userId: string): Promise<CrmTask[]> {
+async function fetchAllUserTasks(db: ReturnType<typeof createClient>, userId: string): Promise<CrmTask[]> {
   // Parent tasks
-  const { data: parents } = await adminClient
+  const { data: parents } = await db
     .from('tasks')
     .select('id, title, due_date, priority, status, description, ms_todo_task_id, client:clients(id, name)')
     .eq('assigned_to', userId)
@@ -136,7 +135,7 @@ async function fetchAllUserTasks(userId: string): Promise<CrmTask[]> {
 
   // Sub-tasks
   const { data: subs } = parentIds.length
-    ? await adminClient
+    ? await db
         .from('tasks')
         .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id, client:clients(id, name)')
         .in('parent_task_id', parentIds)
@@ -146,7 +145,7 @@ async function fetchAllUserTasks(userId: string): Promise<CrmTask[]> {
   // Grandchildren
   const subIds = (subs ?? []).map((s: any) => s.id)
   const { data: grands } = subIds.length
-    ? await adminClient
+    ? await db
         .from('tasks')
         .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id')
         .in('parent_task_id', subIds)
