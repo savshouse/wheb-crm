@@ -122,7 +122,7 @@ type CrmTask = {
   parentTitle: string | null
 }
 
-async function fetchAllUserTasks(db: ReturnType<typeof createClient>, userId: string): Promise<CrmTask[]> {
+async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
   // Parent tasks
   const { data: parents } = await db
     .from('tasks')
@@ -131,43 +131,43 @@ async function fetchAllUserTasks(db: ReturnType<typeof createClient>, userId: st
     .is('parent_task_id', null)
     .not('status', 'in', '("completed","cancelled")')
 
-  const parentIds = (parents ?? []).map((t: any) => t.id)
+  const parentIds = ((parents ?? []) as any[]).map((t: any) => t.id)
 
   // Sub-tasks
-  const { data: subs } = parentIds.length
-    ? await db
+  const subs: any[] = parentIds.length
+    ? ((await db
         .from('tasks')
         .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id, client:clients(id, name)')
         .in('parent_task_id', parentIds)
-        .not('status', 'in', '("completed","cancelled")')
-    : { data: [] }
+        .not('status', 'in', '("completed","cancelled")')).data ?? [])
+    : []
 
   // Grandchildren
-  const subIds = (subs ?? []).map((s: any) => s.id)
-  const { data: grands } = subIds.length
-    ? await db
+  const subIds = subs.map((s: any) => s.id)
+  const grands: any[] = subIds.length
+    ? ((await db
         .from('tasks')
         .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id')
         .in('parent_task_id', subIds)
-        .not('status', 'in', '("completed","cancelled")')
-    : { data: [] }
+        .not('status', 'in', '("completed","cancelled")')).data ?? [])
+    : []
 
   const result: CrmTask[] = []
 
-  for (const t of parents ?? []) {
+  for (const t of (parents ?? []) as any[]) {
     const client = t.client as any
     result.push({ ...t, clientName: client?.name ?? null, clientId: client?.id ?? null, parentTitle: null, client: undefined } as any)
   }
 
-  for (const t of subs ?? []) {
+  for (const t of subs) {
     const client = t.client as any
-    const parent = (parents ?? []).find((p: any) => p.id === t.parent_task_id) as any
+    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === t.parent_task_id)
     result.push({ ...t, clientName: client?.name ?? parent?.client?.name ?? null, clientId: client?.id ?? parent?.client?.id ?? null, parentTitle: parent?.title ?? null, client: undefined } as any)
   }
 
-  for (const t of grands ?? []) {
-    const sub = (subs ?? []).find((s: any) => s.id === t.parent_task_id) as any
-    const parent = (parents ?? []).find((p: any) => p.id === sub?.parent_task_id) as any
+  for (const t of grands) {
+    const sub = subs.find((s: any) => s.id === t.parent_task_id)
+    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === sub?.parent_task_id)
     result.push({ ...t, clientName: parent?.client?.name ?? null, clientId: parent?.client?.id ?? null, parentTitle: sub?.title ?? null } as any)
   }
 
