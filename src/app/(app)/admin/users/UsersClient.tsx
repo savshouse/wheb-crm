@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Shield, User, Users, Check, Loader2 } from 'lucide-react'
-import { updateUserRole } from '@/app/actions'
+import { Shield, Check, Loader2, UserPlus, X, Send } from 'lucide-react'
+import { updateUserRole, inviteUser } from '@/app/actions'
 
 const ROLES = [
   { value: 'admin',   label: 'Admin',   description: 'Full access including delete and user management', colour: 'bg-purple-100 text-purple-700' },
@@ -29,6 +29,15 @@ export default function UsersClient({ profiles: initial, currentUserId }: Props)
   const [saved, setSaved] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Invite form state
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
+  const [inviteRole, setInviteRole] = useState<'admin' | 'manager' | 'staff'>('staff')
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteSent, setInviteSent] = useState<string | null>(null)
+
   async function handleRoleChange(userId: string, role: 'admin' | 'manager' | 'staff') {
     setSaving(userId)
     setErrors(prev => { const n = { ...prev }; delete n[userId]; return n })
@@ -43,8 +52,94 @@ export default function UsersClient({ profiles: initial, currentUserId }: Props)
     setSaving(null)
   }
 
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    if (!inviteEmail.trim()) return
+    setInviting(true)
+    setInviteError(null)
+    const { error } = await inviteUser({ email: inviteEmail.trim(), fullName: inviteName.trim(), role: inviteRole })
+    if (error) {
+      setInviteError(error)
+      setInviting(false)
+    } else {
+      setInviteSent(inviteEmail.trim())
+      setInviteEmail('')
+      setInviteName('')
+      setInviteRole('staff')
+      setShowInvite(false)
+      setInviting(false)
+      setTimeout(() => setInviteSent(null), 5000)
+    }
+  }
+
   return (
     <div className="space-y-2">
+      {/* Invite banner */}
+      {inviteSent && (
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+          <Check size={14} className="shrink-0" />
+          Invite sent to <span className="font-medium">{inviteSent}</span>
+        </div>
+      )}
+
+      {/* Invite form */}
+      {showInvite ? (
+        <form onSubmit={handleInvite} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-800">Invite a team member</p>
+            <button type="button" onClick={() => { setShowInvite(false); setInviteError(null) }} className="text-slate-400 hover:text-slate-600">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input
+              type="email"
+              required
+              placeholder="Email address *"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              className="text-sm rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="Full name (optional)"
+              value={inviteName}
+              onChange={e => setInviteName(e.target.value)}
+              className="text-sm rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={inviteRole}
+              onChange={e => setInviteRole(e.target.value as 'admin' | 'manager' | 'staff')}
+              className="text-sm rounded-lg border border-slate-200 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          {inviteError && <p className="text-xs text-red-600">{inviteError}</p>}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail.trim()}
+              className="flex items-center gap-2 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {inviting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {inviting ? 'Sending…' : 'Send invite'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-2 text-sm bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <UserPlus size={14} />
+            Invite member
+          </button>
+        </div>
+      )}
+
+      {/* User list */}
       {profiles.map(profile => {
         const roleInfo = ROLES.find(r => r.value === profile.role) ?? ROLES[2]
         const isCurrentUser = profile.id === currentUserId
@@ -52,12 +147,10 @@ export default function UsersClient({ profiles: initial, currentUserId }: Props)
         return (
           <div key={profile.id} className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex items-start gap-4">
-              {/* Avatar */}
               <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
                 {(profile.full_name || profile.email).charAt(0).toUpperCase()}
               </div>
 
-              {/* Name / email */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-slate-900">
@@ -76,7 +169,6 @@ export default function UsersClient({ profiles: initial, currentUserId }: Props)
                 )}
               </div>
 
-              {/* Role selector */}
               <div className="flex items-center gap-2 shrink-0">
                 {saving === profile.id && <Loader2 size={14} className="animate-spin text-slate-400" />}
                 {saved === profile.id && <Check size={14} className="text-green-500" />}
@@ -93,7 +185,6 @@ export default function UsersClient({ profiles: initial, currentUserId }: Props)
               </div>
             </div>
 
-            {/* Role description */}
             <p className="text-xs text-slate-400 mt-2 ml-14">{roleInfo.description}</p>
           </div>
         )

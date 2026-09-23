@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
 import { syncTaskOnSave } from '@/lib/microsoft-graph'
 
@@ -896,6 +897,41 @@ export async function updateUserRole(
     .eq('id', userId)
 
   if (error) return { error: error.message }
+  revalidatePath('/admin/users')
+  return { error: null }
+}
+
+export async function inviteUser(data: {
+  email: string
+  fullName: string
+  role: 'admin' | 'manager' | 'staff'
+}): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: caller } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (caller?.role !== 'admin') return { error: 'Admin access required' }
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(data.email, {
+    data: { full_name: data.fullName || null },
+    redirectTo: 'https://wheb-crm.vercel.app/auth/callback',
+  })
+
+  if (inviteErr) return { error: inviteErr.message }
+
+  await admin.from('profiles').upsert({
+    id: invited.user.id,
+    email: invited.user.email,
+    full_name: data.fullName || null,
+    role: data.role,
+  })
+
   revalidatePath('/admin/users')
   return { error: null }
 }
