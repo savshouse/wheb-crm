@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { getOrCreateWhebList, createTodoSubscription } from '@/lib/microsoft-graph'
 
 const APP_URL = 'https://wheb-crm.vercel.app'
 
@@ -64,8 +65,26 @@ export async function GET(req: NextRequest) {
     ms_access_token:    tokens.access_token,
     ms_refresh_token:   tokens.refresh_token,
     ms_token_expires_at: expiresAt.toISOString(),
-    ms_todo_list_id:    null, // created on first sync
+    ms_todo_list_id:    null,
   }).eq('id', user.id)
+
+  // Create the To Do list and change-notification subscription immediately after connecting
+  try {
+    const listId = await getOrCreateWhebList(tokens.access_token)
+    await adminClient.from('profiles').update({ ms_todo_list_id: listId }).eq('id', user.id)
+    const { id: subId, expiresAt: subExpiry } = await createTodoSubscription(
+      tokens.access_token,
+      listId,
+      `${APP_URL}/api/webhook/ms-todo`,
+      process.env.MS_WEBHOOK_SECRET ?? ''
+    )
+    await adminClient.from('profiles').update({
+      ms_todo_subscription_id: subId,
+      ms_todo_subscription_expires_at: subExpiry,
+    }).eq('id', user.id)
+  } catch (e) {
+    console.error('Subscription setup failed (non-fatal):', e)
+  }
 
   const response = NextResponse.redirect(new URL('/profile?ms_connected=1', req.url))
   response.cookies.delete('ms_oauth_state')

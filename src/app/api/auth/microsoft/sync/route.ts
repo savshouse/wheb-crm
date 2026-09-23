@@ -12,9 +12,13 @@ import {
   crmPriorityToImportance,
   crmStatusToTodo,
   syncStepsFromSubItems,
+  createTodoSubscription,
+  renewTodoSubscription,
   type TodoTaskInput,
   type SubTaskEntry,
 } from '@/lib/microsoft-graph'
+
+const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
 
 // POST /api/auth/microsoft/sync
 // Triggers a full task sync to Microsoft To Do for the current user.
@@ -31,7 +35,7 @@ export async function POST() {
 
   const { data: profile } = await db
     .from('profiles')
-    .select('ms_refresh_token, ms_todo_list_id')
+    .select('ms_refresh_token, ms_todo_list_id, ms_todo_subscription_id, ms_todo_subscription_expires_at')
     .eq('id', user.id)
     .single()
 
@@ -45,6 +49,30 @@ export async function POST() {
   const listId = await getOrCreateWhebList(token)
   if (listId !== profile.ms_todo_list_id) {
     await db.from('profiles').update({ ms_todo_list_id: listId }).eq('id', user.id)
+  }
+
+  // Ensure a change-notification subscription exists (creates or renews)
+  try {
+    const subExpiry = profile.ms_todo_subscription_expires_at
+      ? new Date(profile.ms_todo_subscription_expires_at as string)
+      : new Date(0)
+    const needsRenewal = subExpiry < new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    if (!profile.ms_todo_subscription_id || needsRenewal) {
+      if (profile.ms_todo_subscription_id && needsRenewal) {
+        try {
+          const newExpiry = await renewTodoSubscription(token, profile.ms_todo_subscription_id as string)
+          await db.from('profiles').update({ ms_todo_subscription_expires_at: newExpiry }).eq('id', user.id)
+        } catch {
+          const { id: subId, expiresAt } = await createTodoSubscription(token, listId, WEBHOOK_URL, process.env.MS_WEBHOOK_SECRET ?? '')
+          await db.from('profiles').update({ ms_todo_subscription_id: subId, ms_todo_subscription_expires_at: expiresAt }).eq('id', user.id)
+        }
+      } else {
+        const { id: subId, expiresAt } = await createTodoSubscription(token, listId, WEBHOOK_URL, process.env.MS_WEBHOOK_SECRET ?? '')
+        await db.from('profiles').update({ ms_todo_subscription_id: subId, ms_todo_subscription_expires_at: expiresAt }).eq('id', user.id)
+      }
+    }
+  } catch (e) {
+    console.error('Subscription setup failed (non-fatal):', e)
   }
 
   // Fetch parent tasks

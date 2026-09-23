@@ -182,6 +182,39 @@ export function crmStatusToTodo(s: string): 'notStarted' | 'inProgress' | 'compl
   return 'notStarted'
 }
 
+export async function getTodoTask(token: string, listId: string, taskId: string): Promise<any> {
+  return graph(token, 'GET', `/me/todo/lists/${listId}/tasks/${taskId}`)
+}
+
+// Subscription management — change notifications fire when tasks are updated in To Do.
+// Subscriptions last ~2.8 days; the daily cron renews them.
+export async function createTodoSubscription(
+  token: string,
+  listId: string,
+  notificationUrl: string,
+  clientState: string
+): Promise<{ id: string; expiresAt: string }> {
+  const expirationDateTime = new Date(Date.now() + 4100 * 60 * 1000).toISOString()
+  const result = await graph(token, 'POST', '/subscriptions', {
+    changeType: 'updated',
+    notificationUrl,
+    resource: `/me/todo/lists/${listId}/tasks`,
+    expirationDateTime,
+    clientState,
+  })
+  return { id: result.id as string, expiresAt: result.expirationDateTime as string }
+}
+
+export async function renewTodoSubscription(token: string, subscriptionId: string): Promise<string> {
+  const expirationDateTime = new Date(Date.now() + 4100 * 60 * 1000).toISOString()
+  const result = await graph(token, 'PATCH', `/subscriptions/${subscriptionId}`, { expirationDateTime })
+  return result.expirationDateTime as string
+}
+
+export async function deleteTodoSubscription(token: string, subscriptionId: string): Promise<void> {
+  try { await graph(token, 'DELETE', `/subscriptions/${subscriptionId}`) } catch {}
+}
+
 // Deletes a To Do task (safe to call on already-deleted tasks).
 export async function deleteTodoTask(token: string, listId: string, taskId: string): Promise<void> {
   try { await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${taskId}`) } catch {}
@@ -212,6 +245,8 @@ export async function disconnectMicrosoft(userId: string): Promise<void> {
     ms_refresh_token: null,
     ms_token_expires_at: null,
     ms_todo_list_id: null,
+    ms_todo_subscription_id: null,
+    ms_todo_subscription_expires_at: null,
   }).eq('id', userId)
 }
 

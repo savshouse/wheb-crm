@@ -31,6 +31,7 @@ export async function proxy(request: NextRequest) {
     || request.nextUrl.pathname.startsWith('/api/pa/')
     || request.nextUrl.pathname.startsWith('/api/rss/')
     || request.nextUrl.pathname.startsWith('/api/cron/')
+    || request.nextUrl.pathname.startsWith('/api/webhook/')
 
   if (!user && !isAuthRoute && !isPublicAsset && !isPublicApi) {
     const url = request.nextUrl.clone()

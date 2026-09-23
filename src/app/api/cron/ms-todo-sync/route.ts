@@ -11,9 +11,13 @@ import {
   crmPriorityToImportance,
   crmStatusToTodo,
   syncStepsFromSubItems,
+  createTodoSubscription,
+  renewTodoSubscription,
   type TodoTaskInput,
   type SubTaskEntry,
 } from '@/lib/microsoft-graph'
+
+const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
 
 // GET /api/cron/ms-todo-sync
 // Called by Vercel cron every 15 minutes.
@@ -35,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const { data: users } = await adminClient
     .from('profiles')
-    .select('id, ms_refresh_token, ms_todo_list_id')
+    .select('id, ms_refresh_token, ms_todo_list_id, ms_todo_subscription_id, ms_todo_subscription_expires_at')
     .not('ms_refresh_token', 'is', null)
 
   if (!users?.length) return NextResponse.json({ ok: true, synced: 0 })
@@ -51,6 +55,25 @@ export async function GET(req: NextRequest) {
       const listId = await getOrCreateWhebList(token)
       if (listId !== user.ms_todo_list_id) {
         await adminClient.from('profiles').update({ ms_todo_list_id: listId }).eq('id', user.id)
+      }
+
+      // Renew change-notification subscription if expiring within 2 days
+      try {
+        const subExpiry = user.ms_todo_subscription_expires_at
+          ? new Date(user.ms_todo_subscription_expires_at)
+          : new Date(0)
+        const twoDaysFromNow = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+        if (!user.ms_todo_subscription_id || subExpiry < twoDaysFromNow) {
+          if (user.ms_todo_subscription_id && subExpiry > new Date()) {
+            const newExpiry = await renewTodoSubscription(token, user.ms_todo_subscription_id)
+            await adminClient.from('profiles').update({ ms_todo_subscription_expires_at: newExpiry }).eq('id', user.id)
+          } else {
+            const { id: subId, expiresAt } = await createTodoSubscription(token, listId, WEBHOOK_URL, process.env.MS_WEBHOOK_SECRET ?? '')
+            await adminClient.from('profiles').update({ ms_todo_subscription_id: subId, ms_todo_subscription_expires_at: expiresAt }).eq('id', user.id)
+          }
+        }
+      } catch (e) {
+        console.error(`Subscription renewal failed for ${user.id}:`, e)
       }
 
       // --- Sync CRM → To Do ---
