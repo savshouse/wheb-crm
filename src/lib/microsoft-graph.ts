@@ -123,9 +123,13 @@ export async function completeTodoTask(token: string, listId: string, taskId: st
 }
 
 // Fetches all completed tasks in the WHEB CRM list.
+// Checks both status and completedDateTime for belt-and-suspenders reliability.
 export async function getCompletedTasks(token: string, listId: string): Promise<{ id: string }[]> {
-  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,status&$top=500`)
-  return (result?.value ?? []).filter((t: any) => t.status === 'completed')
+  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,status,completedDateTime&$top=500`)
+  const all = result?.value ?? []
+  const completed = all.filter((t: any) => t.status === 'completed' || t.completedDateTime != null)
+  console.log(`[ToDo sync] getCompletedTasks: ${all.length} total tasks, ${completed.length} completed`)
+  return completed
 }
 
 // Fetches all non-completed tasks in the WHEB CRM list (for orphan detection).
@@ -140,6 +144,13 @@ export type SubTaskEntry = {
   due_date: string | null
   priority: string
   children: { title: string; status: string; due_date: string | null; priority: string }[]
+}
+
+// CRM IDs for sub-tasks, parallel to a SubTaskEntry[]. Used by syncStepsFromSubItems
+// to propagate step completions back to the CRM during a full sync.
+export type SubTaskIds = {
+  subId: string    // CRM task.id for this sub-task
+  childIds: string[] // CRM task.id for each grandchild, parallel to SubTaskEntry.children
 }
 
 function shortDate(d: string): string {
@@ -214,20 +225,106 @@ export async function deleteTodoTask(token: string, listId: string, taskId: stri
   try { await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${taskId}`) } catch {}
 }
 
-// Replaces all Steps (checklistItems) on a To Do task with the CRM sub-task hierarchy.
-export async function syncStepsFromSubItems(token: string, listId: string, todoTaskId: string, subItems: SubTaskEntry[]): Promise<void> {
-  const existing = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`)
-  for (const item of existing?.value ?? []) {
-    try { await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${item.id}`) } catch {}
+// Fetches checklistItems (Steps) for a To Do task.
+export async function getChecklistItems(
+  token: string, listId: string, taskId: string
+): Promise<{ id: string; displayName: string; isChecked: boolean }[]> {
+  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks/${taskId}/checklistItems`)
+  return result?.value ?? []
+}
+
+// Syncs Steps (checklistItems) on a To Do task with the CRM sub-task hierarchy.
+//
+// Two-way mode (pass subTaskIds): before rebuilding, reads existing step states.
+// Any step that is ticked off in To Do but not yet complete in the CRM is marked
+// complete in the CRM, and the local subItems copy is updated so the rebuilt step
+// is created as checked.
+//
+// One-way mode (omit subTaskIds): CRM is authoritative — used by syncTaskOnSave
+// where a CRM change triggered the sync and CRM status wins.
+export async function syncStepsFromSubItems(
+  token: string,
+  listId: string,
+  todoTaskId: string,
+  subItems: SubTaskEntry[],
+  subTaskIds?: SubTaskIds[]
+): Promise<void> {
+  const existingItems = await getChecklistItems(token, listId, todoTaskId)
+
+  // Mutable copy so we can update statuses in-memory after detecting To Do completions
+  const items: SubTaskEntry[] = subItems.map(sub => ({
+    ...sub,
+    children: sub.children.map(c => ({ ...c })),
+  }))
+
+  if (subTaskIds?.length) {
+    const db = adminClient()
+    const toComplete: string[] = []
+
+    for (let si = 0; si < items.length; si++) {
+      const sub = items[si]
+      const ids = subTaskIds[si]
+      if (!ids) continue
+
+      if (sub.status !== 'completed' && sub.status !== 'cancelled') {
+        const matched = existingItems.find(
+          e => !e.displayName.startsWith('  ↳') &&
+               (e.displayName === sub.title || e.displayName.startsWith(sub.title + ' (')) &&
+               e.isChecked
+        )
+        if (matched) {
+          toComplete.push(ids.subId)
+          items[si] = { ...sub, status: 'completed' }
+        }
+      }
+
+      for (let gi = 0; gi < sub.children.length; gi++) {
+        const g = sub.children[gi]
+        const childId = ids.childIds[gi]
+        if (!childId) continue
+        if (g.status !== 'completed' && g.status !== 'cancelled') {
+          const matched = existingItems.find(
+            e => (e.displayName === `  ↳ ${g.title}` ||
+                  e.displayName.startsWith(`  ↳ ${g.title} (`)) &&
+                 e.isChecked
+          )
+          if (matched) {
+            toComplete.push(childId)
+            items[si].children[gi] = { ...g, status: 'completed' }
+          }
+        }
+      }
+    }
+
+    if (toComplete.length) {
+      console.log(`[ToDo sync] Marking ${toComplete.length} sub-task(s) complete from checked steps`)
+      await db.from('tasks')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .in('id', toComplete)
+    }
   }
-  for (const sub of subItems) {
+
+  // Delete existing steps then recreate from (potentially updated) items
+  for (const item of existingItems) {
+    try {
+      await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${item.id}`)
+    } catch {}
+  }
+
+  for (const sub of items) {
     const done = sub.status === 'completed' || sub.status === 'cancelled'
     const due = sub.due_date ? ` (${shortDate(sub.due_date)})` : ''
-    await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, { displayName: `${sub.title}${due}`, isChecked: done })
+    await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
+      displayName: `${sub.title}${due}`,
+      isChecked: done,
+    })
     for (const g of sub.children) {
       const gdone = g.status === 'completed' || g.status === 'cancelled'
       const gdue = g.due_date ? ` (${shortDate(g.due_date)})` : ''
-      await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, { displayName: `  ↳ ${g.title}${gdue}`, isChecked: gdone })
+      await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
+        displayName: `  ↳ ${g.title}${gdue}`,
+        isChecked: gdone,
+      })
     }
   }
 }

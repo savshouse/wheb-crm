@@ -16,6 +16,7 @@ import {
   renewTodoSubscription,
   type TodoTaskInput,
   type SubTaskEntry,
+  type SubTaskIds,
 } from '@/lib/microsoft-graph'
 
 const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
@@ -104,13 +105,21 @@ async function runSync() {
     ? ((await db.from('tasks').select('id, title, due_date, priority, status, parent_task_id').in('parent_task_id', subIds).order('created_at')).data ?? [])
     : []
 
-  // Build sub-item lookup for Steps
+  // Build sub-item lookup for Steps (subListByParent) and parallel CRM ID lookup
+  // (subTaskIdsByParent) so syncStepsFromSubItems can propagate To Do check-offs to CRM.
   const subListByParent: Record<string, SubTaskEntry[]> = {}
+  const subTaskIdsByParent: Record<string, SubTaskIds[]> = {}
   for (const s of subs) {
     if (!subListByParent[s.parent_task_id]) subListByParent[s.parent_task_id] = []
+    if (!subTaskIdsByParent[s.parent_task_id]) subTaskIdsByParent[s.parent_task_id] = []
+    const children = grands.filter((g: any) => g.parent_task_id === s.id)
     subListByParent[s.parent_task_id].push({
       title: s.title, status: s.status, due_date: s.due_date, priority: s.priority,
-      children: grands.filter((g: any) => g.parent_task_id === s.id).map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })),
+      children: children.map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })),
+    })
+    subTaskIdsByParent[s.parent_task_id].push({
+      subId: s.id,
+      childIds: children.map((g: any) => g.id),
     })
   }
 
@@ -181,7 +190,7 @@ async function runSync() {
           created++
         }
       }
-      await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [])
+      await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [], subTaskIdsByParent[t.id])
     } catch (e: any) {
       console.error('sync failed for task', t.id, e?.message)
     }

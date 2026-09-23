@@ -15,6 +15,7 @@ import {
   renewTodoSubscription,
   type TodoTaskInput,
   type SubTaskEntry,
+  type SubTaskIds,
 } from '@/lib/microsoft-graph'
 
 const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
@@ -122,7 +123,7 @@ export async function GET(req: NextRequest) {
           updated++
         }
 
-        await syncStepsFromSubItems(token, listId, todoTaskId, t.subItems ?? [])
+        await syncStepsFromSubItems(token, listId, todoTaskId, t.subItems ?? [], t.subTaskIds)
       }
 
       results.push(`${user.id}: +${created} created, ~${updated} updated, ✓${completedInCrm} completed`)
@@ -147,6 +148,7 @@ type CrmTask = {
   clientId: string | null
   parentTitle: string | null
   subItems?: SubTaskEntry[]
+  subTaskIds?: SubTaskIds[]
 }
 
 async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
@@ -160,41 +162,56 @@ async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
 
   const parentIds = ((parents ?? []) as any[]).map((t: any) => t.id)
 
-  // Sub-tasks
+  // Sub-tasks — include completed ones so they appear as checked Steps in To Do
   const subs: any[] = parentIds.length
     ? ((await db
         .from('tasks')
-        .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id, client:clients(id, name)')
+        .select('id, title, due_date, priority, status, parent_task_id')
         .in('parent_task_id', parentIds)
-        .not('status', 'in', '("completed","cancelled")')).data ?? [])
+        .order('created_at')).data ?? [])
     : []
 
-  // Grandchildren
+  // Grandchildren — include completed ones too
   const subIds = subs.map((s: any) => s.id)
   const grands: any[] = subIds.length
     ? ((await db
         .from('tasks')
-        .select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id')
+        .select('id, title, due_date, priority, status, parent_task_id')
         .in('parent_task_id', subIds)
-        .not('status', 'in', '("completed","cancelled")')).data ?? [])
+        .order('created_at')).data ?? [])
     : []
 
   const result: CrmTask[] = []
 
-  // Build sub-item lookup for Steps
+  // Build sub-item lookup for Steps (subListByParent) and parallel CRM ID lookup
   const subListByParent: Record<string, SubTaskEntry[]> = {}
+  const subTaskIdsByParent: Record<string, SubTaskIds[]> = {}
   for (const s of subs) {
     if (!subListByParent[s.parent_task_id]) subListByParent[s.parent_task_id] = []
+    if (!subTaskIdsByParent[s.parent_task_id]) subTaskIdsByParent[s.parent_task_id] = []
+    const children = grands.filter((g: any) => g.parent_task_id === s.id)
     subListByParent[s.parent_task_id].push({
       title: s.title, status: s.status, due_date: s.due_date, priority: s.priority,
-      children: grands.filter((g: any) => g.parent_task_id === s.id).map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })),
+      children: children.map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })),
+    })
+    subTaskIdsByParent[s.parent_task_id].push({
+      subId: s.id,
+      childIds: children.map((g: any) => g.id),
     })
   }
 
   // Only parent tasks become To Do tasks; sub-tasks/grandchildren become Steps
   for (const t of (parents ?? []) as any[]) {
     const client = t.client as any
-    result.push({ ...t, clientName: client?.name ?? null, clientId: client?.id ?? null, parentTitle: null, subItems: subListByParent[t.id] ?? [], client: undefined } as any)
+    result.push({
+      ...t,
+      clientName: client?.name ?? null,
+      clientId: client?.id ?? null,
+      parentTitle: null,
+      subItems: subListByParent[t.id] ?? [],
+      subTaskIds: subTaskIdsByParent[t.id],
+      client: undefined,
+    } as any)
   }
 
   return result

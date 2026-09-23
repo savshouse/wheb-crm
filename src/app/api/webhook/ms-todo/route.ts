@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { getValidAccessToken, getTodoTask } from '@/lib/microsoft-graph'
+import { getValidAccessToken, getTodoTask, getChecklistItems } from '@/lib/microsoft-graph'
 
 const WEBHOOK_SECRET = process.env.MS_WEBHOOK_SECRET ?? ''
 
@@ -10,9 +10,10 @@ const WEBHOOK_SECRET = process.env.MS_WEBHOOK_SECRET ?? ''
 export async function POST(req: NextRequest) {
   // Step 1: Microsoft sends a validation challenge when creating a subscription.
   // Must echo the token back as plain text within 10 seconds.
+  // searchParams.get() already URL-decodes, so no further decoding needed.
   const validationToken = req.nextUrl.searchParams.get('validationToken')
   if (validationToken) {
-    return new Response(decodeURIComponent(validationToken), {
+    return new Response(validationToken, {
       status: 200,
       headers: { 'Content-Type': 'text/plain' },
     })
@@ -49,22 +50,77 @@ export async function POST(req: NextRequest) {
       const token = await getValidAccessToken(profile.id as string)
       if (!token) continue
 
-      // Fetch the task from Graph to check current status
-      const task = await getTodoTask(token, profile.ms_todo_list_id as string, taskId)
-      if (task?.status !== 'completed') continue
+      const listId = profile.ms_todo_list_id as string
 
-      // Find the matching CRM task and mark it complete
-      const { data: crmTask } = await db
-        .from('tasks')
-        .select('id')
-        .eq('ms_todo_task_id', taskId)
-        .not('status', 'in', '("completed","cancelled")')
-        .maybeSingle()
+      // Fetch task status and steps in parallel
+      const [task, steps] = await Promise.all([
+        getTodoTask(token, listId, taskId),
+        getChecklistItems(token, listId, taskId),
+      ])
 
-      if (crmTask) {
-        await db.from('tasks')
-          .update({ status: 'completed', updated_at: new Date().toISOString() })
-          .eq('id', crmTask.id)
+      // --- Parent task completion ---
+      if (task?.status === 'completed' || task?.completedDateTime != null) {
+        const { data: crmTask } = await db
+          .from('tasks')
+          .select('id')
+          .eq('ms_todo_task_id', taskId)
+          .not('status', 'in', '("completed","cancelled")')
+          .maybeSingle()
+        if (crmTask) {
+          await db.from('tasks')
+            .update({ status: 'completed', updated_at: new Date().toISOString() })
+            .eq('id', crmTask.id)
+          console.log(`[Webhook] Marked CRM task ${crmTask.id} complete (parent task)`)
+        }
+      }
+
+      // --- Step (sub-task) completions ---
+      const checkedSteps = steps.filter(s => s.isChecked)
+      if (checkedSteps.length > 0) {
+        const { data: parentCrmTask } = await db
+          .from('tasks')
+          .select('id')
+          .eq('ms_todo_task_id', taskId)
+          .maybeSingle()
+
+        if (parentCrmTask) {
+          const { data: subTasks } = await db
+            .from('tasks')
+            .select('id, title, status')
+            .eq('parent_task_id', parentCrmTask.id)
+            .not('status', 'in', '("completed","cancelled")')
+
+          const toComplete: string[] = []
+          for (const sub of (subTasks ?? [])) {
+            const matchedStep = checkedSteps.find(
+              s => !s.displayName.startsWith('  ↳') &&
+                   (s.displayName === sub.title || s.displayName.startsWith(sub.title + ' ('))
+            )
+            if (matchedStep) {
+              toComplete.push(sub.id)
+              // Check grandchildren
+              const { data: grands } = await db
+                .from('tasks')
+                .select('id, title')
+                .eq('parent_task_id', sub.id)
+                .not('status', 'in', '("completed","cancelled")')
+              for (const g of (grands ?? [])) {
+                const matchedGrand = checkedSteps.find(
+                  s => s.displayName === `  ↳ ${g.title}` ||
+                       s.displayName.startsWith(`  ↳ ${g.title} (`)
+                )
+                if (matchedGrand) toComplete.push(g.id)
+              }
+            }
+          }
+
+          if (toComplete.length) {
+            console.log(`[Webhook] Marking ${toComplete.length} sub-task(s) complete from checked steps`)
+            await db.from('tasks')
+              .update({ status: 'completed', updated_at: new Date().toISOString() })
+              .in('id', [...new Set(toComplete)])
+          }
+        }
       }
     } catch (e) {
       console.error('Webhook notification error for task', taskId, e)
