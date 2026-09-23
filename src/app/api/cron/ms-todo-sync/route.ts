@@ -10,6 +10,7 @@ import {
   crmPriorityToImportance,
   crmStatusToTodo,
   type TodoTaskInput,
+  type SubTaskEntry,
 } from '@/lib/microsoft-graph'
 
 // GET /api/cron/ms-todo-sync
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
       for (const t of crmTasks) {
         const input: TodoTaskInput = {
           title:      t.title,
-          bodyText:   buildTodoBody(t, t.parentTitle, t.clientName, t.clientId),
+          bodyText:   buildTodoBody(t, t.parentTitle, t.clientName, t.clientId, t.subItems?.length ? t.subItems : undefined),
           dueDate:    t.due_date,
           importance: crmPriorityToImportance(t.priority),
         }
@@ -120,6 +121,7 @@ type CrmTask = {
   clientName: string | null
   clientId: string | null
   parentTitle: string | null
+  subItems?: SubTaskEntry[]
 }
 
 async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
@@ -154,9 +156,24 @@ async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
 
   const result: CrmTask[] = []
 
+  // Build sub-item lookup for parent task bodies
+  const subsByParent: Record<string, SubTaskEntry> = {}
+  for (const s of subs) {
+    const entry: SubTaskEntry = { title: s.title, status: s.status, due_date: s.due_date, priority: s.priority, children: [] }
+    if (!subsByParent[s.parent_task_id]) {
+      subsByParent[s.parent_task_id] = entry
+    }
+  }
+  // Group subs by parent into arrays
+  const subListByParent: Record<string, SubTaskEntry[]> = {}
+  for (const s of subs) {
+    if (!subListByParent[s.parent_task_id]) subListByParent[s.parent_task_id] = []
+    subListByParent[s.parent_task_id].push({ title: s.title, status: s.status, due_date: s.due_date, priority: s.priority, children: grands.filter((g: any) => g.parent_task_id === s.id).map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })) })
+  }
+
   for (const t of (parents ?? []) as any[]) {
     const client = t.client as any
-    result.push({ ...t, clientName: client?.name ?? null, clientId: client?.id ?? null, parentTitle: null, client: undefined } as any)
+    result.push({ ...t, clientName: client?.name ?? null, clientId: client?.id ?? null, parentTitle: null, subItems: subListByParent[t.id] ?? [], client: undefined } as any)
   }
 
   for (const t of subs) {

@@ -140,17 +140,48 @@ export async function getActiveTasks(token: string, listId: string): Promise<{ i
   return result?.value ?? []
 }
 
+export type SubTaskEntry = {
+  title: string
+  status: string
+  due_date: string | null
+  priority: string
+  children: { title: string; status: string; due_date: string | null; priority: string }[]
+}
+
+function shortDate(d: string): string {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
 export function buildTodoBody(
   task: any,
   parentTitle: string | null,
   clientName: string | null,
-  clientId: string | null
+  clientId: string | null,
+  subItems?: SubTaskEntry[]
 ): string {
   const parts: string[] = []
   if (clientName)       parts.push(`Client: ${clientName}`)
   if (parentTitle)      parts.push(`Under: ${parentTitle}`)
   if (task.description) parts.push(`\n${task.description as string}`)
-  if (clientId)         parts.push(`\nClient page: ${SITE}/clients/${clientId}`)
+
+  if (subItems?.length) {
+    const total = subItems.reduce((n, s) => n + 1 + s.children.length, 0)
+    parts.push(`\nSub-tasks (${total}):`)
+    for (const sub of subItems) {
+      const done = sub.status === 'completed' || sub.status === 'cancelled'
+      const due  = sub.due_date ? `  due ${shortDate(sub.due_date)}` : ''
+      const prio = sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1)
+      parts.push(`${done ? '☑' : '☐'} ${sub.title}${due}  [${prio}]`)
+      for (const g of sub.children) {
+        const gdone = g.status === 'completed' || g.status === 'cancelled'
+        const gdue  = g.due_date ? `  due ${shortDate(g.due_date)}` : ''
+        const gprio = g.priority.charAt(0).toUpperCase() + g.priority.slice(1)
+        parts.push(`    ${gdone ? '☑' : '☐'} ${g.title}${gdue}  [${gprio}]`)
+      }
+    }
+  }
+
+  if (clientId) parts.push(`\nClient page: ${SITE}/clients/${clientId}`)
   parts.push(`Task link: ${SITE}/tasks?task=${task.id as string}`)
   parts.push(`CRM-ID: ${task.id as string}`)
   return parts.join('\n')
@@ -217,10 +248,28 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
     parentTitle = (parent?.title as string) ?? null
   }
 
+  // For parent tasks, fetch sub-tasks and grandchildren to include in the body
+  let subItems: SubTaskEntry[] = []
+  if (!task.parent_task_id) {
+    const { data: subs } = await db
+      .from('tasks')
+      .select('id, title, status, due_date, priority')
+      .eq('parent_task_id', taskId)
+      .order('created_at')
+    for (const sub of (subs ?? []) as any[]) {
+      const { data: grands } = await db
+        .from('tasks')
+        .select('title, status, due_date, priority')
+        .eq('parent_task_id', sub.id)
+        .order('created_at')
+      subItems.push({ title: sub.title, status: sub.status, due_date: sub.due_date, priority: sub.priority, children: (grands ?? []) as any[] })
+    }
+  }
+
   const clientData = (task as any).client
   const input: TodoTaskInput = {
     title: task.title as string,
-    bodyText: buildTodoBody(task, parentTitle, clientData?.name ?? null, clientData?.id ?? null),
+    bodyText: buildTodoBody(task, parentTitle, clientData?.name ?? null, clientData?.id ?? null, subItems.length ? subItems : undefined),
     dueDate: task.due_date as string | null,
     importance: crmPriorityToImportance(task.priority as string),
   }

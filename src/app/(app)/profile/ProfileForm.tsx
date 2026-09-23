@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Save, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Camera, Save, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { updateProfile } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import CropModal from './CropModal'
@@ -29,6 +29,27 @@ export default function ProfileForm({
   const [uploading, setUploading] = useState(false)
   const [cropFile, setCropFile] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/auth/microsoft/sync', { method: 'POST' })
+      const json = await res.json()
+      if (res.ok) {
+        setSyncResult({ ok: true, message: `Synced — ${json.created} created, ${json.updated} updated${json.completedInCrm ? `, ${json.completedInCrm} completed` : ''}` })
+      } else {
+        setSyncResult({ ok: false, message: json.error ?? 'Sync failed' })
+      }
+    } catch {
+      setSyncResult({ ok: false, message: 'Network error' })
+    } finally {
+      setSyncing(false)
+      setTimeout(() => setSyncResult(null), 6000)
+    }
+  }
 
   async function uploadBlob(blob: Blob) {
     setUploading(true)
@@ -157,17 +178,36 @@ export default function ProfileForm({
           )}
 
           {profile.ms_refresh_token ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-green-700">
-                <CheckCircle size={16} className="text-green-500" />
-                Connected — tasks sync every 15 minutes
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle size={16} className="text-green-500" />
+                  Connected — tasks sync daily
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+                    {syncing ? 'Syncing…' : 'Sync now'}
+                  </button>
+                  <a
+                    href="/api/auth/microsoft/disconnect"
+                    className="text-xs text-slate-400 hover:text-red-500 underline"
+                  >
+                    Disconnect
+                  </a>
+                </div>
               </div>
-              <a
-                href="/api/auth/microsoft/disconnect"
-                className="text-xs text-slate-400 hover:text-red-500 underline"
-              >
-                Disconnect
-              </a>
+              {syncResult && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${syncResult.ok ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {syncResult.ok ? <CheckCircle size={13} /> : <XCircle size={13} />}
+                  {syncResult.message}
+                </div>
+              )}
             </div>
           ) : (
             <a
