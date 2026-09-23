@@ -124,22 +124,14 @@ export async function completeTodoTask(token: string, listId: string, taskId: st
 
 // Fetches all completed tasks in the WHEB CRM list.
 export async function getCompletedTasks(token: string, listId: string): Promise<{ id: string }[]> {
-  const filter = encodeURIComponent("status eq 'completed'")
-  const result = await graph(
-    token, 'GET',
-    `/me/todo/lists/${listId}/tasks?$filter=${filter}&$select=id,title&$top=100`
-  )
-  return result?.value ?? []
+  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,status&$top=500`)
+  return (result?.value ?? []).filter((t: any) => t.status === 'completed')
 }
 
 // Fetches all non-completed tasks in the WHEB CRM list (for orphan detection).
 export async function getActiveTasks(token: string, listId: string): Promise<{ id: string, title: string }[]> {
-  const filter = encodeURIComponent("status ne 'completed'")
-  const result = await graph(
-    token, 'GET',
-    `/me/todo/lists/${listId}/tasks?$filter=${filter}&$select=id,title&$top=250`
-  )
-  return result?.value ?? []
+  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,title,status&$top=500`)
+  return (result?.value ?? []).filter((t: any) => t.status !== 'completed')
 }
 
 export type SubTaskEntry = {
