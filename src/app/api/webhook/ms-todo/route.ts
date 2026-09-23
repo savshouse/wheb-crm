@@ -51,25 +51,30 @@ export async function POST(req: NextRequest) {
       if (!token) continue
 
       const listId = profile.ms_todo_list_id as string
+      console.log(`[Webhook] processing taskId=${taskId} listId=${listId}`)
 
       // Fetch task — retry once after 2 s if not yet completed, because
       // Graph change notifications fire faster than the API reflects the change.
       let task = await getTodoTask(token, listId, taskId)
+      console.log(`[Webhook] task status=${task?.status} completedDateTime=${task?.completedDateTime}`)
       if (task && task.status !== 'completed' && task.completedDateTime == null) {
         await new Promise(r => setTimeout(r, 2000))
         task = await getTodoTask(token, listId, taskId)
+        console.log(`[Webhook] after retry: status=${task?.status} completedDateTime=${task?.completedDateTime}`)
       }
 
       const steps = await getChecklistItems(token, listId, taskId)
+      console.log(`[Webhook] steps=${steps.length} checked=${steps.filter(s => s.isChecked).length}`)
 
       // --- Parent task completion ---
       if (task?.status === 'completed' || task?.completedDateTime != null) {
-        const { data: crmTask } = await db
+        const { data: crmTask, error: lookupErr } = await db
           .from('tasks')
           .select('id')
           .eq('ms_todo_task_id', taskId)
           .not('status', 'in', '("completed","cancelled")')
           .maybeSingle()
+        console.log(`[Webhook] CRM lookup: found=${!!crmTask} error=${lookupErr?.message}`)
         if (crmTask) {
           await db.from('tasks')
             .update({ status: 'completed', updated_at: new Date().toISOString() })
