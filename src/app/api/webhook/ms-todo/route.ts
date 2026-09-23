@@ -52,11 +52,15 @@ export async function POST(req: NextRequest) {
 
       const listId = profile.ms_todo_list_id as string
 
-      // Fetch task status and steps in parallel
-      const [task, steps] = await Promise.all([
-        getTodoTask(token, listId, taskId),
-        getChecklistItems(token, listId, taskId),
-      ])
+      // Fetch task — retry once after 2 s if not yet completed, because
+      // Graph change notifications fire faster than the API reflects the change.
+      let task = await getTodoTask(token, listId, taskId)
+      if (task && task.status !== 'completed' && task.completedDateTime == null) {
+        await new Promise(r => setTimeout(r, 2000))
+        task = await getTodoTask(token, listId, taskId)
+      }
+
+      const steps = await getChecklistItems(token, listId, taskId)
 
       // --- Parent task completion ---
       if (task?.status === 'completed' || task?.completedDateTime != null) {
