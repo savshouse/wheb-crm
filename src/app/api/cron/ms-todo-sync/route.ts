@@ -5,10 +5,12 @@ import {
   getOrCreateWhebList,
   createTodoTask,
   updateTodoTask,
+  deleteTodoTask,
   getCompletedTasks,
   buildTodoBody,
   crmPriorityToImportance,
   crmStatusToTodo,
+  syncStepsFromSubItems,
   type TodoTaskInput,
   type SubTaskEntry,
 } from '@/lib/microsoft-graph'
@@ -58,24 +60,23 @@ export async function GET(req: NextRequest) {
       for (const t of crmTasks) {
         const input: TodoTaskInput = {
           title:      t.title,
-          bodyText:   buildTodoBody(t, t.parentTitle, t.clientName, t.clientId, t.subItems?.length ? t.subItems : undefined),
+          bodyText:   buildTodoBody(t, null, t.clientName, t.clientId),
           dueDate:    t.due_date,
           importance: crmPriorityToImportance(t.priority),
         }
 
+        let todoTaskId: string
         if (!t.ms_todo_task_id) {
-          // Create in To Do
-          const todoId = await createTodoTask(token, listId, input)
-          await adminClient.from('tasks').update({ ms_todo_task_id: todoId }).eq('id', t.id)
+          todoTaskId = await createTodoTask(token, listId, input)
+          await adminClient.from('tasks').update({ ms_todo_task_id: todoTaskId }).eq('id', t.id)
           created++
         } else {
-          // Update existing (title/due date may have changed)
-          await updateTodoTask(token, listId, t.ms_todo_task_id, {
-            ...input,
-            status: crmStatusToTodo(t.status),
-          })
+          todoTaskId = t.ms_todo_task_id
+          await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(t.status) })
           updated++
         }
+
+        await syncStepsFromSubItems(token, listId, todoTaskId, t.subItems ?? [])
       }
 
       // --- Sync To Do → CRM (completions) ---
@@ -156,36 +157,20 @@ async function fetchAllUserTasks(db: any, userId: string): Promise<CrmTask[]> {
 
   const result: CrmTask[] = []
 
-  // Build sub-item lookup for parent task bodies
-  const subsByParent: Record<string, SubTaskEntry> = {}
-  for (const s of subs) {
-    const entry: SubTaskEntry = { title: s.title, status: s.status, due_date: s.due_date, priority: s.priority, children: [] }
-    if (!subsByParent[s.parent_task_id]) {
-      subsByParent[s.parent_task_id] = entry
-    }
-  }
-  // Group subs by parent into arrays
+  // Build sub-item lookup for Steps
   const subListByParent: Record<string, SubTaskEntry[]> = {}
   for (const s of subs) {
     if (!subListByParent[s.parent_task_id]) subListByParent[s.parent_task_id] = []
-    subListByParent[s.parent_task_id].push({ title: s.title, status: s.status, due_date: s.due_date, priority: s.priority, children: grands.filter((g: any) => g.parent_task_id === s.id).map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })) })
+    subListByParent[s.parent_task_id].push({
+      title: s.title, status: s.status, due_date: s.due_date, priority: s.priority,
+      children: grands.filter((g: any) => g.parent_task_id === s.id).map((g: any) => ({ title: g.title, status: g.status, due_date: g.due_date, priority: g.priority })),
+    })
   }
 
+  // Only parent tasks become To Do tasks; sub-tasks/grandchildren become Steps
   for (const t of (parents ?? []) as any[]) {
     const client = t.client as any
     result.push({ ...t, clientName: client?.name ?? null, clientId: client?.id ?? null, parentTitle: null, subItems: subListByParent[t.id] ?? [], client: undefined } as any)
-  }
-
-  for (const t of subs) {
-    const client = t.client as any
-    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === t.parent_task_id)
-    result.push({ ...t, clientName: client?.name ?? parent?.client?.name ?? null, clientId: client?.id ?? parent?.client?.id ?? null, parentTitle: parent?.title ?? null, client: undefined } as any)
-  }
-
-  for (const t of grands) {
-    const sub = subs.find((s: any) => s.id === t.parent_task_id)
-    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === sub?.parent_task_id)
-    result.push({ ...t, clientName: parent?.client?.name ?? null, clientId: parent?.client?.id ?? null, parentTitle: sub?.title ?? null } as any)
   }
 
   return result

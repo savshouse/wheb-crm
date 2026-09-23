@@ -6,10 +6,12 @@ import {
   getOrCreateWhebList,
   createTodoTask,
   updateTodoTask,
+  deleteTodoTask,
   getCompletedTasks,
   buildTodoBody,
   crmPriorityToImportance,
   crmStatusToTodo,
+  syncStepsFromSubItems,
   type TodoTaskInput,
   type SubTaskEntry,
 } from '@/lib/microsoft-graph'
@@ -55,16 +57,17 @@ export async function POST() {
 
   const parentIds = ((parents ?? []) as any[]).map((t: any) => t.id)
 
+  // Fetch sub-tasks for Steps
   const subs: any[] = parentIds.length
-    ? ((await db.from('tasks').select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id, client:clients(id, name)').in('parent_task_id', parentIds).not('status', 'in', '("completed","cancelled")')).data ?? [])
+    ? ((await db.from('tasks').select('id, title, due_date, priority, status, parent_task_id').in('parent_task_id', parentIds).order('created_at')).data ?? [])
     : []
 
   const subIds = subs.map((s: any) => s.id)
   const grands: any[] = subIds.length
-    ? ((await db.from('tasks').select('id, title, due_date, priority, status, description, ms_todo_task_id, parent_task_id').in('parent_task_id', subIds).not('status', 'in', '("completed","cancelled")')).data ?? [])
+    ? ((await db.from('tasks').select('id, title, due_date, priority, status, parent_task_id').in('parent_task_id', subIds).order('created_at')).data ?? [])
     : []
 
-  // Build sub-item lists for parent task bodies
+  // Build sub-item lookup for Steps
   const subListByParent: Record<string, SubTaskEntry[]> = {}
   for (const s of subs) {
     if (!subListByParent[s.parent_task_id]) subListByParent[s.parent_task_id] = []
@@ -74,39 +77,36 @@ export async function POST() {
     })
   }
 
-  const allTasks: any[] = []
-  for (const t of (parents ?? []) as any[]) {
-    const c = t.client as any
-    allTasks.push({ ...t, clientName: c?.name ?? null, clientId: c?.id ?? null, parentTitle: null, subItems: subListByParent[t.id] ?? [], client: undefined })
-  }
-  for (const t of subs) {
-    const c = t.client as any
-    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === t.parent_task_id)
-    allTasks.push({ ...t, clientName: c?.name ?? parent?.client?.name ?? null, clientId: c?.id ?? parent?.client?.id ?? null, parentTitle: parent?.title ?? null, client: undefined })
-  }
-  for (const t of grands) {
-    const sub = subs.find((s: any) => s.id === t.parent_task_id)
-    const parent = ((parents ?? []) as any[]).find((p: any) => p.id === sub?.parent_task_id)
-    allTasks.push({ ...t, clientName: parent?.client?.name ?? null, clientId: parent?.client?.id ?? null, parentTitle: sub?.title ?? null })
+  // Cleanup: delete orphaned To Do tasks for sub-tasks that were synced before this fix
+  const orphanIds = [...subs, ...grands].filter((t: any) => t.ms_todo_task_id).map((t: any) => t.id)
+  if (orphanIds.length) {
+    const { data: orphans } = await db.from('tasks').select('id, ms_todo_task_id').in('id', orphanIds)
+    for (const o of orphans ?? []) {
+      await deleteTodoTask(token, listId, o.ms_todo_task_id)
+      await db.from('tasks').update({ ms_todo_task_id: null }).eq('id', o.id)
+    }
   }
 
   let created = 0, updated = 0
 
-  for (const t of allTasks) {
+  for (const t of (parents ?? []) as any[]) {
+    const c = t.client as any
     const input: TodoTaskInput = {
       title:      t.title,
-      bodyText:   buildTodoBody(t, t.parentTitle, t.clientName, t.clientId, t.subItems?.length ? t.subItems : undefined),
+      bodyText:   buildTodoBody(t, null, c?.name ?? null, c?.id ?? null),
       dueDate:    t.due_date,
       importance: crmPriorityToImportance(t.priority),
     }
-    if (!t.ms_todo_task_id) {
-      const todoId = await createTodoTask(token, listId, input)
-      await db.from('tasks').update({ ms_todo_task_id: todoId }).eq('id', t.id)
+    let todoTaskId: string = t.ms_todo_task_id
+    if (!todoTaskId) {
+      todoTaskId = await createTodoTask(token, listId, input)
+      await db.from('tasks').update({ ms_todo_task_id: todoTaskId }).eq('id', t.id)
       created++
     } else {
-      await updateTodoTask(token, listId, t.ms_todo_task_id, { ...input, status: crmStatusToTodo(t.status) })
+      await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(t.status) })
       updated++
     }
+    await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [])
   }
 
   // Sync completions from To Do → CRM
