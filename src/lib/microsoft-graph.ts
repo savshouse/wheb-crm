@@ -124,18 +124,20 @@ export async function completeTodoTask(token: string, listId: string, taskId: st
 
 // Fetches all completed tasks in the WHEB CRM list.
 export async function getCompletedTasks(token: string, listId: string): Promise<{ id: string }[]> {
+  const filter = encodeURIComponent("status eq 'completed'")
   const result = await graph(
     token, 'GET',
-    `/me/todo/lists/${listId}/tasks?$filter=status eq 'completed'&$select=id,title&$top=100`
+    `/me/todo/lists/${listId}/tasks?$filter=${filter}&$select=id,title&$top=100`
   )
   return result?.value ?? []
 }
 
 // Fetches all non-completed tasks in the WHEB CRM list (for orphan detection).
 export async function getActiveTasks(token: string, listId: string): Promise<{ id: string, title: string }[]> {
+  const filter = encodeURIComponent("status ne 'completed'")
   const result = await graph(
     token, 'GET',
-    `/me/todo/lists/${listId}/tasks?$filter=status ne 'completed'&$select=id,title&$top=250`
+    `/me/todo/lists/${listId}/tasks?$filter=${filter}&$select=id,title&$top=250`
   )
   return result?.value ?? []
 }
