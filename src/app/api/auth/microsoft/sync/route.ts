@@ -124,9 +124,38 @@ async function runSync() {
     }
   }
 
+  // Pull completions from To Do → CRM FIRST.
+  // This must run before the CRM→To Do push so completed tasks are excluded
+  // from the parent-task query below (otherwise updateTodoTask would reset
+  // their status back to notStarted, undoing the completion).
+  const completedTodo = await getCompletedTasks(token, listId)
+  let completedInCrm = 0
+  if (completedTodo.length > 0) {
+    const ids = completedTodo.map((t: any) => t.id)
+    const { data: toComplete } = await db
+      .from('tasks')
+      .select('id')
+      .in('ms_todo_task_id', ids)
+      .not('status', 'in', '("completed","cancelled")')
+    if (toComplete?.length) {
+      await db.from('tasks')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .in('id', toComplete.map((t: any) => t.id))
+      completedInCrm = toComplete.length
+    }
+  }
+
+  // Re-fetch parents AFTER marking completions so newly-completed tasks are excluded
+  const { data: activeparents } = await db
+    .from('tasks')
+    .select('id, title, due_date, priority, status, description, ms_todo_task_id, client:clients(id, name)')
+    .eq('assigned_to', user.id)
+    .is('parent_task_id', null)
+    .not('status', 'in', '("completed","cancelled")')
+
   let created = 0, updated = 0
 
-  for (const t of (parents ?? []) as any[]) {
+  for (const t of (activeparents ?? []) as any[]) {
     try {
       const c = t.client as any
       const input: TodoTaskInput = {
@@ -155,24 +184,6 @@ async function runSync() {
       await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [])
     } catch (e: any) {
       console.error('sync failed for task', t.id, e?.message)
-    }
-  }
-
-  // Sync completions from To Do → CRM
-  const completedTodo = await getCompletedTasks(token, listId)
-  let completedInCrm = 0
-  if (completedTodo.length > 0) {
-    const ids = completedTodo.map((t: any) => t.id)
-    const { data: toComplete } = await db
-      .from('tasks')
-      .select('id')
-      .in('ms_todo_task_id', ids)
-      .not('status', 'in', '("completed","cancelled")')
-    if (toComplete?.length) {
-      await db.from('tasks')
-        .update({ status: 'completed', updated_at: new Date().toISOString() })
-        .in('id', toComplete.map((t: any) => t.id))
-      completedInCrm = toComplete.length
     }
   }
 

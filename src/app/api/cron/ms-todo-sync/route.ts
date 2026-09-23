@@ -76,7 +76,30 @@ export async function GET(req: NextRequest) {
         console.error(`Subscription renewal failed for ${user.id}:`, e)
       }
 
-      // --- Sync CRM → To Do ---
+      // --- Sync To Do → CRM (completions) FIRST ---
+      // Must run before CRM→To Do push; otherwise updateTodoTask resets the
+      // completed status back to notStarted, making them invisible to this check.
+      const completedTodo = await getCompletedTasks(token, listId)
+      let completedInCrm = 0
+
+      if (completedTodo.length > 0) {
+        const completedTodoIds = completedTodo.map(t => t.id)
+        const { data: tasksToComplete } = await adminClient
+          .from('tasks')
+          .select('id')
+          .in('ms_todo_task_id', completedTodoIds)
+          .not('status', 'in', '("completed","cancelled")')
+
+        if (tasksToComplete?.length) {
+          const ids = tasksToComplete.map(t => t.id)
+          await adminClient.from('tasks')
+            .update({ status: 'completed', updated_at: new Date().toISOString() })
+            .in('id', ids)
+          completedInCrm = ids.length
+        }
+      }
+
+      // --- Sync CRM → To Do (re-fetch so newly-completed tasks are excluded) ---
       const crmTasks = await fetchAllUserTasks(adminClient, user.id)
       let created = 0, updated = 0
 
@@ -100,28 +123,6 @@ export async function GET(req: NextRequest) {
         }
 
         await syncStepsFromSubItems(token, listId, todoTaskId, t.subItems ?? [])
-      }
-
-      // --- Sync To Do → CRM (completions) ---
-      const completedTodo = await getCompletedTasks(token, listId)
-      let completedInCrm = 0
-
-      if (completedTodo.length > 0) {
-        const completedTodoIds = completedTodo.map(t => t.id)
-        // Find CRM tasks linked to these To Do IDs that aren't already complete
-        const { data: tasksToComplete } = await adminClient
-          .from('tasks')
-          .select('id')
-          .in('ms_todo_task_id', completedTodoIds)
-          .not('status', 'in', '("completed","cancelled")')
-
-        if (tasksToComplete?.length) {
-          const ids = tasksToComplete.map(t => t.id)
-          await adminClient.from('tasks')
-            .update({ status: 'completed', updated_at: new Date().toISOString() })
-            .in('id', ids)
-          completedInCrm = ids.length
-        }
       }
 
       results.push(`${user.id}: +${created} created, ~${updated} updated, ✓${completedInCrm} completed`)
