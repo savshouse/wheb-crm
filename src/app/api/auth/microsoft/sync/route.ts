@@ -24,6 +24,15 @@ const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
 // Triggers a full task sync to Microsoft To Do for the current user.
 // Called from the Profile page "Sync now" button.
 export async function POST() {
+  try {
+    return await runSync()
+  } catch (e: any) {
+    console.error('Sync route uncaught error:', e)
+    return NextResponse.json({ error: e?.message ?? 'Unexpected error' }, { status: 500 })
+  }
+}
+
+async function runSync() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
