@@ -37,17 +37,19 @@ export default function ProfileForm({
     setSyncResult(null)
     try {
       const res = await fetch('/api/auth/microsoft/sync', { method: 'POST' })
-      const json = await res.json()
-      if (res.ok) {
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch { /* non-JSON response */ }
+      if (res.ok && json) {
         setSyncResult({ ok: true, message: `Synced — ${json.created} created, ${json.updated} updated${json.completedInCrm ? `, ${json.completedInCrm} completed` : ''}` })
       } else {
-        setSyncResult({ ok: false, message: json.error ?? 'Sync failed' })
+        setSyncResult({ ok: false, message: json?.error ?? `Server error (${res.status})` })
       }
     } catch {
-      setSyncResult({ ok: false, message: 'Network error' })
+      setSyncResult({ ok: false, message: 'Could not reach server — check your connection' })
     } finally {
       setSyncing(false)
-      setTimeout(() => setSyncResult(null), 6000)
+      setTimeout(() => setSyncResult(null), 8000)
     }
   }
 

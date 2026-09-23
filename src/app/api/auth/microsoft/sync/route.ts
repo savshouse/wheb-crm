@@ -90,23 +90,35 @@ export async function POST() {
   let created = 0, updated = 0
 
   for (const t of (parents ?? []) as any[]) {
-    const c = t.client as any
-    const input: TodoTaskInput = {
-      title:      t.title,
-      bodyText:   buildTodoBody(t, null, c?.name ?? null, c?.id ?? null),
-      dueDate:    t.due_date,
-      importance: crmPriorityToImportance(t.priority),
+    try {
+      const c = t.client as any
+      const input: TodoTaskInput = {
+        title:      t.title,
+        bodyText:   buildTodoBody(t, null, c?.name ?? null, c?.id ?? null),
+        dueDate:    t.due_date,
+        importance: crmPriorityToImportance(t.priority),
+      }
+      let todoTaskId: string
+      if (!t.ms_todo_task_id) {
+        todoTaskId = await createTodoTask(token, listId, input)
+        await db.from('tasks').update({ ms_todo_task_id: todoTaskId }).eq('id', t.id)
+        created++
+      } else {
+        todoTaskId = t.ms_todo_task_id as string
+        try {
+          await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(t.status) })
+          updated++
+        } catch {
+          // Task may have been deleted in To Do — recreate it
+          todoTaskId = await createTodoTask(token, listId, input)
+          await db.from('tasks').update({ ms_todo_task_id: todoTaskId }).eq('id', t.id)
+          created++
+        }
+      }
+      await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [])
+    } catch (e: any) {
+      console.error('sync failed for task', t.id, e?.message)
     }
-    let todoTaskId: string = t.ms_todo_task_id
-    if (!todoTaskId) {
-      todoTaskId = await createTodoTask(token, listId, input)
-      await db.from('tasks').update({ ms_todo_task_id: todoTaskId }).eq('id', t.id)
-      created++
-    } else {
-      await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(t.status) })
-      updated++
-    }
-    await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [])
   }
 
   // Sync completions from To Do → CRM
