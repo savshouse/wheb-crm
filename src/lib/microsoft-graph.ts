@@ -257,6 +257,7 @@ export async function syncStepsFromSubItems(
     children: sub.children.map(c => ({ ...c })),
   }))
 
+  // Two-way: detect checked steps in To Do → mark matching CRM sub-tasks complete
   if (subTaskIds?.length) {
     const db = adminClient()
     const toComplete: string[] = []
@@ -304,27 +305,70 @@ export async function syncStepsFromSubItems(
     }
   }
 
-  // Delete existing steps then recreate from (potentially updated) items
-  for (const item of existingItems) {
-    try {
-      await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${item.id}`)
-    } catch {}
-  }
-
+  // Build the desired step list from (potentially completion-updated) items
+  const desired: { displayName: string; isChecked: boolean }[] = []
   for (const sub of items) {
     const done = sub.status === 'completed' || sub.status === 'cancelled'
     const due = sub.due_date ? ` (${shortDate(sub.due_date)})` : ''
-    await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
-      displayName: `${sub.title}${due}`,
-      isChecked: done,
-    })
+    desired.push({ displayName: `${sub.title}${due}`, isChecked: done })
     for (const g of sub.children) {
       const gdone = g.status === 'completed' || g.status === 'cancelled'
       const gdue = g.due_date ? ` (${shortDate(g.due_date)})` : ''
+      desired.push({ displayName: `  ↳ ${g.title}${gdue}`, isChecked: gdone })
+    }
+  }
+
+  // --- Diff-based sync (idempotent / concurrent-safe) ---
+  // Early exit: if existing steps already exactly match desired, do nothing.
+  // This is the common case when syncTaskOnSave is called multiple times for
+  // the same parent task (once per sub-task save) — after the first call
+  // completes, subsequent calls find nothing to change and return immediately.
+  const sortedExisting = [...existingItems].sort((a, b) => a.displayName.localeCompare(b.displayName))
+  const sortedDesired  = [...desired].sort((a, b) => a.displayName.localeCompare(b.displayName))
+  const alreadyMatches =
+    sortedExisting.length === sortedDesired.length &&
+    sortedExisting.every((e, i) =>
+      e.displayName === sortedDesired[i].displayName && e.isChecked === sortedDesired[i].isChecked
+    )
+  if (alreadyMatches) return
+
+  const desiredNames = new Set(desired.map(d => d.displayName))
+
+  // Delete steps that are no longer in the desired list, plus any duplicates
+  // (duplicates arise if concurrent calls both created the same step — delete
+  // all but the first occurrence so the re-read below finds a clean state).
+  const seen = new Set<string>()
+  for (const step of existingItems) {
+    if (!desiredNames.has(step.displayName) || seen.has(step.displayName)) {
+      try {
+        await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${step.id}`)
+      } catch {}
+    } else {
+      seen.add(step.displayName)
+    }
+  }
+
+  // Re-read after deletes so we know the real current state before creating.
+  // This prevents a concurrent caller from duplicating steps: if another call
+  // already created the steps while we were deleting, we'll see them here and
+  // skip creating them again.
+  const afterDeletes = await getChecklistItems(token, listId, todoTaskId)
+  const currentByName = new Map(afterDeletes.map(e => [e.displayName, e]))
+
+  for (const step of desired) {
+    const existing = currentByName.get(step.displayName)
+    if (!existing) {
       await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
-        displayName: `  ↳ ${g.title}${gdue}`,
-        isChecked: gdone,
+        displayName: step.displayName,
+        isChecked: step.isChecked,
       })
+    } else if (existing.isChecked !== step.isChecked) {
+      // Step already exists but checked state is wrong — patch it
+      try {
+        await graph(token, 'PATCH', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${existing.id}`, {
+          isChecked: step.isChecked,
+        })
+      } catch {}
     }
   }
 }
@@ -388,6 +432,14 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
     await db.from('profiles').update({ ms_todo_list_id: listId }).eq('id', root.assigned_to as string)
   }
 
+  // Fetch sub-tasks and grandchildren for Steps
+  const { data: subs } = await db.from('tasks').select('id, title, status, due_date, priority').eq('parent_task_id', taskId).order('created_at')
+  const subItems: SubTaskEntry[] = []
+  for (const sub of (subs ?? []) as any[]) {
+    const { data: grands } = await db.from('tasks').select('title, status, due_date, priority').eq('parent_task_id', sub.id).order('created_at')
+    subItems.push({ title: sub.title, status: sub.status, due_date: sub.due_date, priority: sub.priority, children: (grands ?? []) as any[] })
+  }
+
   const clientData = (root as any).client
   const input: TodoTaskInput = {
     title: root.title as string,
@@ -403,7 +455,7 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
   } else {
     await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(root.status as string) })
   }
-  // Steps (sub-tasks as checklistItems) are NOT synced here to avoid concurrent
-  // delete-then-recreate races (syncTaskOnSave fires per sub-task save, causing duplicates).
-  // Steps are synced by Sync Now and the daily cron only.
+
+  // Sync steps using diff-based approach (idempotent — safe to call concurrently)
+  await syncStepsFromSubItems(token, listId, todoTaskId, subItems)
 }
