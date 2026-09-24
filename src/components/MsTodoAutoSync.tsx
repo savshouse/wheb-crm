@@ -18,7 +18,10 @@ export default function MsTodoAutoSync() {
     } catch {
       // localStorage unavailable — skip cooldown, still sync
     }
-    fetch('/api/auth/microsoft/sync', { method: 'POST' }).catch(() => {})
+    // Use the lightweight pull-only endpoint — avoids concurrent syncStepsFromSubItems
+    // calls that cause step duplication. Full CRM→To Do push is handled by
+    // syncTaskOnSave (reactive) and the manual Sync Now button.
+    fetch('/api/auth/microsoft/pull-completions', { method: 'POST' }).catch(() => {})
   }, [pathname])
 
   return null
