@@ -49,6 +49,22 @@ type Props = {
 }
 
 export default function TaskModal({ task, profiles, currentUserId, onClose, onSaved, onOpenSubTask, onBack, onDeleted }: Props) {
+  // Debounced step sync: fires once, 3 s after the last save, so all DB writes
+  // have settled before we push sub-tasks as steps to Microsoft To Do.
+  const _syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function scheduleMsStepSync() {
+    if (_syncTimer.current) clearTimeout(_syncTimer.current)
+    _syncTimer.current = setTimeout(() => {
+      fetch('/api/auth/microsoft/sync-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id }),
+      }).catch(() => {})
+      _syncTimer.current = null
+    }, 3000)
+  }
+  useEffect(() => () => { if (_syncTimer.current) clearTimeout(_syncTimer.current) }, [])
+
   // Parent task fields
   const [title, setTitle]             = useState(task.title)
   const [priority, setPriority]       = useState(task.priority)
@@ -275,6 +291,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     await Promise.all(promises)
     setSaving(false)
     setDirty(false)
+    scheduleMsStepSync()
     onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
   }
 
@@ -325,6 +342,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     if (edits.assigned_to !== (sub.assigned_to ?? ''))
       promises.push(reassignTask(sub.id, edits.assigned_to, task.client?.id ?? null))
     await Promise.all(promises)
+    scheduleMsStepSync()
     setSubTasks(prev => prev.map(s => s.id === sub.id
       ? { ...s, ...edits, due_date: edits.due_date || null, assigned_to: edits.assigned_to || null, description: edits.description || null }
       : s))
@@ -362,6 +380,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       setSubTasks(data ?? [])
       setNewTitle(''); setNewPriority('medium'); setNewDueDate(''); setNewAssignee(''); setNewDesc('')
       setAddingNew(false)
+      scheduleMsStepSync()
     }
     setNewSaving(false)
   }

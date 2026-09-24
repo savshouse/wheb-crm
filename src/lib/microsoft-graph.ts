@@ -432,14 +432,6 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
     await db.from('profiles').update({ ms_todo_list_id: listId }).eq('id', root.assigned_to as string)
   }
 
-  // Fetch sub-tasks and grandchildren for Steps
-  const { data: subs } = await db.from('tasks').select('id, title, status, due_date, priority').eq('parent_task_id', taskId).order('created_at')
-  const subItems: SubTaskEntry[] = []
-  for (const sub of (subs ?? []) as any[]) {
-    const { data: grands } = await db.from('tasks').select('title, status, due_date, priority').eq('parent_task_id', sub.id).order('created_at')
-    subItems.push({ title: sub.title, status: sub.status, due_date: sub.due_date, priority: sub.priority, children: (grands ?? []) as any[] })
-  }
-
   const clientData = (root as any).client
   const input: TodoTaskInput = {
     title: root.title as string,
@@ -455,7 +447,8 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
   } else {
     await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(root.status as string) })
   }
-
-  // Sync steps using diff-based approach (idempotent — safe to call concurrently)
-  await syncStepsFromSubItems(token, listId, todoTaskId, subItems)
+  // Steps are NOT synced here — syncing from syncTaskOnSave causes concurrent
+  // Graph API writes that bypass even diff-based checks due to API-level stale reads.
+  // Steps are synced via the client-side debounced trigger (sync-task endpoint)
+  // which fires once, 3 s after the last save, when all DB writes are settled.
 }
