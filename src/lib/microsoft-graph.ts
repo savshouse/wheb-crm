@@ -388,14 +388,6 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
     await db.from('profiles').update({ ms_todo_list_id: listId }).eq('id', root.assigned_to as string)
   }
 
-  // Fetch sub-tasks and grandchildren for Steps
-  const { data: subs } = await db.from('tasks').select('id, title, status, due_date, priority').eq('parent_task_id', taskId).order('created_at')
-  const subItems: SubTaskEntry[] = []
-  for (const sub of (subs ?? []) as any[]) {
-    const { data: grands } = await db.from('tasks').select('title, status, due_date, priority').eq('parent_task_id', sub.id).order('created_at')
-    subItems.push({ title: sub.title, status: sub.status, due_date: sub.due_date, priority: sub.priority, children: (grands ?? []) as any[] })
-  }
-
   const clientData = (root as any).client
   const input: TodoTaskInput = {
     title: root.title as string,
@@ -411,6 +403,7 @@ export async function syncTaskOnSave(taskId: string): Promise<void> {
   } else {
     await updateTodoTask(token, listId, todoTaskId, { ...input, status: crmStatusToTodo(root.status as string) })
   }
-
-  await syncStepsFromSubItems(token, listId, todoTaskId, subItems)
+  // Steps (sub-tasks as checklistItems) are NOT synced here to avoid concurrent
+  // delete-then-recreate races (syncTaskOnSave fires per sub-task save, causing duplicates).
+  // Steps are synced by Sync Now and the daily cron only.
 }
