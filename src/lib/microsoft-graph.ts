@@ -318,11 +318,7 @@ export async function syncStepsFromSubItems(
     }
   }
 
-  // --- Diff-based sync (idempotent / concurrent-safe) ---
   // Early exit: if existing steps already exactly match desired, do nothing.
-  // This is the common case when syncTaskOnSave is called multiple times for
-  // the same parent task (once per sub-task save) — after the first call
-  // completes, subsequent calls find nothing to change and return immediately.
   const sortedExisting = [...existingItems].sort((a, b) => a.displayName.localeCompare(b.displayName))
   const sortedDesired  = [...desired].sort((a, b) => a.displayName.localeCompare(b.displayName))
   const alreadyMatches =
@@ -332,45 +328,29 @@ export async function syncStepsFromSubItems(
     )
   if (alreadyMatches) return
 
-  const desiredNames = new Set(desired.map(d => d.displayName))
-
-  // Delete steps that are no longer in the desired list, plus any duplicates
-  // (duplicates arise if concurrent calls both created the same step — delete
-  // all but the first occurrence so the re-read below finds a clean state).
-  const seen = new Set<string>()
-  for (const step of existingItems) {
-    if (!desiredNames.has(step.displayName) || seen.has(step.displayName)) {
-      try {
-        await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${step.id}`)
-      } catch {}
-    } else {
-      seen.add(step.displayName)
-    }
+  // Delete ALL existing steps, then wait for Graph API to propagate the deletes.
+  // A selective diff approach fails because Graph API stale reads return empty
+  // lists immediately after writes, so re-reads can't be trusted. Deleting all
+  // then waiting 1.5s before creating gives Graph API time to settle, preventing
+  // the duplicate-step bug where stale reads cause the same items to be created twice.
+  for (const item of existingItems) {
+    try {
+      await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${item.id}`)
+    } catch {}
   }
 
-  // Re-read after deletes so we know the real current state before creating.
-  // This prevents a concurrent caller from duplicating steps: if another call
-  // already created the steps while we were deleting, we'll see them here and
-  // skip creating them again.
-  const afterDeletes = await getChecklistItems(token, listId, todoTaskId)
-  const currentByName = new Map(afterDeletes.map(e => [e.displayName, e]))
+  if (existingItems.length > 0) {
+    await new Promise(r => setTimeout(r, 1500))
+  }
 
+  // Create all desired steps fresh
   for (const step of desired) {
-    const existing = currentByName.get(step.displayName)
-    if (!existing) {
-      await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
-        displayName: step.displayName,
-        isChecked: step.isChecked,
-      })
-    } else if (existing.isChecked !== step.isChecked) {
-      // Step already exists but checked state is wrong — patch it
-      try {
-        await graph(token, 'PATCH', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${existing.id}`, {
-          isChecked: step.isChecked,
-        })
-      } catch {}
-    }
+    await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
+      displayName: step.displayName,
+      isChecked: step.isChecked,
+    })
   }
+
 }
 
 // Clears the stored Microsoft tokens for a user (disconnect).
