@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Navigation from '@/components/Navigation'
+import MsTodoAutoSync from '@/components/MsTodoAutoSync'
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const supabase = await createClient()
@@ -12,9 +13,11 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, role')
+    .select('full_name, role, ms_refresh_token')
     .eq('id', user.id)
     .single()
+
+  const hasMicrosoft = !!profile?.ms_refresh_token
 
   return (
     <div className="flex h-full">
@@ -26,6 +29,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
+      {hasMicrosoft && <MsTodoAutoSync />}
     </div>
   )
 }
