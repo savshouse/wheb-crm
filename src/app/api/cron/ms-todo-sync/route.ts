@@ -10,7 +10,6 @@ import {
   buildTodoBody,
   crmPriorityToImportance,
   crmStatusToTodo,
-  syncStepsFromSubItems,
   createTodoSubscription,
   renewTodoSubscription,
   type TodoTaskInput,
@@ -123,7 +122,10 @@ export async function GET(req: NextRequest) {
           updated++
         }
 
-        await syncStepsFromSubItems(token, listId, todoTaskId, t.subItems ?? [], t.subTaskIds)
+        // Steps are NOT synced here — the 15-minute cron runs concurrently with
+        // Sync Now and the debounced sync-task endpoint, causing duplicate steps
+        // via concurrent Graph API writes. Steps are synced only from sync-task
+        // (debounced 3s after each save in the task modal).
       }
 
       results.push(`${user.id}: +${created} created, ~${updated} updated, ✓${completedInCrm} completed`)
