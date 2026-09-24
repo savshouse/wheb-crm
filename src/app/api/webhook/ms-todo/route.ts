@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
     if (notification.changeType !== 'updated') continue
 
     const subscriptionId = notification.subscriptionId as string
-    const taskId = notification.resourceData?.id as string | undefined
+    // resourceData.id is sometimes absent; fall back to parsing the resource URL
+    // e.g. "me/todo/lists/{listId}/tasks/{taskId}"
+    const taskId: string | undefined =
+      (notification.resourceData?.id as string | undefined) ??
+      (notification.resource as string | undefined)?.split('/tasks/')?.[1]
+    console.log(`[Webhook] notification: changeType=${notification.changeType} taskId=${taskId ?? 'MISSING'} resourceData=${JSON.stringify(notification.resourceData)}`)
     if (!taskId || !subscriptionId) continue
 
     try {
@@ -123,11 +128,12 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          console.log(`[Webhook] Step match: ${toComplete.length} sub-task(s) to complete`)
           if (toComplete.length) {
-            console.log(`[Webhook] Marking ${toComplete.length} sub-task(s) complete from checked steps`)
             await db.from('tasks')
               .update({ status: 'completed', updated_at: new Date().toISOString() })
               .in('id', [...new Set(toComplete)])
+            console.log(`[Webhook] Marked sub-tasks complete: ${toComplete.join(', ')}`)
           }
         }
       }
