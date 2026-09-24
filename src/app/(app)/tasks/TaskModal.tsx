@@ -68,6 +68,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   // Parent task fields
   const [title, setTitle]             = useState(task.title)
   const [priority, setPriority]       = useState(task.priority)
+  const [openedDate, setOpenedDate]   = useState(task.opened_date ?? '')
   const [dueDate, setDueDate]         = useState(task.due_date ?? '')
   const [description, setDescription] = useState(task.description ?? '')
   const [status, setStatus]           = useState(task.status)
@@ -174,6 +175,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
           if (!dirtyRef.current) {
             setTitle(u.title ?? '')
             setPriority(u.priority ?? 'medium')
+            setOpenedDate(u.opened_date ?? '')
             setDueDate(u.due_date ?? '')
             setDescription(u.description ?? '')
             setAssignedTo(u.assigned_to ?? '')
@@ -214,7 +216,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     if (!isMountedRef.current) { isMountedRef.current = true; return }
     setDirty(true)
     dirtyRef.current = true
-  }, [title, priority, dueDate, description])
+  }, [title, priority, openedDate, dueDate, description])
 
   // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
   useEffect(() => {
@@ -279,6 +281,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     const promises: Promise<any>[] = [
       updateTask(task.id, task.client?.id ?? null, {
         title: title.trim() || task.title,
+        opened_date: openedDate || null,
         due_date: dueDate || null,
         priority,
         description: description.trim() || null,
@@ -292,7 +295,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setSaving(false)
     setDirty(false)
     scheduleMsStepSync()
-    onSaved({ ...task, title, priority, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
+    onSaved({ ...task, title, priority, opened_date: openedDate || null, due_date: dueDate || null, description: description || null, status, assigned_to: assignedTo })
   }
 
   async function handleDelete() {
@@ -324,6 +327,22 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setSubEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
   }
 
+  function updateDueDateFromSubs(updatedSubs: any[]) {
+    const dates = updatedSubs.map(s => s.due_date).filter(Boolean) as string[]
+    if (!dates.length) return
+    const maxDate = dates.sort().reverse()[0]
+    if (maxDate !== dueDate) {
+      setDueDate(maxDate)
+      updateTask(task.id, task.client?.id ?? null, {
+        title: title.trim() || task.title,
+        opened_date: openedDate || null,
+        due_date: maxDate,
+        priority,
+        description: description.trim() || null,
+      })
+    }
+  }
+
   // ── Sub-task save ────────────────────────────────────────────
   async function saveSub(sub: any) {
     const edits = subEdits[sub.id]
@@ -343,9 +362,13 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       promises.push(reassignTask(sub.id, edits.assigned_to, task.client?.id ?? null))
     await Promise.all(promises)
     scheduleMsStepSync()
-    setSubTasks(prev => prev.map(s => s.id === sub.id
-      ? { ...s, ...edits, due_date: edits.due_date || null, assigned_to: edits.assigned_to || null, description: edits.description || null }
-      : s))
+    setSubTasks(prev => {
+      const next = prev.map(s => s.id === sub.id
+        ? { ...s, ...edits, due_date: edits.due_date || null, assigned_to: edits.assigned_to || null, description: edits.description || null }
+        : s)
+      updateDueDateFromSubs(next)
+      return next
+    })
 
     // If a sub-task just moved to in_progress and the parent is still open, jog the parent on too
     if (edits.status === 'in_progress' && status === 'open') {
@@ -377,7 +400,9 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         .select('id, title, status, priority, due_date, description, assigned_to')
         .eq('parent_task_id', task.id)
         .order('created_at')
-      setSubTasks(data ?? [])
+      const freshSubs = data ?? []
+      setSubTasks(freshSubs)
+      updateDueDateFromSubs(freshSubs)
       setNewTitle(''); setNewPriority('medium'); setNewDueDate(''); setNewAssignee(''); setNewDesc('')
       setAddingNew(false)
       scheduleMsStepSync()
@@ -454,6 +479,15 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               </select>
             </div>
             <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Opened date</label>
+              <input type="date" value={openedDate} onChange={e => setOpenedDate(e.target.value)} className={inputCls} />
+              {openedDate && (
+                <p className="text-xs mt-1 text-slate-500">
+                  {format(parseISO(openedDate), 'EEE d MMM yyyy')}
+                </p>
+              )}
+            </div>
+            <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Due date</label>
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
               {dueDate && (
@@ -463,7 +497,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                 </p>
               )}
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-500 mb-1">Assigned to</label>
               <select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); setDirty(true) }} className={selectCls}>
                 <option value="">Unassigned</option>

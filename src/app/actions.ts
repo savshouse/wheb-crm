@@ -396,11 +396,27 @@ export async function applyTemplateToTask(
   taskId: string,
   templateId: string,
   clientId: string,
-  baseDueDate?: string
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
+
+  // Use the task's opened_date as the base for relative due dates
+  const { data: parentTask } = await supabase
+    .from('tasks')
+    .select('opened_date')
+    .eq('id', taskId)
+    .single()
+
+  const baseDateStr = (parentTask?.opened_date as string | null) ?? new Date().toISOString().split('T')[0]
+  const baseDate = new Date(baseDateStr)
+
+  function calcDueDate(relativeDays: number | null): string {
+    if (relativeDays == null) return baseDateStr
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() + relativeDays)
+    return d.toISOString().split('T')[0]
+  }
 
   const { data: items, error: itemsError } = await supabase
     .from('task_template_items')
@@ -410,17 +426,6 @@ export async function applyTemplateToTask(
 
   if (itemsError) return { error: itemsError.message }
   if (!items?.length) return { error: null }
-
-  const baseDate = baseDueDate ? new Date(baseDueDate) : new Date()
-
-  const fallbackDate = baseDueDate || new Date().toISOString().split('T')[0]
-
-  function calcDueDate(relativeDays: number | null): string {
-    if (relativeDays == null) return fallbackDate
-    const d = new Date(baseDate)
-    d.setDate(d.getDate() + relativeDays)
-    return d.toISOString().split('T')[0]
-  }
 
   // Build a lookup of children grouped by parent item id
   const childrenByParent: Record<string, typeof items> = {}
@@ -435,18 +440,20 @@ export async function applyTemplateToTask(
     .filter(i => !i.parent_item_id)
     .sort((a, b) => a.order_index - b.order_index)
 
-  // Create top-level items as sub-tasks of the main task, capturing their new IDs
-  // Then create each item's children as sub-tasks of that item
   const failedItems: string[] = []
-  let totalItems = items.length
+  const totalItems = items.length
+  const allSubDueDates: string[] = []
 
   for (const item of topLevel) {
+    const subDue = calcDueDate(item.relative_due_days)
+    allSubDueDates.push(subDue)
+
     const { data: created, error } = await supabase.from('tasks').insert({
       title:          item.title,
       client_id:      clientId,
       parent_task_id: taskId,
       priority:       item.priority,
-      due_date:       calcDueDate(item.relative_due_days),
+      due_date:       subDue,
       created_by:     user.id,
       status:         'open',
     }).select('id').single()
@@ -455,17 +462,25 @@ export async function applyTemplateToTask(
 
     const children = (childrenByParent[item.id] ?? []).sort((a, b) => a.order_index - b.order_index)
     for (const child of children) {
+      const childDue = calcDueDate(child.relative_due_days)
+      allSubDueDates.push(childDue)
       const { error: childErr } = await supabase.from('tasks').insert({
         title:          child.title,
         client_id:      clientId,
         parent_task_id: created!.id,
         priority:       child.priority,
-        due_date:       calcDueDate(child.relative_due_days),
+        due_date:       childDue,
         created_by:     user.id,
         status:         'open',
       })
       if (childErr) failedItems.push(`"${child.title}" (${childErr.message})`)
     }
+  }
+
+  // Auto-set parent due_date = latest sub-task due date
+  if (allSubDueDates.length > 0) {
+    const maxDue = allSubDueDates.sort().reverse()[0]
+    await supabase.from('tasks').update({ due_date: maxDue }).eq('id', taskId)
   }
 
   if (failedItems.length > 0) {
@@ -480,7 +495,7 @@ export async function applyTemplateToTask(
 export async function updateTask(
   taskId: string,
   clientId: string,
-  data: { title: string; due_date: string | null; priority: string; description?: string | null }
+  data: { title: string; due_date: string | null; priority: string; description?: string | null; opened_date?: string | null }
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -491,6 +506,7 @@ export async function updateTask(
     due_date:    data.due_date,
     priority:    data.priority,
     description: data.description ?? null,
+    ...(data.opened_date !== undefined ? { opened_date: data.opened_date } : {}),
   }).eq('id', taskId)
 
   if (error) return { error: error.message }

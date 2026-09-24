@@ -86,6 +86,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskAssignee, setNewTaskAssignee] = useState(currentUserId)
   const [newTaskDue, setNewTaskDue] = useState('')
+  const [newTaskOpenedDate, setNewTaskOpenedDate] = useState(() => new Date().toISOString().split('T')[0])
   const [newTaskPriority, setNewTaskPriority] = useState('medium')
   const [newTaskTemplate, setNewTaskTemplate] = useState('')
   const [addingTask, setAddingTask] = useState(false)
@@ -281,13 +282,15 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     if (!user) return
     const { data: task } = await supabase.from('tasks').insert({
       title: newTaskTitle, client_id: clientId, assigned_to: newTaskAssignee || null,
-      due_date: newTaskDue || null, priority: newTaskPriority, created_by: user.id, status: 'open',
+      due_date: newTaskDue || null, opened_date: newTaskOpenedDate || null,
+      priority: newTaskPriority, created_by: user.id, status: 'open',
     }).select().single()
     if (task && newTaskTemplate) {
-      const { error: tmplErr } = await applyTemplateToTask(task.id, newTaskTemplate, clientId, newTaskDue || undefined)
+      const { error: tmplErr } = await applyTemplateToTask(task.id, newTaskTemplate, clientId)
       if (tmplErr) { setTemplateError(tmplErr); setAddingTask(false); router.refresh(); return }
     }
     setNewTaskTitle(''); setNewTaskDue(''); setNewTaskPriority('medium')
+    setNewTaskOpenedDate(new Date().toISOString().split('T')[0])
     setNewTaskAssignee(currentUserId); setNewTaskTemplate('')
     setTemplateError(null)
     setShowAddTask(false); setAddingTask(false)
@@ -350,8 +353,18 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
               <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
             </select>
           </div>
-          <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Opened</label>
+              <input type="date" value={newTaskOpenedDate} onChange={e => setNewTaskOpenedDate(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Due date</label>
+              <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
           {templates.length > 0 && (
             <div>
               <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><LayoutTemplate size={11} />Apply template (creates sub-tasks)</label>

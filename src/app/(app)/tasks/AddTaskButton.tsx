@@ -16,6 +16,7 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
   const [clientId, setClientId] = useState('')
   const [assignee, setAssignee] = useState(currentUserId)
   const [priority, setPriority] = useState('medium')
+  const [openedDate, setOpenedDate] = useState(() => new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -48,6 +49,7 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
       client_id: clientId || null,
       assigned_to: assignee || null,
       priority,
+      opened_date: openedDate || null,
       due_date: dueDate || null,
       description: description.trim() || null,
       created_by: user.id,
@@ -56,7 +58,8 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
 
     if (err) { setError(err.message); setSaving(false); return }
     setOpen(false)
-    setTitle(''); setClientId(''); setAssignee(currentUserId); setPriority('medium'); setDueDate(''); setDescription('')
+    setTitle(''); setClientId(''); setAssignee(currentUserId); setPriority('medium')
+    setOpenedDate(new Date().toISOString().split('T')[0]); setDueDate(''); setDescription('')
     router.refresh()
     setSaving(false)
   }
@@ -106,9 +109,15 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Due date</label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputClass} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Opened date</label>
+                  <input type="date" value={openedDate} onChange={e => setOpenedDate(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Due date</label>
+                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputClass} />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
