@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
-import { syncTaskOnSave } from '@/lib/microsoft-graph'
+import { syncTaskOnSave, getValidAccessToken, deleteTodoTask } from '@/lib/microsoft-graph'
 
 // ─── Clients ─────────────────────────────────────────────────
 
@@ -857,8 +857,19 @@ export async function deleteTask(taskId: string): Promise<{ error: string | null
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const { data: profile } = await supabase.from('profiles').select('role, ms_todo_list_id').eq('id', user.id).single()
   if (profile?.role !== 'admin') return { error: 'Admin access required' }
+
+  // Delete from Microsoft To Do before removing from CRM (non-fatal)
+  const { data: taskRow } = await supabase.from('tasks').select('ms_todo_task_id').eq('id', taskId).single()
+  if (taskRow?.ms_todo_task_id && profile?.ms_todo_list_id) {
+    try {
+      const token = await getValidAccessToken(user.id)
+      if (token) await deleteTodoTask(token, profile.ms_todo_list_id as string, taskRow.ms_todo_task_id as string)
+    } catch (e) {
+      console.error('deleteTask: To Do deletion failed (non-fatal):', e)
+    }
+  }
 
   // Gather sub-task IDs
   const { data: subTasks } = await supabase.from('tasks').select('id').eq('parent_task_id', taskId)

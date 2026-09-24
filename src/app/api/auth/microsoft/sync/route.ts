@@ -8,6 +8,7 @@ import {
   updateTodoTask,
   deleteTodoTask,
   getCompletedTasks,
+  getActiveTasks,
   buildTodoBody,
   crmPriorityToImportance,
   crmStatusToTodo,
@@ -163,6 +164,9 @@ async function runSync() {
     .not('status', 'in', '("completed","cancelled")')
 
   let created = 0, updated = 0
+  // Track every To Do task ID we touch during the sync loop so orphan cleanup
+  // can identify tasks in To Do that no longer have a CRM counterpart.
+  const syncedTodoIds = new Set<string>()
 
   for (const t of (activeparents ?? []) as any[]) {
     try {
@@ -190,11 +194,34 @@ async function runSync() {
           created++
         }
       }
+      syncedTodoIds.add(todoTaskId)
       await syncStepsFromSubItems(token, listId, todoTaskId, subListByParent[t.id] ?? [], subTaskIdsByParent[t.id])
     } catch (e: any) {
       console.error('sync failed for task', t.id, e?.message)
     }
   }
 
-  return NextResponse.json({ ok: true, created, updated, completedInCrm })
+  // Orphan cleanup: delete To Do tasks that no longer have a matching CRM task.
+  // This handles the case where tasks were deleted from the CRM but left in To Do.
+  // Uses syncedTodoIds (built during the loop above) so newly-created tasks are
+  // correctly included even though activeparents was fetched before the loop ran.
+  let deletedOrphans = 0
+  try {
+    const activeTodoTasks = await getActiveTasks(token, listId)
+    for (const todoTask of activeTodoTasks) {
+      if (!syncedTodoIds.has(todoTask.id)) {
+        try {
+          await deleteTodoTask(token, listId, todoTask.id)
+          deletedOrphans++
+          console.log(`[Sync] Deleted orphan To Do task: ${todoTask.id} "${todoTask.title}"`)
+        } catch (e) {
+          console.error(`[Sync] Failed to delete orphan To Do task ${todoTask.id}:`, e)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Sync] Orphan cleanup failed (non-fatal):', e)
+  }
+
+  return NextResponse.json({ ok: true, created, updated, completedInCrm, deletedOrphans })
 }
