@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, ExternalLink, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateMeeting } from '@/app/actions'
+import TaskModal from '@/app/(app)/tasks/TaskModal'
 
 type TaskDraft = {
   id: string
@@ -58,6 +59,22 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
   // New follow-up tasks
   const [tasks, setTasks]               = useState<TaskDraft[]>([])
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+
+  // Task peek modal
+  const [peekTask, setPeekTask]         = useState<any>(null)
+  const [peekLoading, setPeekLoading]   = useState<string | null>(null)
+
+  async function openTaskPeek(taskId: string) {
+    setPeekLoading(taskId)
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('tasks')
+      .select('*, client:clients(id, name), assignee:profiles!tasks_assigned_to_fkey(id, full_name, email), meeting:meetings(id, title)')
+      .eq('id', taskId)
+      .single()
+    setPeekLoading(null)
+    if (data) setPeekTask(data)
+  }
 
   const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -154,6 +171,7 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
   const validNewCount = tasks.filter(t => t.title.trim()).length
 
   return (
+    <>
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <Link href={`/clients/${clientId}`} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 mb-3">
@@ -205,13 +223,17 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
                     <span className="shrink-0 text-xs text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded">
                       {statusLabel[task.status] ?? task.status}
                     </span>
-                    <Link
-                      href={`/tasks?task=${task.id}`}
+                    <button
+                      type="button"
+                      onClick={() => openTaskPeek(task.id)}
                       className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors"
                       title="Open task"
                     >
-                      <ExternalLink size={14} />
-                    </Link>
+                      {peekLoading === task.id
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <ExternalLink size={14} />
+                      }
+                    </button>
                   </div>
                 )
               })}
@@ -337,5 +359,17 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
         </div>
       </form>
     </div>
+
+    {peekTask && (
+      <TaskModal
+        task={peekTask}
+        profiles={profiles}
+        currentUserId={currentUserId}
+        onClose={() => setPeekTask(null)}
+        onSaved={(updated) => setPeekTask(updated)}
+        onDeleted={() => setPeekTask(null)}
+      />
+    )}
+    </>
   )
 }
