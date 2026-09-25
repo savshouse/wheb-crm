@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -94,6 +94,10 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [commentText, setCommentText] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
 
+  // Meeting link
+  const [meetingId, setMeetingId]       = useState(task.meeting_id ?? task.meeting?.id ?? '')
+  const [clientMeetings, setClientMeetings] = useState<{ id: string; title: string; meeting_date: string }[]>([])
+
   // Admin delete
   const [isAdmin, setIsAdmin]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -113,8 +117,25 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [newDesc, setNewDesc]         = useState('')
   const [newSaving, setNewSaving]     = useState(false)
 
+  // New grandchild (sub-sub-task) form
+  const [addingGcFor, setAddingGcFor] = useState<string | null>(null)
+  const [gcTitle, setGcTitle]         = useState('')
+  const [gcPriority, setGcPriority]   = useState('medium')
+  const [gcDueDate, setGcDueDate]     = useState('')
+  const [gcSaving, setGcSaving]       = useState(false)
+
   useEffect(() => {
     const supabase = createClient()
+
+    // Fetch meetings for the client (for meeting picker)
+    if (task.client?.id) {
+      supabase
+        .from('meetings')
+        .select('id, title, meeting_date')
+        .eq('client_id', task.client.id)
+        .order('meeting_date', { ascending: false })
+        .then(({ data }) => setClientMeetings(data ?? []))
+    }
 
     supabase
       .from('tasks')
@@ -216,7 +237,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     if (!isMountedRef.current) { isMountedRef.current = true; return }
     setDirty(true)
     dirtyRef.current = true
-  }, [title, priority, openedDate, dueDate, description])
+  }, [title, priority, openedDate, dueDate, description, meetingId])
 
   // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
   useEffect(() => {
@@ -285,6 +306,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         due_date: dueDate || null,
         priority,
         description: description.trim() || null,
+        meeting_id: meetingId || null,
       }),
     ]
     if (status !== task.status)
@@ -410,6 +432,37 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     setNewSaving(false)
   }
 
+  // ── Add grandchild (sub-sub-task) ──────────────────────────
+  async function handleAddGrandchild(subId: string) {
+    if (!gcTitle.trim()) return
+    setGcSaving(true)
+    const { error } = await createSubTask({
+      parentTaskId: subId,
+      clientId:     task.client?.id ?? null,
+      title:        gcTitle.trim(),
+      assignedTo:   null,
+      dueDate:      gcDueDate || null,
+      priority:     gcPriority,
+      description:  null,
+    })
+    if (!error) {
+      const { data } = await createClient()
+        .from('tasks')
+        .select('id, title, status, priority, due_date, parent_task_id')
+        .in('parent_task_id', subTasks.map(s => s.id))
+        .order('created_at')
+      const map: Record<string, any[]> = {}
+      for (const gc of data ?? []) {
+        if (!map[gc.parent_task_id]) map[gc.parent_task_id] = []
+        map[gc.parent_task_id].push(gc)
+      }
+      setSubChildren(map)
+      setGcTitle(''); setGcPriority('medium'); setGcDueDate('')
+      setAddingGcFor(null)
+    }
+    setGcSaving(false)
+  }
+
   const selectCls = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
   const inputCls  = 'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -444,7 +497,19 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                 <Building2 size={12} />{task.client.name}
               </Link>
             )}
-            {task.meeting && <span className="text-xs text-slate-400">· From: {task.meeting.title}</span>}
+            {task.client?.id && (meetingId || task.meeting) && (() => {
+              const linked = clientMeetings.find(m => m.id === meetingId) ?? task.meeting
+              if (!linked) return null
+              return (
+                <Link
+                  href={`/clients/${task.client.id}/meetings/${linked.id}/edit`}
+                  className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700"
+                  onClick={safeClose}
+                >
+                  <CalendarDays size={11} />{linked.title}
+                </Link>
+              )
+            })()}
           </div>
           <button onClick={safeClose} className="text-slate-400 hover:text-slate-700 transition-colors">
             <X size={18} />
@@ -504,6 +569,21 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                 {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>)}
               </select>
             </div>
+            {clientMeetings.length > 0 && (
+              <div className="col-span-2">
+                <label className="flex items-center gap-1 text-xs font-medium text-slate-500 mb-1">
+                  <CalendarDays size={11} />Linked meeting
+                </label>
+                <select value={meetingId} onChange={e => setMeetingId(e.target.value)} className={selectCls}>
+                  <option value="">— No meeting —</option>
+                  {clientMeetings.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.title} ({m.meeting_date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -647,11 +727,21 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                           </button>
                         </div>
 
-                        {/* Sub-sub-tasks (template step children) */}
-                        {subChildren[sub.id]?.length > 0 && (
-                          <div className="border-t border-blue-100 pt-2.5 mt-1">
-                            <p className="text-xs font-medium text-slate-500 mb-1.5">Steps</p>
-                            <div className="space-y-1 border-l-2 border-slate-200 pl-2">
+                        {/* Sub-sub-tasks (grandchild steps) */}
+                        <div className="border-t border-blue-100 pt-2.5 mt-1">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-xs font-medium text-slate-500">Steps {subChildren[sub.id]?.length > 0 && `(${subChildren[sub.id].length})`}</p>
+                            {addingGcFor !== sub.id && (
+                              <button
+                                onClick={() => { setAddingGcFor(sub.id); setGcTitle(''); setGcPriority('medium'); setGcDueDate('') }}
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                <Plus size={11} />Add step
+                              </button>
+                            )}
+                          </div>
+                          {subChildren[sub.id]?.length > 0 && (
+                            <div className="space-y-1 border-l-2 border-slate-200 pl-2 mb-2">
                               {subChildren[sub.id].map((gc: any) => (
                                 <div key={gc.id} className="flex items-center gap-2 py-0.5">
                                   <button
@@ -671,8 +761,38 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                                 </div>
                               ))}
                             </div>
-                          </div>
-                        )}
+                          )}
+                          {addingGcFor === sub.id && (
+                            <div className="space-y-1.5 p-2 rounded-lg bg-white border border-slate-200">
+                              <input
+                                autoFocus
+                                value={gcTitle}
+                                onChange={e => setGcTitle(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAddGrandchild(sub.id) }}
+                                placeholder="Step title…"
+                                className="w-full px-2 py-1 text-xs rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <select value={gcPriority} onChange={e => setGcPriority(e.target.value)} className="px-1.5 py-1 text-xs rounded border border-slate-200 focus:outline-none">
+                                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                                </select>
+                                <input type="date" value={gcDueDate} onChange={e => setGcDueDate(e.target.value)} className="px-1.5 py-1 text-xs rounded border border-slate-200 focus:outline-none" />
+                              </div>
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => handleAddGrandchild(sub.id)}
+                                  disabled={gcSaving || !gcTitle.trim()}
+                                  className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-40"
+                                >
+                                  <Plus size={10} />{gcSaving ? 'Adding…' : 'Add'}
+                                </button>
+                                <button onClick={() => setAddingGcFor(null)} className="px-2 py-1 rounded border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         {/* Sub-task comments */}
                         <div className="border-t border-blue-100 pt-2.5 mt-1">

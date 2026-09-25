@@ -2,19 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, LayoutTemplate, ChevronDown } from 'lucide-react'
+import { Plus, X, LayoutTemplate, ChevronDown, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { applyTemplateToTask } from '@/app/actions'
 
 type Profile      = { id: string; full_name: string | null; email: string }
 type ClientOption = { id: string; name: string }
 type Template     = { id: string; name: string; itemCount: number }
+type Meeting      = { id: string; title: string; meeting_date: string }
 
 export default function AddTaskButton({ currentUserId }: { currentUserId: string }) {
   const [open, setOpen]           = useState(false)
   const [clients, setClients]     = useState<ClientOption[]>([])
   const [profiles, setProfiles]   = useState<Profile[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
+  const [meetingsByClient, setMeetingsByClient] = useState<Record<string, Meeting[]>>({})
 
   // Form fields
   const [title, setTitle]             = useState('')
@@ -27,6 +29,7 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
   const [openedDate, setOpenedDate]   = useState(() => new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate]         = useState('')
   const [templateId, setTemplateId]   = useState('')
+  const [meetingId, setMeetingId]     = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState<string | null>(null)
@@ -51,6 +54,18 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
     })
   }, [open])
 
+  // Fetch meetings when a client is selected
+  useEffect(() => {
+    if (!clientId) return
+    const id = clientId
+    createClient()
+      .from('meetings')
+      .select('id, title, meeting_date')
+      .eq('client_id', id)
+      .order('meeting_date', { ascending: false })
+      .then(({ data }) => setMeetingsByClient(prev => ({ ...prev, [id]: data ?? [] })))
+  }, [clientId])
+
   // Close client dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -70,17 +85,19 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
     setClientId(c.id)
     setClientSearch(c.name)
     setShowClientDrop(false)
+    setMeetingId('')
   }
 
   function clearClient() {
     setClientId('')
     setClientSearch('')
+    setMeetingId('')
   }
 
   function resetForm() {
     setTitle(''); setClientId(''); setClientSearch(''); setAssignee(currentUserId)
     setPriority('medium'); setOpenedDate(new Date().toISOString().split('T')[0])
-    setDueDate(''); setTemplateId(''); setDescription('')
+    setDueDate(''); setTemplateId(''); setMeetingId(''); setDescription('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -100,6 +117,7 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
       opened_date: openedDate || null,
       due_date:    dueDate || null,
       description: description.trim() || null,
+      meeting_id:  meetingId || null,
       created_by:  user.id,
       status:      'open',
     }).select('id').single()
@@ -219,6 +237,21 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
                   <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
                 </div>
               </div>
+
+              {/* Meeting link */}
+              {clientId && (meetingsByClient[clientId] ?? []).length > 0 && (
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-slate-700 mb-1">
+                    <CalendarDays size={12} />Link to meeting
+                  </label>
+                  <select value={meetingId} onChange={e => setMeetingId(e.target.value)} className={inputCls}>
+                    <option value="">— No meeting —</option>
+                    {(meetingsByClient[clientId] ?? []).map(m => (
+                      <option key={m.id} value={m.id}>{m.title} ({m.meeting_date})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Template */}
               {templates.length > 0 && (

@@ -3,9 +3,10 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { updateTaskStatus, reassignTask, createSubTask, applyTemplateToTask, addTaskComment, updateTask } from '@/app/actions'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { CheckSquare, Clock, Plus, ChevronDown, ChevronRight, LayoutTemplate, History, MessageCircle, Send, GripVertical, Pencil, Check, X } from 'lucide-react'
+import { CheckSquare, Clock, Plus, ChevronDown, ChevronRight, LayoutTemplate, History, MessageCircle, Send, GripVertical, Pencil, Check, X, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { BasicProfile } from '@/lib/types'
 import TaskModal from '@/app/(app)/tasks/TaskModal'
 
@@ -115,6 +116,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     setEditDue(task.due_date ?? '')
     setEditPriority(task.priority)
     setEditDescription(task.description ?? '')
+    setEditMeetingId(task.meeting?.id ?? '')
   }
 
   async function saveEdit() {
@@ -125,6 +127,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
       due_date:    editDue || null,
       priority:    editPriority,
       description: editDescription.trim() || null,
+      meeting_id:  editMeetingId || null,
     })
     setSavingEdit(false)
     setEditingTaskId(null)
@@ -167,6 +170,26 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     router.refresh()
   }
 
+  // Grandchild (sub-sub-task) adding
+  const [addingSubSubFor, setAddingSubSubFor] = useState<string | null>(null)
+  const [subSubTitle, setSubSubTitle]         = useState('')
+  const [subSubDue, setSubSubDue]             = useState('')
+  const [subSubPriority, setSubSubPriority]   = useState('medium')
+
+  async function handleAddSubSub(subId: string) {
+    if (!subSubTitle.trim()) return
+    startTransition(async () => {
+      await createSubTask({ parentTaskId: subId, title: subSubTitle, assignedTo: null, dueDate: subSubDue || null, priority: subSubPriority, clientId })
+      setAddingSubSubFor(null); setSubSubTitle(''); setSubSubDue(''); setSubSubPriority('medium')
+      router.refresh()
+    })
+  }
+
+  // Meetings for this client (for meeting link picker)
+  const [clientMeetings, setClientMeetings] = useState<{ id: string; title: string; meeting_date: string }[]>([])
+  const [newTaskMeetingId, setNewTaskMeetingId] = useState('')
+  const [editMeetingId, setEditMeetingId]       = useState('')
+
   // Sub-task focused modal
   const [modalTask, setModalTask] = useState<any | null>(null)
 
@@ -190,6 +213,15 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   }, [])
 
   useEffect(() => { widthRef.current = panelWidth }, [panelWidth])
+
+  useEffect(() => {
+    createClient()
+      .from('meetings')
+      .select('id, title, meeting_date')
+      .eq('client_id', clientId)
+      .order('meeting_date', { ascending: false })
+      .then(({ data }) => setClientMeetings(data ?? []))
+  }, [clientId])
 
   function startResize(e: React.MouseEvent) {
     e.preventDefault()
@@ -284,6 +316,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
       title: newTaskTitle, client_id: clientId, assigned_to: newTaskAssignee || null,
       due_date: newTaskDue || null, opened_date: newTaskOpenedDate || null,
       priority: newTaskPriority, created_by: user.id, status: 'open',
+      meeting_id: newTaskMeetingId || null,
     }).select().single()
     if (task && newTaskTemplate) {
       const { error: tmplErr } = await applyTemplateToTask(task.id, newTaskTemplate, clientId)
@@ -291,7 +324,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     }
     setNewTaskTitle(''); setNewTaskDue(''); setNewTaskPriority('medium')
     setNewTaskOpenedDate(new Date().toISOString().split('T')[0])
-    setNewTaskAssignee(currentUserId); setNewTaskTemplate('')
+    setNewTaskAssignee(currentUserId); setNewTaskTemplate(''); setNewTaskMeetingId('')
     setTemplateError(null)
     setShowAddTask(false); setAddingTask(false)
     router.refresh()
@@ -375,6 +408,16 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
               </select>
             </div>
           )}
+          {clientMeetings.length > 0 && (
+            <div>
+              <label className="flex items-center gap-1 text-xs text-slate-500 mb-1"><CalendarDays size={11} />Link to meeting</label>
+              <select value={newTaskMeetingId} onChange={e => setNewTaskMeetingId(e.target.value)}
+                className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">— No meeting —</option>
+                {clientMeetings.map(m => <option key={m.id} value={m.id}>{m.title} ({m.meeting_date})</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2">
             <button type="submit" disabled={addingTask}
               className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -443,6 +486,16 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                       rows={3}
                       className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                     />
+                    {clientMeetings.length > 0 && (
+                      <div>
+                        <label className="flex items-center gap-1 text-xs text-slate-500 mb-1"><CalendarDays size={10} />Link to meeting</label>
+                        <select value={editMeetingId} onChange={e => setEditMeetingId(e.target.value)}
+                          className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                          <option value="">— No meeting —</option>
+                          {clientMeetings.map(m => <option key={m.id} value={m.id}>{m.title} ({m.meeting_date})</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={saveEdit} disabled={savingEdit}
                         className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -464,7 +517,11 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-900 leading-tight">{task.title}</p>
-                    {task.meeting && <p className="text-xs text-slate-400 mt-0.5 truncate">From: {task.meeting.title}</p>}
+                    {task.meeting && (
+                      <Link href={`/clients/${clientId}/meetings/${task.meeting.id}/edit`} className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 mt-0.5 truncate">
+                        <CalendarDays size={10} />{task.meeting.title}
+                      </Link>
+                    )}
                     {task.description && (
                       <p
                         onClick={() => toggleDesc(task.id)}
@@ -592,65 +649,100 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                           {sub.due_date && <span className={`text-xs shrink-0 ${dueDateClass(sub.due_date)}`}>{format(parseISO(sub.due_date), 'd MMM')}</span>}
                           <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[sub.priority]}`}>{sub.priority[0].toUpperCase()}</span>
                         </div>
-                      {/* Sub-sub-tasks (template step children) — fully editable */}
-                      {sub.sub_tasks && sub.sub_tasks.length > 0 && (
-                        <div className="mt-1.5 ml-5 space-y-0.5 border-l-2 border-slate-200 pl-2">
-                          {sub.sub_tasks.map(ss => (
-                            <div key={ss.id}>
-                              {editingSubSubId === ss.id ? (
-                                <div className="space-y-1.5 py-1">
-                                  <input
-                                    value={editSubSubTitle}
-                                    onChange={e => setEditSubSubTitle(e.target.value)}
-                                    className="w-full px-2 py-1 text-xs rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    autoFocus
-                                    onKeyDown={e => { if (e.key === 'Escape') setEditingSubSubId(null) }}
-                                  />
-                                  <div className="grid grid-cols-2 gap-1.5">
-                                    <select value={editSubSubPriority} onChange={e => setEditSubSubPriority(e.target.value)}
-                                      className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
-                                      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                                    </select>
-                                    <input type="date" value={editSubSubDue} onChange={e => setEditSubSubDue(e.target.value)}
-                                      className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
+                      {/* Sub-sub-tasks — fully editable + addable */}
+                      <div className="mt-1.5 ml-5">
+                        {sub.sub_tasks && sub.sub_tasks.length > 0 && (
+                          <div className="space-y-0.5 border-l-2 border-slate-200 pl-2 mb-1">
+                            {sub.sub_tasks.map(ss => (
+                              <div key={ss.id}>
+                                {editingSubSubId === ss.id ? (
+                                  <div className="space-y-1.5 py-1">
+                                    <input
+                                      value={editSubSubTitle}
+                                      onChange={e => setEditSubSubTitle(e.target.value)}
+                                      className="w-full px-2 py-1 text-xs rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      autoFocus
+                                      onKeyDown={e => { if (e.key === 'Escape') setEditingSubSubId(null) }}
+                                    />
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <select value={editSubSubPriority} onChange={e => setEditSubSubPriority(e.target.value)}
+                                        className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
+                                        <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                                      </select>
+                                      <input type="date" value={editSubSubDue} onChange={e => setEditSubSubDue(e.target.value)}
+                                        className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
+                                    </div>
+                                    <textarea
+                                      value={editSubSubDesc}
+                                      onChange={e => setEditSubSubDesc(e.target.value)}
+                                      placeholder="Notes…" rows={2}
+                                      className="w-full px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                                    />
+                                    <div className="flex gap-1.5">
+                                      <button onClick={saveSubSubEdit} disabled={savingSubSubEdit}
+                                        className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                                        <Check size={11} />{savingSubSubEdit ? 'Saving…' : 'Save'}
+                                      </button>
+                                      <button onClick={() => setEditingSubSubId(null)}
+                                        className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-1">
+                                        <X size={11} />Cancel
+                                      </button>
+                                    </div>
                                   </div>
-                                  <textarea
-                                    value={editSubSubDesc}
-                                    onChange={e => setEditSubSubDesc(e.target.value)}
-                                    placeholder="Notes…" rows={2}
-                                    className="w-full px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                                  />
-                                  <div className="flex gap-1.5">
-                                    <button onClick={saveSubSubEdit} disabled={savingSubSubEdit}
-                                      className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
-                                      <Check size={11} />{savingSubSubEdit ? 'Saving…' : 'Save'}
-                                    </button>
-                                    <button onClick={() => setEditingSubSubId(null)}
-                                      className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-1">
-                                      <X size={11} />Cancel
+                                ) : (
+                                  <div className="flex items-center gap-2 py-0.5">
+                                    <button
+                                      onClick={() => handleStatusChange(ss.id, ss.status === 'completed' ? 'open' : 'completed')}
+                                      className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${ss.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
+                                    />
+                                    <p className={`text-xs flex-1 min-w-0 truncate ${ss.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'}`}>{ss.title}</p>
+                                    {ss.description && <span title={ss.description} className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                    {ss.due_date && <span className={`text-xs shrink-0 ${dueDateClass(ss.due_date)}`}>{format(parseISO(ss.due_date), 'd MMM')}</span>}
+                                    <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[ss.priority]}`}>{ss.priority[0].toUpperCase()}</span>
+                                    <button onClick={() => startSubSubEdit(ss)} title="Edit"
+                                      className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors">
+                                      <Pencil size={10} />
                                     </button>
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 py-0.5">
-                                  <button
-                                    onClick={() => handleStatusChange(ss.id, ss.status === 'completed' ? 'open' : 'completed')}
-                                    className={`w-3 h-3 rounded-sm border-2 shrink-0 transition-colors ${ss.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-slate-300 hover:border-green-500'}`}
-                                  />
-                                  <p className={`text-xs flex-1 min-w-0 truncate ${ss.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'}`}>{ss.title}</p>
-                                  {ss.description && <span title={ss.description} className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400" />}
-                                  {ss.due_date && <span className={`text-xs shrink-0 ${dueDateClass(ss.due_date)}`}>{format(parseISO(ss.due_date), 'd MMM')}</span>}
-                                  <span className={`shrink-0 text-xs px-1 py-0.5 rounded font-medium ${priorityColour[ss.priority]}`}>{ss.priority[0].toUpperCase()}</span>
-                                  <button onClick={() => startSubSubEdit(ss)} title="Edit"
-                                    className="shrink-0 text-slate-300 hover:text-blue-600 transition-colors">
-                                    <Pencil size={10} />
-                                  </button>
-                                </div>
-                              )}
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {addingSubSubFor === sub.id ? (
+                          <div className="space-y-1 p-1.5 rounded border border-slate-200 bg-white">
+                            <input
+                              autoFocus
+                              value={subSubTitle}
+                              onChange={e => setSubSubTitle(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleAddSubSub(sub.id) }}
+                              placeholder="Step title…"
+                              className="w-full px-2 py-1 text-xs rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            <div className="grid grid-cols-2 gap-1">
+                              <select value={subSubPriority} onChange={e => setSubSubPriority(e.target.value)}
+                                className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none">
+                                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                              </select>
+                              <input type="date" value={subSubDue} onChange={e => setSubSubDue(e.target.value)}
+                                className="px-1.5 py-1 text-xs rounded border border-slate-300 focus:outline-none" />
                             </div>
-                          ))}
-                        </div>
-                      )}
+                            <div className="flex gap-1">
+                              <button onClick={() => handleAddSubSub(sub.id)} disabled={isPending || !subSubTitle.trim()}
+                                className="flex-1 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
+                              <button onClick={() => { setAddingSubSubFor(null); setSubSubTitle('') }}
+                                className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setAddingSubSubFor(sub.id); setSubSubTitle(''); setSubSubDue(''); setSubSubPriority('medium') }}
+                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 mt-0.5"
+                          >
+                            <Plus size={10} />Add step
+                          </button>
+                        )}
+                      </div>
                     </div>
                     )
                   })}

@@ -495,7 +495,7 @@ export async function applyTemplateToTask(
 export async function updateTask(
   taskId: string,
   clientId: string,
-  data: { title: string; due_date: string | null; priority: string; description?: string | null; opened_date?: string | null }
+  data: { title: string; due_date: string | null; priority: string; description?: string | null; opened_date?: string | null; meeting_id?: string | null }
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -507,6 +507,7 @@ export async function updateTask(
     priority:    data.priority,
     description: data.description ?? null,
     ...(data.opened_date !== undefined ? { opened_date: data.opened_date } : {}),
+    ...(data.meeting_id !== undefined ? { meeting_id: data.meeting_id } : {}),
   }).eq('id', taskId)
 
   if (error) return { error: error.message }
