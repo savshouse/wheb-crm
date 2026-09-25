@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   const [{ data: task }, { data: subTasks }] = await Promise.all([
     supabase
       .from('tasks')
-      .select('id, title, description, priority, status, due_date, created_at, client:clients(id, name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)')
+      .select('id, title, description, priority, status, due_date, created_at, client:clients(id, name), assignee:profiles!tasks_assigned_to_fkey(full_name, email), meeting:meetings(id, title)')
       .eq('id', taskId)
       .single(),
     supabase

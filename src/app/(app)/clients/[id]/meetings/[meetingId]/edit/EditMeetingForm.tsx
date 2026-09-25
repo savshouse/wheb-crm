@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateMeeting } from '@/app/actions'
 
@@ -205,6 +205,13 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
                     <span className="shrink-0 text-xs text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded">
                       {statusLabel[task.status] ?? task.status}
                     </span>
+                    <Link
+                      href={`/tasks?task=${task.id}`}
+                      className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors"
+                      title="Open task"
+                    >
+                      <ExternalLink size={14} />
+                    </Link>
                   </div>
                 )
               })}

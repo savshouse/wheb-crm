@@ -196,6 +196,7 @@ async function showTaskList() {
 function resetDetail() {
   $('client-row').classList.add('hidden')
   $('assignee-row').classList.add('hidden')
+  $('meeting-row').classList.add('hidden')
   $('subtasks-section').classList.add('hidden')
   $('actions').innerHTML = ''
   $('subtask-list').innerHTML = ''
@@ -457,6 +458,12 @@ function renderTask(task, subTasks) {
   if (task.assignee) {
     $('assignee-name').textContent = task.assignee.full_name ?? task.assignee.email
     $('assignee-row').classList.remove('hidden')
+  }
+
+  if (task.meeting && task.client) {
+    $('meeting-link').textContent = task.meeting.title
+    $('meeting-link').href = `${CRM_URL}/clients/${task.client.id}/meetings/${task.meeting.id}/edit`
+    $('meeting-row').classList.remove('hidden')
   }
 
   renderActions(task.status)
