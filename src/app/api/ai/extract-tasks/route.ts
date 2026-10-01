@@ -1,39 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-// Cached per warm serverless instance — re-resolves on cold start
-let cachedModel: string | null = null
-
-async function getBestFlashModel(apiKey: string): Promise<string> {
-  if (cachedModel) return cachedModel
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    )
-    if (!res.ok) throw new Error('list failed')
-    const { models } = await res.json() as { models: { name: string; supportedGenerationMethods?: string[] }[] }
-    const candidates = models
-      .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-      .map(m => m.name.replace('models/', ''))
-      .filter(n => n.includes('flash'))
-      // Only use stable 2.x models — 3.x+ are often preview/overloaded
-      .filter(n => {
-        const ver = parseFloat(n.match(/gemini-(\d+\.\d+)/)?.[1] ?? '0')
-        return ver >= 1 && ver < 3
-      })
-      .sort((a, b) => {
-        const score = (s: string) =>
-          (parseFloat(s.match(/gemini-(\d+\.\d+)/)?.[1] ?? '0') * 10) -
-          (s.includes('exp') ? 1 : 0) -
-          (s.includes('lite') ? 2 : 0)
-        return score(b) - score(a)
-      })
-    cachedModel = candidates[0] ?? 'gemini-2.0-flash'
-  } catch {
-    cachedModel = 'gemini-2.0-flash'
-  }
-  return cachedModel
-}
+const GEMINI_MODEL = 'gemini-2.0-flash'
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY
@@ -77,8 +45,7 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const modelName = await getBestFlashModel(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelName })
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL })
 
     const parts: any[] = []
 
