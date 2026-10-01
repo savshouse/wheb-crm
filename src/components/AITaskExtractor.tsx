@@ -74,7 +74,13 @@ export default function AITaskExtractor({ onExtracted, onClose, meetingDate, cli
       }
 
       if (!data.tasks?.length) {
-        setError('No tasks found — try adding more detail to the notes')
+        if (data.transcription) {
+          setTab('text')
+          setTranscript(data.transcription)
+          setError('The AI couldn\'t extract tasks from the image directly — the transcription has been pasted below. Review it, then hit Extract tasks again.')
+        } else {
+          setError('No tasks found — try adding more detail to the notes')
+        }
         return
       }
 

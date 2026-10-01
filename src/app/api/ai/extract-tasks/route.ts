@@ -103,6 +103,11 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
     console.log('[AI] Raw task extraction:', raw)
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
     const parsed = JSON.parse(cleaned)
+
+    if (!parsed.tasks?.length && sourceText) {
+      return NextResponse.json({ tasks: [], transcription: sourceText })
+    }
+
     return NextResponse.json(parsed)
   } catch (err: any) {
     console.error('AI extract-tasks error:', err)
