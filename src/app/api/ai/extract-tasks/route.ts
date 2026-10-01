@@ -16,7 +16,11 @@ async function getBestFlashModel(apiKey: string): Promise<string> {
       .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
       .map(m => m.name.replace('models/', ''))
       .filter(n => n.includes('flash'))
-      // Prefer higher major version; within same version prefer non-exp stable
+      // Only use stable 2.x models — 3.x+ are often preview/overloaded
+      .filter(n => {
+        const ver = parseFloat(n.match(/gemini-(\d+\.\d+)/)?.[1] ?? '0')
+        return ver >= 1 && ver < 3
+      })
       .sort((a, b) => {
         const score = (s: string) =>
           (parseFloat(s.match(/gemini-(\d+\.\d+)/)?.[1] ?? '0') * 10) -
