@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const CF_TEXT_MODEL   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
-const CF_VISION_MODEL = '@cf/llava-1.5-7b-hf'
+const CF_VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct'
 
 function cfUrl(accountId: string, model: string) {
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`
@@ -54,11 +54,17 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 
     if (imageBase64 && imageMimeType) {
       model = CF_VISION_MODEL
-      const imageBytes = Array.from(Buffer.from(imageBase64, 'base64'))
       cfBody = {
-        image: imageBytes,
-        prompt: `${systemPrompt}\n\nExtract all actionable tasks from these handwritten notes.`,
-        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
+              { type: 'text', text: 'Extract all actionable tasks from these handwritten notes.' },
+            ],
+          },
+        ],
       }
     } else {
       model = CF_TEXT_MODEL
