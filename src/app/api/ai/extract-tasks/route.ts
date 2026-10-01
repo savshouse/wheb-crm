@@ -48,53 +48,49 @@ For each task return:
 Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 {"tasks":[{"title":"...","priority":"medium","due_date":null,"assignee_hint":null}]}`
 
+  async function cfPost(model: string, body: object): Promise<string> {
+    const res = await fetch(cfUrl(accountId, model), {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Cloudflare: ${res.status} — ${err}`)
+    }
+    const data = await res.json() as { result?: { response?: string } }
+    return (data.result?.response ?? '').trim()
+  }
+
   try {
-    let cfBody: object
-    let model: string
+    let sourceText: string
 
     if (imageBase64 && imageMimeType) {
-      model = CF_VISION_MODEL
-      cfBody = {
+      // Step 1: vision model transcribes the image to text
+      sourceText = await cfPost(CF_VISION_MODEL, {
         messages: [
-          { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
-              { type: 'text', text: 'Extract all actionable tasks from these handwritten notes.' },
+              { type: 'text', text: 'Transcribe all text visible in this image exactly as written, including any to-do lists, action items, names, and dates. Output only the transcribed text, nothing else.' },
             ],
           },
         ],
-      }
+      })
     } else {
-      model = CF_TEXT_MODEL
-      cfBody = {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract tasks from the following:\n\n${text}` },
-        ],
-      }
+      sourceText = text!
     }
 
-    const res = await fetch(cfUrl(accountId, model), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(cfBody),
+    // Step 2: text model extracts structured tasks
+    const raw = await cfPost(CF_TEXT_MODEL, {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Extract tasks from the following:\n\n${sourceText}` },
+      ],
     })
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error('Cloudflare AI error:', err)
-      return NextResponse.json({ error: `Cloudflare: ${res.status} — ${err}` }, { status: 502 })
-    }
-
-    const data = await res.json() as { result?: { response?: string; description?: string } }
-    const raw = (data.result?.response ?? data.result?.description ?? '').trim()
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-
     const parsed = JSON.parse(cleaned)
     return NextResponse.json(parsed)
   } catch (err: any) {
