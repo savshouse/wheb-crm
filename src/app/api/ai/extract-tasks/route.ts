@@ -60,8 +60,14 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
       const err = await res.text()
       throw new Error(`Cloudflare: ${res.status} — ${err}`)
     }
-    const data = await res.json() as { result?: { response?: string } }
-    return (data.result?.response ?? '').trim()
+    const data = await res.json() as { result?: unknown }
+    const result = (data.result as any)
+    const response = typeof result?.response === 'string'
+      ? result.response
+      : typeof result === 'string'
+        ? result
+        : JSON.stringify(result ?? '')
+    return response.trim()
   }
 
   try {
