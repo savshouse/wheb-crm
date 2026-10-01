@@ -97,6 +97,7 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Extract tasks from the following. Even brief notes or list items should become tasks. If someone's name appears next to an item, use them as the assignee:\n\n${sourceText}` },
       ],
+      max_tokens: 2048,
     })
 
     console.log('[AI] Raw task extraction:', raw)
