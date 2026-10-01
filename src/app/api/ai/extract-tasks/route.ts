@@ -81,11 +81,12 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
-              { type: 'text', text: 'Transcribe all text visible in this image exactly as written, including any to-do lists, action items, names, and dates. Output only the transcribed text, nothing else.' },
+              { type: 'text', text: 'Transcribe ALL text visible in this image exactly as written. Include every word, name, date, number, list item, and note. Output only the transcribed text, nothing else.' },
             ],
           },
         ],
       })
+      console.log('[AI] Vision transcription:', sourceText)
     } else {
       sourceText = text!
     }
@@ -94,10 +95,11 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
     const raw = await cfPost(CF_TEXT_MODEL, {
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extract tasks from the following:\n\n${sourceText}` },
+        { role: 'user', content: `Extract tasks from the following. Even brief notes or list items should become tasks. If someone's name appears next to an item, use them as the assignee:\n\n${sourceText}` },
       ],
     })
 
+    console.log('[AI] Raw task extraction:', raw)
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
     const parsed = JSON.parse(cleaned)
     return NextResponse.json(parsed)
