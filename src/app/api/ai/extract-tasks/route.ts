@@ -36,19 +36,34 @@ export async function POST(req: NextRequest) {
     `Today's date: ${today}`,
   ].filter(Boolean).join('\n')
 
-  const systemPrompt = `You are a task extraction assistant for a CRM system.
-${context}
+  const taskPrompt = `${context ? context + '\n\n' : ''}Extract every actionable task or follow-up item from the text provided. Items in numbered lists, bullet points, or labelled "To-Do" are always tasks.
 
-Extract every actionable task or follow-up item from the provided content.
+RESPOND WITH ONLY VALID JSON — no explanation, no markdown, no code fences. Start your response with { and end with }.
 
-For each task return:
-- title: short, clear, action-oriented (start with a verb)
-- priority: "high", "medium", or "low" (high = urgent/time-sensitive, low = nice-to-have)
-- due_date: ISO date YYYY-MM-DD if a date is mentioned or implied, otherwise null
-- assignee_hint: first name or full name of the person who should do it, or null
+Required format:
+{"tasks":[{"title":"Send renewal quote","priority":"high","due_date":"2026-10-15","assignee_hint":"Mike"},{"title":"Review pension fund","priority":"medium","due_date":null,"assignee_hint":null}]}
 
-Return ONLY valid JSON in this exact shape, no markdown, no commentary:
-{"tasks":[{"title":"...","priority":"medium","due_date":null,"assignee_hint":null}]}`
+Rules:
+- title: verb + what needs doing (e.g. "Review mortgage rates", "Send quote to client")
+- priority: "high" if urgent/time-sensitive, "medium" default, "low" if nice-to-have
+- due_date: YYYY-MM-DD if any date is mentioned, otherwise null
+- assignee_hint: person's name if mentioned, otherwise null
+- Include ALL items from any list, even brief ones`
+
+  function parseJsonResponse(raw: string): unknown {
+    // Direct parse
+    try { return JSON.parse(raw.trim()) } catch {}
+    // Strip code fences anywhere in string
+    const noFences = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    try { return JSON.parse(noFences) } catch {}
+    // Extract outermost JSON object
+    const firstBrace = noFences.indexOf('{')
+    const lastBrace = noFences.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try { return JSON.parse(noFences.slice(firstBrace, lastBrace + 1)) } catch {}
+    }
+    throw new Error(`Model returned non-JSON: ${raw.slice(0, 300)}`)
+  }
 
   async function cfPost(model: string, body: object): Promise<string> {
     const res = await fetch(cfUrl(aid, model), {
@@ -94,21 +109,19 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
     // Step 2: text model extracts structured tasks
     const raw = await cfPost(CF_TEXT_MODEL, {
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extract tasks from the following. Even brief notes or list items should become tasks. If someone's name appears next to an item, use them as the assignee:\n\n${sourceText}` },
+        { role: 'user', content: `${taskPrompt}\n\nText to extract tasks from:\n${sourceText}` },
       ],
       max_tokens: 2048,
     })
 
     console.log('[AI] Raw task extraction:', raw)
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    const parsed = JSON.parse(cleaned)
+    const parsed = parseJsonResponse(raw) as { tasks?: unknown[] }
 
     if (!parsed.tasks?.length && sourceText) {
       return NextResponse.json({ tasks: [], transcription: sourceText })
     }
 
-    return NextResponse.json(parsed)
+    return NextResponse.json({ tasks: parsed.tasks })
   } catch (err: any) {
     console.error('AI extract-tasks error:', err)
     return NextResponse.json({ error: err.message ?? 'Extraction failed' }, { status: 500 })
