@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
   if (!accountId || !apiToken) {
     return NextResponse.json({ error: 'Cloudflare AI not configured' }, { status: 503 })
   }
+  const aid = accountId as string
+  const tok = apiToken  as string
 
   const body = await req.json()
   const { text, imageBase64, imageMimeType, meetingDate, clientName } = body as {
@@ -49,9 +51,9 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 {"tasks":[{"title":"...","priority":"medium","due_date":null,"assignee_hint":null}]}`
 
   async function cfPost(model: string, body: object): Promise<string> {
-    const res = await fetch(cfUrl(accountId, model), {
+    const res = await fetch(cfUrl(aid, model), {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     if (!res.ok) {
