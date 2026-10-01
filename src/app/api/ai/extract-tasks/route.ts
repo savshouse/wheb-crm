@@ -88,7 +88,7 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
     if (!res.ok) {
       const err = await res.text()
       console.error('Cloudflare AI error:', err)
-      return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
+      return NextResponse.json({ error: `Cloudflare: ${res.status} — ${err}` }, { status: 502 })
     }
 
     const data = await res.json() as { result?: { response?: string } }
