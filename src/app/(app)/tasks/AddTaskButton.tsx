@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, LayoutTemplate, ChevronDown, CalendarDays } from 'lucide-react'
+import { Plus, X, LayoutTemplate, ChevronDown, CalendarDays, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { applyTemplateToTask } from '@/app/actions'
+import AITaskExtractor, { type AIExtractedTask } from '@/components/AITaskExtractor'
 
 type Profile      = { id: string; full_name: string | null; email: string }
 type ClientOption = { id: string; name: string }
@@ -33,7 +34,40 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
   const [description, setDescription] = useState('')
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState<string | null>(null)
+  const [showAIExtractor, setShowAIExtractor] = useState(false)
   const router = useRouter()
+
+  async function handleAIExtracted(aiTasks: AIExtractedTask[]) {
+    setSaving(true)
+    setError(null)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setError('Not signed in'); setSaving(false); return }
+    const { error: insertErr } = await supabase.from('tasks').insert(
+      aiTasks.map(t => {
+        const matched = t.assignee_hint
+          ? profiles.find(p =>
+              (p.full_name ?? p.email).toLowerCase().includes(t.assignee_hint!.toLowerCase())
+            )
+          : null
+        return {
+          title:       t.title,
+          client_id:   clientId || null,
+          assigned_to: matched?.id ?? user.id,
+          priority:    t.priority,
+          due_date:    t.due_date ?? null,
+          opened_date: openedDate || null,
+          created_by:  user.id,
+          status:      'open',
+        }
+      })
+    )
+    setSaving(false)
+    if (insertErr) { setError(insertErr.message); return }
+    setOpen(false)
+    resetForm()
+    router.refresh()
+  }
 
   // Fetch reference data when modal opens
   useEffect(() => {
@@ -154,9 +188,18 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <h2 className="text-base font-semibold text-slate-900">New task</h2>
-              <button onClick={() => { setOpen(false); resetForm() }} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAIExtractor(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100 border border-violet-200"
+                >
+                  <Sparkles size={12} />AI extract
+                </button>
+                <button onClick={() => { setOpen(false); resetForm() }} className="text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
               {/* Title */}
@@ -292,6 +335,13 @@ export default function AddTaskButton({ currentUserId }: { currentUserId: string
             </form>
           </div>
         </div>
+      )}
+      {showAIExtractor && (
+        <AITaskExtractor
+          onExtracted={handleAIExtracted}
+          onClose={() => setShowAIExtractor(false)}
+          clientName={clientId ? (clients.find(c => c.id === clientId)?.name) : undefined}
+        />
       )}
     </>
   )

@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, Sparkles } from 'lucide-react'
+import AITaskExtractor, { type AIExtractedTask } from '@/components/AITaskExtractor'
 
 type TaskDraft = {
   id: string
@@ -33,6 +34,27 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
   const [error, setError] = useState<string | null>(null)
   const [tasks, setTasks] = useState<TaskDraft[]>([])
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+  const [showAIExtractor, setShowAIExtractor] = useState(false)
+
+  function handleAIExtracted(aiTasks: AIExtractedTask[]) {
+    const meetingDate = (document.querySelector('input[name="meeting_date"]') as HTMLInputElement)?.value
+    const newTasks: TaskDraft[] = aiTasks.map(t => {
+      const matched = t.assignee_hint
+        ? profiles.find(p =>
+            (p.full_name ?? p.email).toLowerCase().includes(t.assignee_hint!.toLowerCase())
+          )
+        : null
+      return {
+        id: crypto.randomUUID(),
+        title: t.title,
+        assigned_to: matched?.id ?? currentUserId,
+        due_date: t.due_date ?? '',
+        priority: t.priority,
+        fromTemplate: 'AI',
+      }
+    })
+    setTasks(prev => [...prev, ...newTasks])
+  }
 
   function addTask() {
     setTasks(prev => [...prev, {
@@ -146,6 +168,7 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
   const todayStr = new Date().toISOString().split('T')[0]
 
   return (
+    <>
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <Link href={`/clients/${clientId}`} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 mb-3">
@@ -203,6 +226,14 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
               <p className="text-xs text-slate-500 mt-0.5">Create tasks from this meeting and assign them now</p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAIExtractor(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors border border-violet-200"
+              >
+                <Sparkles size={14} />
+                AI extract
+              </button>
               {templates.length > 0 && (
                 <div className="relative">
                   <button
@@ -363,5 +394,15 @@ export default function NewMeetingForm({ clientId, clientName, profiles, current
         </div>
       </form>
     </div>
+
+    {showAIExtractor && (
+      <AITaskExtractor
+        onExtracted={handleAIExtracted}
+        onClose={() => setShowAIExtractor(false)}
+        meetingDate={(document.querySelector('input[name="meeting_date"]') as HTMLInputElement)?.value}
+        clientName={clientName}
+      />
+    )}
+    </>
   )
 }

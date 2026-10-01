@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckSquare, LayoutTemplate, ExternalLink, Loader2, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateMeeting } from '@/app/actions'
 import TaskModal from '@/app/(app)/tasks/TaskModal'
+import AITaskExtractor, { type AIExtractedTask } from '@/components/AITaskExtractor'
 
 type TaskDraft = {
   id: string
@@ -59,6 +60,28 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
   // New follow-up tasks
   const [tasks, setTasks]               = useState<TaskDraft[]>([])
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+
+  // AI extractor
+  const [showAIExtractor, setShowAIExtractor] = useState(false)
+
+  function handleAIExtracted(aiTasks: AIExtractedTask[]) {
+    const newTasks: TaskDraft[] = aiTasks.map(t => {
+      const matched = t.assignee_hint
+        ? profiles.find(p =>
+            (p.full_name ?? p.email).toLowerCase().includes(t.assignee_hint!.toLowerCase())
+          )
+        : null
+      return {
+        id: crypto.randomUUID(),
+        title: t.title,
+        assigned_to: matched?.id ?? currentUserId,
+        due_date: t.due_date ?? '',
+        priority: t.priority,
+        fromTemplate: 'AI',
+      }
+    })
+    setTasks(prev => [...prev, ...newTasks])
+  }
 
   // Task peek modal
   const [peekTask, setPeekTask]         = useState<any>(null)
@@ -249,6 +272,10 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
               <p className="text-xs text-slate-500 mt-0.5">Create additional tasks from this meeting</p>
             </div>
             <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShowAIExtractor(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 text-sm font-medium hover:bg-violet-100 border border-violet-200">
+                <Sparkles size={14} />AI extract
+              </button>
               {templates.length > 0 && (
                 <div className="relative">
                   <button type="button" onClick={() => setShowTemplateMenu(p => !p)}
@@ -368,6 +395,13 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
         onClose={() => setPeekTask(null)}
         onSaved={(updated) => setPeekTask(updated)}
         onDeleted={() => setPeekTask(null)}
+      />
+    )}
+    {showAIExtractor && (
+      <AITaskExtractor
+        onExtracted={handleAIExtracted}
+        onClose={() => setShowAIExtractor(false)}
+        meetingDate={meetingDate}
       />
     )}
     </>
