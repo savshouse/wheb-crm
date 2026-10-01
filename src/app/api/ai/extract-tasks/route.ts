@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const GEMINI_MODEL = 'gemini-3.8-flash'
+const CF_TEXT_MODEL  = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+const CF_VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct'
+
+function cfUrl(accountId: string, model: string) {
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`
+}
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503 })
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+  const apiToken  = process.env.CLOUDFLARE_API_TOKEN
+  if (!accountId || !apiToken) {
+    return NextResponse.json({ error: 'Cloudflare AI not configured' }, { status: 503 })
   }
 
   const body = await req.json()
@@ -24,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().split('T')[0]
   const context = [
-    clientName && `Client: ${clientName}`,
+    clientName  && `Client: ${clientName}`,
     meetingDate && `Meeting date: ${meetingDate}`,
     `Today's date: ${today}`,
   ].filter(Boolean).join('\n')
@@ -37,28 +42,57 @@ Extract every actionable task or follow-up item from the provided content.
 For each task return:
 - title: short, clear, action-oriented (start with a verb)
 - priority: "high", "medium", or "low" (high = urgent/time-sensitive, low = nice-to-have)
-- due_date: ISO date YYYY-MM-DD if a date is mentioned or implied (e.g. "by end of week", "next Tuesday"), otherwise null
+- due_date: ISO date YYYY-MM-DD if a date is mentioned or implied, otherwise null
 - assignee_hint: first name or full name of the person who should do it, or null
 
 Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 {"tasks":[{"title":"...","priority":"medium","due_date":null,"assignee_hint":null}]}`
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL })
-
-    const parts: any[] = []
+    let cfBody: object
+    let model: string
 
     if (imageBase64 && imageMimeType) {
-      parts.push({ inlineData: { mimeType: imageMimeType, data: imageBase64 } })
+      model = CF_VISION_MODEL
+      cfBody = {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
+              { type: 'text', text: 'Extract all actionable tasks from these handwritten notes.' },
+            ],
+          },
+        ],
+      }
+    } else {
+      model = CF_TEXT_MODEL
+      cfBody = {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Extract tasks from the following:\n\n${text}` },
+        ],
+      }
     }
 
-    parts.push({ text: systemPrompt + (text ? `\n\nContent:\n${text}` : '\n\nExtract tasks from the image above.') })
+    const res = await fetch(cfUrl(accountId, model), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cfBody),
+    })
 
-    const result = await model.generateContent(parts)
-    const raw = result.response.text().trim()
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('Cloudflare AI error:', err)
+      return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
+    }
 
-    // Strip markdown fences if present
+    const data = await res.json() as { result?: { response?: string } }
+    const raw = data.result?.response?.trim() ?? ''
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
 
     const parsed = JSON.parse(cleaned)
