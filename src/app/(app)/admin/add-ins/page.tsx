@@ -188,45 +188,69 @@ export default function AddInsPage() {
           </div>
         </Section>
 
-        {/* Edge sidebar */}
+        {/* Browser extension */}
         <Section
           icon={<Globe size={20} className="text-blue-500" />}
-          title="Edge — Add to Sidebar"
-          subtitle="Access WHEB CRM as a panel on the side of Edge without leaving your current tab"
+          title="Edge / Chrome — Browser Extension"
+          subtitle="A blue WH icon sits in your browser toolbar with a live task badge — click for a quick popup and side panel"
           accent="bg-slate-50"
         >
           <p className="text-sm text-slate-600 mb-4">
-            Once installed as an app, you can pin WHEB CRM to the Edge sidebar so the blue{' '}
-            <strong>WH</strong> icon sits permanently on the side of your browser. Click it
-            any time to open a panel showing your tasks, clients, meetings and reports.
+            WHEB CRM has a browser extension that adds a <strong>WH</strong> icon to your
+            toolbar. It shows a red badge with your overdue task count, opens a task popup
+            on click, and lets you work on tasks in a side panel — all without leaving your
+            current page. It works in both Edge and Chrome.
           </p>
-          <ol className="space-y-3">
+          <p className="text-sm font-semibold text-slate-700 mb-2">Step 1 — Get the extension folder</p>
+          <p className="text-sm text-slate-600 mb-4">
+            The extension lives in the <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code> folder
+            inside the WHEB CRM repository on GitHub. Download or clone the repo, or ask Mike to
+            share the <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code> folder directly.
+          </p>
+          <p className="text-sm font-semibold text-slate-700 mb-2">Step 2 — Load in Edge</p>
+          <ol className="space-y-3 mb-4">
             <Step n={1}>
-              Make sure you have completed the <strong>Install as an App</strong> steps above first.
+              Open Edge and go to{' '}
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">edge://extensions</code>{' '}
+              in the address bar.
             </Step>
             <Step n={2}>
-              Open the Edge sidebar by clicking the sidebar toggle button on the right-hand
-              side of the browser, or go to <strong>Settings → Sidebar</strong> and enable it.
+              Turn on <strong>Developer mode</strong> using the toggle in the bottom-left corner
+              of the page.
             </Step>
             <Step n={3}>
-              At the bottom of the sidebar, click the <strong>+</strong> (Add apps / Customise
-              sidebar) button.
+              Click <strong>Load unpacked</strong> and select the{' '}
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code>{' '}
+              folder you downloaded.
             </Step>
             <Step n={4}>
-              Find <strong>WHEB CRM</strong> in the list of your installed apps and click
-              <strong> Add</strong>. The blue <strong>WH</strong> icon will appear in the sidebar.
+              The blue <strong>WH</strong> icon will appear in your browser toolbar. If it is
+              hidden, click the <strong>Extensions</strong> (puzzle piece) icon and pin WHEB CRM.
             </Step>
-            <Step n={5}>
-              Click the <strong>WH</strong> icon in the sidebar at any time to open the CRM
-              panel. Click the <strong>↗</strong> in the panel header to open the full app in
-              its own window.
+          </ol>
+          <p className="text-sm font-semibold text-slate-700 mb-2">Step 2 — Load in Chrome</p>
+          <ol className="space-y-3">
+            <Step n={1}>
+              Open Chrome and go to{' '}
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome://extensions</code>.
+            </Step>
+            <Step n={2}>
+              Enable <strong>Developer mode</strong> (toggle top-right).
+            </Step>
+            <Step n={3}>
+              Click <strong>Load unpacked</strong> and select the{' '}
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code> folder.
+            </Step>
+            <Step n={4}>
+              Pin the <strong>WH</strong> icon to your toolbar via the Extensions menu.
             </Step>
           </ol>
           <div className="mt-4 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
             <CheckCircle2 size={15} className="text-blue-500 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-800">
-              The sidebar panel is the quickest way to check overdue tasks or look up a client
-              while reading emails or other sites in Edge.
+              The red badge on the WH icon shows your current overdue task count and updates
+              automatically. Click the icon for a quick popup, or click any task to open it
+              in the full side panel.
             </p>
           </div>
         </Section>
