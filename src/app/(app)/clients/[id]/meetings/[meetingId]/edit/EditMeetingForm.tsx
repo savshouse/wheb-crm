@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { updateMeeting } from '@/app/actions'
 import TaskModal from '@/app/(app)/tasks/TaskModal'
 import AITaskExtractor, { type AIExtractedTask } from '@/components/AITaskExtractor'
+import AdviceLogLinked from '@/components/AdviceLogLinked'
 
 type TaskDraft = {
   id: string
@@ -220,6 +221,11 @@ export default function EditMeetingForm({ clientId, meeting, profiles, currentUs
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={8}
               className={`${inputClass} resize-y`} placeholder="Meeting notes..." />
           </div>
+        </div>
+
+        {/* Advice log */}
+        <div className="bg-white rounded-xl border border-amber-200 p-5">
+          <AdviceLogLinked clientId={clientId} meetingId={meeting.id} />
         </div>
 
         {/* Existing tasks */}

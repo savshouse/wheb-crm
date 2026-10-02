@@ -147,7 +147,7 @@ export default function OutlookAddinPage() {
 
   function renderEditForm(t: Task) {
     return (
-      <div style={{ background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', margin: '4px 0' }}>
+      <div style={{ background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '7px 10px', margin: '3px 0' }}>
         <input value={edit.title} onChange={e => setEdit(v => ({ ...v, title: e.target.value }))} style={{ ...inputSt, fontWeight: 600, marginBottom: 8 }} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
           <div>
@@ -193,7 +193,7 @@ export default function OutlookAddinPage() {
   function renderRow(t: Task, isSub = false) {
     return (
       <button onClick={() => startEdit(t)}
-        style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 7, padding: isSub ? '4px 2px' : '6px 2px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+        style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, padding: isSub ? '3px 2px' : '4px 2px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
         <span style={{ width: isSub ? 5 : 7, height: isSub ? 5 : 7, borderRadius: '50%', background: PRIO_DOT[t.priority] ?? '#94a3b8', flexShrink: 0, marginTop: 1 }} />
         <span style={{ flex: 1, fontSize: isSub ? 11 : 12, color: '#1e293b' }}>{t.title}</span>
         {t.description && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>📝</span>}
@@ -205,21 +205,21 @@ export default function OutlookAddinPage() {
 
   if (!session) {
     return (
-      <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <img src="/icons/icon-32.png" style={{ borderRadius: 6 }} alt="" />
-          <span style={{ fontWeight: 700, fontSize: 16, color: '#1e40af' }}>WHEB CRM</span>
+      <div style={{ padding: 14, fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <img src="/icons/icon-32.png" style={{ borderRadius: 6, width: 24 }} alt="" />
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#1e40af' }}>WHEB CRM</span>
         </div>
-        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Sign in to look up clients from your inbox.</p>
-        <div style={{ marginBottom: 10 }}>
+        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Sign in to look up clients from your inbox.</p>
+        <div style={{ marginBottom: 8 }}>
           <label style={labelSt}>Email</label>
           <input value={email} onChange={e => setEmail(e.target.value)} type="email" style={inputSt} placeholder="you@example.com" />
         </div>
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 10 }}>
           <label style={labelSt}>Password</label>
           <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} type="password" style={inputSt} placeholder="••••••••" />
         </div>
-        {loginErr && <p style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{loginErr}</p>}
+        {loginErr && <p style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>{loginErr}</p>}
         <button onClick={doLogin} disabled={logging} style={btnSt}>{logging ? 'Signing in…' : 'Sign in'}</button>
       </div>
     )
@@ -228,14 +228,14 @@ export default function OutlookAddinPage() {
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: 13 }}>
       {/* Header */}
-      <div style={{ background: '#1e40af', color: 'white', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/icons/icon-32.png" style={{ borderRadius: 4, width: 24 }} alt="" />
-        <span style={{ fontWeight: 700 }}>WHEB CRM</span>
+      <div style={{ background: '#1e40af', color: 'white', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <img src="/icons/icon-32.png" style={{ borderRadius: 4, width: 20 }} alt="" />
+        <span style={{ fontWeight: 700, fontSize: 13 }}>WHEB CRM</span>
         <button onClick={() => supabase.auth.signOut()} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 11 }}>Sign out</button>
       </div>
 
       {/* Search */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>
+      <div style={{ padding: '7px 10px', borderBottom: '1px solid #e2e8f0' }}>
         {ofContext && <p style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>From email: <strong>{ofContext}</strong></p>}
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch(search)}
@@ -256,9 +256,9 @@ export default function OutlookAddinPage() {
       {loading && <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Loading…</div>}
 
       {selected && !loading && (
-        <div style={{ padding: '10px 12px' }}>
+        <div style={{ padding: '7px 10px' }}>
           {/* Client header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>{selected.name}</span>
             <button onClick={() => selectClient(selected)} title="Refresh" disabled={loading}
               style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 6px', fontSize: 13, cursor: loading ? 'default' : 'pointer', color: '#64748b' }}>
@@ -270,7 +270,7 @@ export default function OutlookAddinPage() {
 
           {/* Open tasks */}
           {tasks.length > 0 && (
-            <div style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 8 }}>
               <div style={sectionLabel}>
                 Open tasks ({tasks.length + Object.values(subTaskMap).reduce((n, a) => n + a.length, 0)})
               </div>
@@ -318,7 +318,7 @@ export default function OutlookAddinPage() {
             <div>
               <div style={sectionLabel}>Recent meetings</div>
               {meetings.map(m => (
-                <div key={m.id} style={{ padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div key={m.id} style={{ padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 12, fontWeight: 500 }}>{m.title}</span>
                     <span style={{ fontSize: 11, color: '#94a3b8' }}>{format(parseISO(m.meeting_date), 'd MMM yyyy')}</span>
@@ -338,7 +338,7 @@ export default function OutlookAddinPage() {
   )
 }
 
-const labelSt: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 3 }
-const inputSt: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
-const btnSt: React.CSSProperties   = { background: '#2563eb', color: 'white', border: 'none', padding: '8px 18px', borderRadius: 6, fontSize: 13, cursor: 'pointer', fontWeight: 500 }
-const sectionLabel: React.CSSProperties = { fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: '#94a3b8', marginBottom: 6 }
+const labelSt: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 2 }
+const inputSt: React.CSSProperties = { width: '100%', padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }
+const btnSt: React.CSSProperties   = { background: '#2563eb', color: 'white', border: 'none', padding: '6px 14px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }
+const sectionLabel: React.CSSProperties = { fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: '#94a3b8', marginBottom: 4 }
