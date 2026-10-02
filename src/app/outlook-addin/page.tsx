@@ -9,9 +9,10 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
 
-type Client  = { id: string; name: string; type: string }
-type Meeting = { id: string; title: string; meeting_date: string; notes: string | null }
-type Task    = { id: string; title: string; status: string; priority: string; due_date: string | null; description: string | null; parent_task_id: string | null }
+type Client      = { id: string; name: string; type: string }
+type Meeting     = { id: string; title: string; meeting_date: string; notes: string | null }
+type Task        = { id: string; title: string; status: string; priority: string; due_date: string | null; description: string | null; parent_task_id: string | null }
+type AdviceEntry = { id: string; date: string; category: string; summary: string }
 
 const PRIO_DOT: Record<string, string> = {
   high: '#ef4444', medium: '#f59e0b', low: '#22c55e',
@@ -35,6 +36,7 @@ export default function OutlookAddinPage() {
   const [meetings, setMeetings]     = useState<Meeting[]>([])
   const [tasks, setTasks]           = useState<Task[]>([])
   const [subTaskMap, setSubTaskMap] = useState<Record<string, Task[]>>({})
+  const [adviceLogs, setAdviceLogs] = useState<AdviceEntry[]>([])
   const [loading, setLoading]       = useState(false)
   const [ofContext, setOfContext]   = useState<string | null>(null)
 
@@ -84,12 +86,14 @@ export default function OutlookAddinPage() {
   }
 
   async function selectClient(c: Client) {
-    setSelected(c); setResults([]); setLoading(true); setEditingId(null); setSubTaskMap({})
-    const [{ data: m }, { data: parentT }] = await Promise.all([
-      supabase.from('meetings').select('id,title,meeting_date,notes').eq('client_id', c.id).order('meeting_date', { ascending: false }).limit(5),
+    setSelected(c); setResults([]); setLoading(true); setEditingId(null); setSubTaskMap({}); setAdviceLogs([])
+    const [{ data: m }, { data: parentT }, { data: al }] = await Promise.all([
+      supabase.from('meetings').select('id,title,meeting_date,notes').eq('client_id', c.id).order('meeting_date', { ascending: false }).limit(3),
       supabase.from('tasks').select('id,title,status,priority,due_date,description,parent_task_id').eq('client_id', c.id).is('parent_task_id', null).in('status', ['open', 'in_progress']).order('due_date', { ascending: true, nullsFirst: false }).limit(50),
+      supabase.from('advice_log').select('id,date,category,summary').eq('client_id', c.id).order('date', { ascending: false }).limit(3),
     ])
     setMeetings((m ?? []) as Meeting[])
+    setAdviceLogs((al ?? []) as AdviceEntry[])
     const parents = (parentT ?? []) as Task[]
     setTasks(parents)
     const parentIds = parents.map(t => t.id)
@@ -315,22 +319,48 @@ export default function OutlookAddinPage() {
 
           {/* Recent meetings */}
           {meetings.length > 0 && (
-            <div>
+            <div style={{ marginBottom: 8 }}>
               <div style={sectionLabel}>Recent meetings</div>
-              {meetings.map(m => (
-                <div key={m.id} style={{ padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{m.title}</span>
-                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{format(parseISO(m.meeting_date), 'd MMM yyyy')}</span>
+              <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+                {meetings.map(m => (
+                  <div key={m.id} style={{ padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 500 }}>{m.title}</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0, marginLeft: 6 }}>{format(parseISO(m.meeting_date), 'd MMM yyyy')}</span>
+                    </div>
+                    {m.notes && <p style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{m.notes}</p>}
                   </div>
-                  {m.notes && <p style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{m.notes}</p>}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
-          {!tasks.length && !meetings.length && (
-            <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>No open tasks or meetings</p>
+          {/* Advice log */}
+          {adviceLogs.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={sectionLabel}>Advice log</div>
+              <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+                {adviceLogs.map(a => (
+                  <div key={a.id} style={{ padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', padding: '1px 6px', borderRadius: 10, flexShrink: 0 }}>
+                        {a.category}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+                        {format(parseISO(a.date), 'd MMM yyyy')}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 11, color: '#374151', marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                      {a.summary}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!tasks.length && !meetings.length && !adviceLogs.length && (
+            <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>No open tasks, meetings or advice</p>
           )}
         </div>
       )}
