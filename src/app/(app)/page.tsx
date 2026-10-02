@@ -106,9 +106,9 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 gap-6">
         {/* My tasks */}
-        <div className="col-span-3">
+        <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">My Tasks</h2>
             <Link href="/tasks" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
@@ -116,40 +116,41 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          {!myTasks?.length ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-              <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-slate-500 text-sm">No open tasks assigned to you</p>
-            </div>
-          ) : (
-            <DashboardTaskList
-              tasks={myTasks as any[]}
-              profiles={profiles ?? []}
-              currentUserId={user.id}
-            />
-          )}
+          <div className="max-h-[420px] overflow-y-auto pr-0.5">
+            {!myTasks?.length ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-slate-500 text-sm">No open tasks assigned to you</p>
+              </div>
+            ) : (
+              <DashboardTaskList
+                tasks={myTasks as any[]}
+                profiles={profiles ?? []}
+                currentUserId={user.id}
+              />
+            )}
+          </div>
         </div>
 
-        {/* Right column: recently viewed + team tasks */}
-        <div className="col-span-2 space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Recently Viewed</h2>
-              <div className="flex items-center gap-2">
-                <Link href="/clients/bulk-upload" className="text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1">
-                  <Upload size={11} />Bulk import
-                </Link>
-                <Link href="/clients/new" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-                  <Plus size={12} />Add
-                </Link>
-              </div>
+        {/* Recently viewed */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Recently Viewed</h2>
+            <div className="flex items-center gap-2">
+              <Link href="/clients/bulk-upload" className="text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1">
+                <Upload size={11} />Bulk import
+              </Link>
+              <Link href="/clients/new" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                <Plus size={12} />Add
+              </Link>
             </div>
-            <RecentlyViewed />
-            <Link href="/clients" className="block text-center text-xs text-slate-500 hover:text-slate-700 pt-2 mt-1">
-              View all clients →
-            </Link>
           </div>
-
+          <div className="max-h-[420px] overflow-y-auto pr-0.5">
+            <RecentlyViewed />
+          </div>
+          <Link href="/clients" className="block text-center text-xs text-slate-500 hover:text-slate-700 pt-2 mt-1">
+            View all clients →
+          </Link>
         </div>
       </div>
 

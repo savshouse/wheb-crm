@@ -94,6 +94,7 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
           <p className="text-sm text-slate-400">No open tasks for {selected?.full_name ?? selected?.email}</p>
         </div>
       ) : (
+        <div className="max-h-[320px] overflow-y-auto pr-0.5">
         <div className="space-y-1.5">
           {tasks.map(task => (
             <div
@@ -124,6 +125,7 @@ export default function TeamTasks({ currentUserId }: { currentUserId: string }) 
               </div>
             </div>
           ))}
+        </div>
         </div>
       )}
 
