@@ -1,4 +1,4 @@
-import { Download, Chrome, Mail, ExternalLink, CheckCircle2 } from 'lucide-react'
+import { Download, Globe, Mail, ExternalLink, CheckCircle2 } from 'lucide-react'
 
 const MANIFEST_URL = 'https://wheb-crm.vercel.app/outlook-manifest.xml'
 const APP_URL = 'https://wheb-crm.vercel.app'
@@ -152,7 +152,7 @@ export default function AddInsPage() {
 
         {/* Edge PWA */}
         <Section
-          icon={<Chrome size={20} className="text-green-600" />}
+          icon={<Globe size={20} className="text-green-600" />}
           title="Edge — Install as an App (PWA)"
           subtitle="Pin the CRM to your taskbar and open it like a desktop app with no browser chrome"
           accent="bg-slate-50"
