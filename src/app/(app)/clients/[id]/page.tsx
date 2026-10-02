@@ -14,6 +14,8 @@ import MeetingHistoryToggle from './MeetingHistoryToggle'
 import ClientActivityLog from './ClientActivityLog'
 import PersonBenefits from './PersonBenefits'
 import EmployerBenefits from './EmployerBenefits'
+import CollapsibleTimeline from './CollapsibleTimeline'
+import AdviceLog from './AdviceLog'
 import RemindersBell from '@/components/RemindersBell'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
@@ -96,7 +98,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
   const taskIds = (tasks ?? []).map((t: any) => t.id)
   const meetingIds = (meetings ?? []).map((m: any) => m.id)
 
-  const [{ data: taskHistory }, { data: meetingHistory }, { data: clientActivity }] = await Promise.all([
+  const [{ data: taskHistory }, { data: meetingHistory }, { data: clientActivity }, { data: adviceLog }] = await Promise.all([
     taskIds.length > 0
       ? supabase
           .from('task_history')
@@ -118,6 +120,12 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
       .limit(100),
+    supabase
+      .from('advice_log')
+      .select('id, date, category, summary, meeting_id, task_id, created_at, meeting:meetings(id, title), task:tasks(id, title)')
+      .eq('client_id', id)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false }),
   ])
 
   // Resolve employer from allCorporates (avoids self-referential FK join)
@@ -148,15 +156,6 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
 
   type MeetingRow = Meeting & { creator: BasicProfile | null; tasks: { id: string }[] }
   type TaskRow    = Task & { assignee: BasicProfile | null; meeting: { title: string } | null }
-
-  type TimelineItem =
-    | { type: 'meeting'; date: string; meeting: MeetingRow }
-    | { type: 'task_completed'; date: string; task: TaskRow }
-
-  const timeline: TimelineItem[] = [
-    ...((meetings as MeetingRow[] | null)?.map(m => ({ type: 'meeting' as const, date: m.meeting_date, meeting: m })) ?? []),
-    ...((completedTasks as TaskRow[] | null)?.map(t => ({ type: 'task_completed' as const, date: t.completed_at ?? t.updated_at, task: t })) ?? []),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   // Group task history by task_id
   const historyByTask: Record<string, any[]> = {}
@@ -311,45 +310,44 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </div>
           )}
 
-          {/* Timeline */}
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Activity timeline</h2>
+          {/* Advice log */}
+          <AdviceLog
+            clientId={id}
+            entries={(adviceLog ?? []) as any[]}
+            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+            tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
+          />
 
-          {!timeline.length ? (
-            <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
-              <Calendar size={32} className="mx-auto text-slate-300 mb-3" />
-              <p className="text-slate-500 text-sm font-medium">No activity yet</p>
-              <p className="text-slate-400 text-xs mt-1 mb-4">Log a meeting to start tracking this client</p>
-              <Link
-                href={`/clients/${id}/meetings/new`}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                <Plus size={15} />
-                Log first meeting
-              </Link>
-            </div>
-          ) : (
-            <div className="relative">
-              <div className="absolute left-4 top-0 bottom-0 w-px bg-slate-200" />
-              <div className="space-y-4">
-                {timeline.map(item => {
-                  if (item.type === 'meeting') {
-                    const m = item.meeting
+          {/* Activity timelines — meetings (left) and completed tasks (right) */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Meetings timeline */}
+            <CollapsibleTimeline
+              title="Meetings"
+              count={(meetings ?? []).length}
+              icon={<Calendar size={15} />}
+              accentClass="text-blue-500"
+              emptyMessage="No meetings logged yet"
+            >
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-slate-200" />
+                <div className="space-y-4">
+                  {(meetings as MeetingRow[] ?? []).map(m => {
                     const taskCount = m.tasks?.length ?? 0
                     return (
-                      <div key={`m-${m.id}`} className="relative pl-10">
+                      <div key={m.id} className="relative pl-10">
                         <div className="absolute left-2 top-3 w-5 h-5 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
                           <Calendar size={10} className="text-white" />
                         </div>
                         <div className="bg-white rounded-xl border border-slate-200 p-4">
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Meeting</span>
                                 <span className="text-xs text-slate-400">
                                   {format(parseISO(m.meeting_date), 'd MMM yyyy')}
                                 </span>
                               </div>
-                              <h3 className="font-semibold text-slate-900 mt-0.5">{m.title}</h3>
+                              <h3 className="font-semibold text-slate-900 mt-0.5 truncate">{m.title}</h3>
                               {m.notes && (
                                 <p className="text-sm text-slate-600 mt-2 line-clamp-3">{m.notes}</p>
                               )}
@@ -375,26 +373,35 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                         </div>
                       </div>
                     )
-                  }
-
-                  if (item.type === 'task_completed') {
-                    const t = item.task
-                    return (
-                      <CompletedTaskCard
-                        key={`tc-${t.id}`}
-                        task={t as any}
-                        clientId={id}
-                        history={historyByTask[t.id] ?? []}
-                        date={item.date}
-                      />
-                    )
-                  }
-
-                  return null
-                })}
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            </CollapsibleTimeline>
+
+            {/* Completed tasks timeline */}
+            <CollapsibleTimeline
+              title="Completed tasks"
+              count={completedTasks.length}
+              icon={<CheckSquare size={15} />}
+              accentClass="text-green-500"
+              emptyMessage="No completed tasks yet"
+            >
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-slate-200" />
+                <div className="space-y-4">
+                  {(completedTasks as TaskRow[]).map(t => (
+                    <CompletedTaskCard
+                      key={t.id}
+                      task={t as any}
+                      clientId={id}
+                      history={historyByTask[t.id] ?? []}
+                      date={t.completed_at ?? (t as any).updated_at}
+                    />
+                  ))}
+                </div>
+              </div>
+            </CollapsibleTimeline>
+          </div>
         </div>
 
         {/* Task panel */}
