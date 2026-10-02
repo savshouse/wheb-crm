@@ -16,6 +16,7 @@ import {
   BarChart2,
   Download,
   HardDrive,
+  Puzzle,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -145,6 +146,17 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
             >
               <HardDrive size={18} className="shrink-0" />
               Backups
+            </Link>
+            <Link
+              href="/admin/add-ins"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/admin/add-ins')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Puzzle size={18} className="shrink-0" />
+              Add-ins
             </Link>
           </>
         )}
