@@ -201,11 +201,22 @@ export default function AddInsPage() {
             on click, and lets you work on tasks in a side panel — all without leaving your
             current page. It works in both Edge and Chrome.
           </p>
-          <p className="text-sm font-semibold text-slate-700 mb-2">Step 1 — Get the extension folder</p>
+
+          {/* Download button */}
+          <a
+            href="/wheb-crm-extension.zip"
+            download="wheb-crm-extension.zip"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors mb-6"
+          >
+            <Download size={15} />
+            Download extension (.zip)
+          </a>
+
+          <p className="text-sm font-semibold text-slate-700 mb-2">Step 1 — Unzip the download</p>
           <p className="text-sm text-slate-600 mb-4">
-            The extension lives in the <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code> folder
-            inside the WHEB CRM repository on GitHub. Download or clone the repo, or ask Mike to
-            share the <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">chrome-extension</code> folder directly.
+            Extract the downloaded <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">wheb-crm-extension.zip</code> to
+            a permanent folder on your computer (e.g. <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">Documents\WHEB Extension</code>).
+            Do not delete this folder after installing — Edge needs it to stay in place.
           </p>
           <p className="text-sm font-semibold text-slate-700 mb-2">Step 2 — Load in Edge</p>
           <ol className="space-y-3 mb-4">
