@@ -72,7 +72,10 @@ Rules:
     const raw = data.content[0]?.text ?? ''
     console.log('[AI] Claude response:', raw)
 
-    const parsed = JSON.parse(raw.trim()) as { tasks?: unknown[] }
+    // Strip markdown code fences if present
+    const cleaned = raw.trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    const parsed = JSON.parse(cleaned) as { tasks?: unknown[] }
 
     if (!parsed.tasks?.length) {
       return NextResponse.json({ tasks: [] })
