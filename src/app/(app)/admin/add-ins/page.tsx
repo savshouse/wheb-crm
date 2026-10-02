@@ -167,16 +167,16 @@ export default function AddInsPage() {
               and sign in.
             </Step>
             <Step n={2}>
-              Click the <strong>…</strong> menu (top-right) → <strong>Apps</strong> →
-              <strong> Install this site as an app</strong>.
+              Click the <strong>…</strong> menu (top-right), hover over <strong>More tools</strong>,
+              then click <strong>Apps</strong> → <strong>Install this site as an app</strong>.
             </Step>
             <Step n={3}>
               In the dialog that appears, confirm the name (<em>WHEB CRM</em>) and click
               <strong> Install</strong>.
             </Step>
             <Step n={4}>
-              Edge will open the app in its own window and pin it to your taskbar.
-              You can also find it in <strong>Start → All Apps</strong>.
+              Edge will open the app in its own window and also pin a <strong>WH</strong> icon to
+              your Windows taskbar. You can find it in <strong>Start → All Apps</strong> too.
             </Step>
           </ol>
           <div className="mt-4 flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
@@ -184,6 +184,46 @@ export default function AddInsPage() {
             <p className="text-xs text-slate-600">
               The install icon (⊕) also appears directly in the Edge address bar when you visit
               the app — click it for a one-step install.
+            </p>
+          </div>
+        </Section>
+
+        {/* Edge toolbar add-in */}
+        <Section
+          icon={<Globe size={20} className="text-blue-500" />}
+          title="Edge — Toolbar Popup (quick access)"
+          subtitle="Pin WHEB CRM as a one-click popup icon in the Edge browser toolbar"
+          accent="bg-slate-50"
+        >
+          <p className="text-sm text-slate-600 mb-4">
+            Once the app is installed (step above), you can pin it as a compact popup directly
+            in the Edge toolbar — so you can check tasks and clients without leaving your current tab.
+          </p>
+          <ol className="space-y-3">
+            <Step n={1}>
+              In Edge, go to{' '}
+              <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">edge://apps</code>
+              {' '}in the address bar and press <kbd className="bg-slate-100 border border-slate-300 rounded px-1 py-0.5 text-xs">Enter</kbd>.
+            </Step>
+            <Step n={2}>
+              Find <strong>WHEB CRM</strong> in the list, click the <strong>…</strong> (three dots)
+              next to it, and choose <strong>Show button in toolbar</strong>.
+            </Step>
+            <Step n={3}>
+              A <strong>WH</strong> icon will appear in the Edge toolbar next to the address bar.
+              Click it at any time to open a compact popup showing your tasks, clients, meetings
+              and reports — without leaving your current page.
+            </Step>
+            <Step n={4}>
+              To remove the toolbar button, go back to <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">edge://apps</code>,
+              click <strong>…</strong> next to WHEB CRM and choose <strong>Hide button from toolbar</strong>.
+            </Step>
+          </ol>
+          <div className="mt-4 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            <CheckCircle2 size={15} className="text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-800">
+              The toolbar popup is the quickest way to check overdue tasks or look up a client
+              mid-email — no need to switch windows.
             </p>
           </div>
         </Section>
