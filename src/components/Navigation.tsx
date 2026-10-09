@@ -18,6 +18,7 @@ import {
   HardDrive,
   Puzzle,
   Store,
+  Route,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -28,6 +29,7 @@ const navItems = [
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/reports', label: 'Reports', icon: BarChart2 },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
+  { href: '/journeys', label: 'Journeys', icon: Route },
 ]
 
 type Props = {
@@ -158,6 +160,17 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
             >
               <Puzzle size={18} className="shrink-0" />
               Add-ins
+            </Link>
+            <Link
+              href="/admin/journey-templates"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/admin/journey-templates')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Route size={18} className="shrink-0" />
+              Journey Templates
             </Link>
             <Link
               href="/admin/store-submission"

@@ -16,6 +16,7 @@ import PersonBenefits from './PersonBenefits'
 import EmployerBenefits from './EmployerBenefits'
 import CollapsibleTimeline from './CollapsibleTimeline'
 import AdviceLog from './AdviceLog'
+import ClientJourneys from './ClientJourneys'
 import RemindersBell from '@/components/RemindersBell'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
@@ -43,6 +44,8 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
     { data: allIndividuals },
     { data: allCorporates },
     { data: templates },
+    { data: journeys },
+    { data: journeyTemplates },
   ] = await Promise.all([
     supabase
       .from('clients')
@@ -89,6 +92,21 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
     supabase
       .from('task_templates')
       .select('id, name, items:task_template_items(id, title, priority, order_index, relative_due_days)')
+      .order('name'),
+    supabase
+      .from('advice_journeys')
+      .select(`
+        id, title, category, status, created_at, completed_at,
+        assignee:profiles!advice_journeys_assigned_to_fkey(id, full_name, email),
+        steps:advice_journey_steps(id, step_order, name, status)
+      `)
+      .eq('client_id', id)
+      .in('status', ['active', 'complete'])
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('advice_journey_templates')
+      .select('id, name, category, description, steps, is_active')
+      .eq('is_active', true)
       .order('name'),
   ])
 
@@ -309,6 +327,17 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
               </div>
             </div>
           )}
+
+          {/* Advice journeys */}
+          <ClientJourneys
+            clientId={id}
+            clientName={client.name}
+            journeys={(journeys ?? []) as any[]}
+            templates={(journeyTemplates ?? []) as any[]}
+            profiles={(profiles ?? []) as any[]}
+            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+            currentUserId={user.id}
+          />
 
           {/* Advice log */}
           <AdviceLog
