@@ -18,7 +18,6 @@ export default async function JourneysPage() {
         assignee:profiles!advice_journeys_assigned_to_fkey(id, full_name, email),
         steps:advice_journey_steps(id, step_order, name, status)
       `)
-      .in('status', ['active', 'complete'])
       .order('created_at', { ascending: false }),
     supabase.from('profiles').select('id, full_name, email').order('full_name'),
   ])

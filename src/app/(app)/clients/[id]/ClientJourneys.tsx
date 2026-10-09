@@ -38,12 +38,14 @@ export default function ClientJourneys({
 }: Props) {
   const [showModal, setShowModal] = useState(false)
 
-  const activeJourneys   = journeys.filter(j => j.status === 'active')
+  const activeJourneys    = journeys.filter(j => j.status === 'active')
   const completedJourneys = journeys.filter(j => j.status === 'complete')
+  const cancelledJourneys = journeys.filter(j => j.status === 'cancelled')
 
   const statusColor: Record<string, string> = {
-    active:   'bg-green-100 text-green-700',
-    complete: 'bg-blue-100 text-blue-700',
+    active:    'bg-green-100 text-green-700',
+    complete:  'bg-blue-100 text-blue-700',
+    cancelled: 'bg-slate-100 text-slate-500',
   }
 
   function JourneyCard({ j }: { j: Journey }) {
@@ -133,6 +135,12 @@ export default function ClientJourneys({
               <>
                 <p className="text-xs text-slate-400 pt-1">Completed</p>
                 {completedJourneys.slice(0, 3).map(j => <JourneyCard key={j.id} j={j} />)}
+              </>
+            )}
+            {cancelledJourneys.length > 0 && (
+              <>
+                <p className="text-xs text-slate-400 pt-1">Cancelled</p>
+                {cancelledJourneys.slice(0, 3).map(j => <JourneyCard key={j.id} j={j} />)}
               </>
             )}
           </div>

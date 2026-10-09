@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
-import { Route, Clock, User, ChevronRight } from 'lucide-react'
+import { Route, Clock, User, ChevronRight, Search, X } from 'lucide-react'
 
 type Profile = { id: string; full_name: string | null; email: string }
 
@@ -27,40 +27,77 @@ type Props = {
   currentUserId: string
 }
 
+type StatusFilter = 'active' | 'complete' | 'cancelled' | 'all'
+
 export default function JourneysFilter({ journeys, profiles, currentUserId }: Props) {
-  const [filterStatus,   setFilterStatus]   = useState<'active' | 'complete' | 'all'>('active')
+  const [filterStatus,   setFilterStatus]   = useState<StatusFilter>('active')
   const [filterAssignee, setFilterAssignee] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [searchText,     setSearchText]     = useState('')
 
   const categories = [...new Set(journeys.map(j => j.category))].sort()
+
+  const search = searchText.trim().toLowerCase()
 
   const filtered = journeys.filter(j => {
     if (filterStatus !== 'all' && j.status !== filterStatus) return false
     if (filterAssignee !== 'all' && j.assignee?.id !== filterAssignee) return false
     if (filterCategory !== 'all' && j.category !== filterCategory) return false
+    if (search) {
+      const hay = `${j.title} ${j.client?.name ?? ''}`.toLowerCase()
+      if (!hay.includes(search)) return false
+    }
     return true
   })
 
   const statusColor: Record<string, string> = {
-    active:   'bg-green-100 text-green-700',
-    complete: 'bg-blue-100 text-blue-700',
+    active:    'bg-green-100 text-green-700',
+    complete:  'bg-blue-100 text-blue-700',
     cancelled: 'bg-slate-100 text-slate-500',
   }
+
+  const STATUS_TABS: { value: StatusFilter; label: string }[] = [
+    { value: 'active',    label: 'Active' },
+    { value: 'complete',  label: 'Complete' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'all',       label: 'All' },
+  ]
 
   return (
     <div>
       {/* Filter bar */}
       <div className="flex flex-wrap gap-3 mb-5">
+        {/* Status tabs */}
         <div className="flex rounded-lg border border-slate-300 overflow-hidden text-sm">
-          {(['active', 'complete', 'all'] as const).map(s => (
+          {STATUS_TABS.map(({ value, label }) => (
             <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={`px-4 py-1.5 font-medium capitalize transition-colors ${filterStatus === s ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              key={value}
+              onClick={() => setFilterStatus(value)}
+              className={`px-4 py-1.5 font-medium transition-colors ${filterStatus === value ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
             >
-              {s}
+              {label}
             </button>
           ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="Search journeys…"
+            className="pl-8 pr-8 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+          />
+          {searchText && (
+            <button
+              onClick={() => setSearchText('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
 
         <select
@@ -134,12 +171,16 @@ export default function JourneysFilter({ journeys, profiles, currentUserId }: Pr
                   {/* Progress bar + current step */}
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                      <span>{j.currentStep ? j.currentStep.name : (j.status === 'complete' ? 'Complete' : '—')}</span>
+                      <span>{j.currentStep ? j.currentStep.name : (j.status === 'complete' ? 'Complete' : j.status === 'cancelled' ? 'Cancelled' : '—')}</span>
                       <span>{j.doneCount}/{totalSteps} steps</span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${j.status === 'complete' ? 'bg-green-500' : 'bg-blue-500'}`}
+                        className={`h-full rounded-full transition-all ${
+                          j.status === 'complete'  ? 'bg-green-500' :
+                          j.status === 'cancelled' ? 'bg-slate-400' :
+                          'bg-blue-500'
+                        }`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>

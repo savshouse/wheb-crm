@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
 import { syncTaskOnSave, getValidAccessToken, deleteTodoTask } from '@/lib/microsoft-graph'
+import { checkJourneyStepAdvance } from './journey-actions'
 
 // ─── Clients ─────────────────────────────────────────────────
 
@@ -543,8 +544,10 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
   })
 
   syncTaskOnSave(taskId).catch(console.error)
+  checkJourneyStepAdvance(taskId, status).catch(console.error)
   revalidatePath(`/clients/${clientId}`)
   revalidatePath('/tasks')
+  revalidatePath('/journeys')
   revalidatePath('/')
 }
 

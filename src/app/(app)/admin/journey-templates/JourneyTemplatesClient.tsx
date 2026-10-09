@@ -2,31 +2,56 @@
 
 import { useState, useTransition } from 'react'
 import { saveJourneyTemplate } from '@/app/journey-actions'
-import { Plus, Pencil, GripVertical, X, Check, ToggleLeft, ToggleRight, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, GripVertical, X, Check, ToggleLeft, ToggleRight, ChevronDown, ChevronRight, Link2 } from 'lucide-react'
+
+type StepDef = { name: string; task_template_id: string | null }
 
 type Template = {
   id: string
   name: string
   category: string
   description: string | null
-  steps: string[]
+  steps: StepDef[]
   is_active: boolean
 }
 
-type Props = { initialTemplates: Template[] }
+type TaskTemplate = { id: string; name: string }
 
-export default function JourneyTemplatesClient({ initialTemplates }: Props) {
-  const [templates, setTemplates] = useState<Template[]>(initialTemplates)
+type Props = {
+  initialTemplates: Template[]
+  taskTemplates: TaskTemplate[]
+}
+
+function normaliseSteps(raw: any[]): StepDef[] {
+  return (raw ?? []).map(s =>
+    typeof s === 'string' ? { name: s, task_template_id: null } : s
+  )
+}
+
+export default function JourneyTemplatesClient({ initialTemplates, taskTemplates }: Props) {
+  const [templates, setTemplates] = useState<Template[]>(
+    initialTemplates.map(t => ({ ...t, steps: normaliseSteps(t.steps as any[]) }))
+  )
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const blankForm = { name: '', category: '', description: '', steps: [''], is_active: true }
+  const blankForm = {
+    name: '', category: '', description: '',
+    steps: [{ name: '', task_template_id: null }] as StepDef[],
+    is_active: true,
+  }
   const [form, setForm] = useState(blankForm)
 
   function startEdit(t: Template) {
-    setForm({ name: t.name, category: t.category, description: t.description ?? '', steps: t.steps.length ? [...t.steps] : [''], is_active: t.is_active })
+    setForm({
+      name: t.name,
+      category: t.category,
+      description: t.description ?? '',
+      steps: t.steps.length ? t.steps.map(s => ({ ...s })) : [{ name: '', task_template_id: null }],
+      is_active: t.is_active,
+    })
     setEditingId(t.id)
     setExpandedId(t.id)
     setSaveError(null)
@@ -44,7 +69,7 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
   }
 
   function addStep() {
-    setForm(f => ({ ...f, steps: [...f.steps, ''] }))
+    setForm(f => ({ ...f, steps: [...f.steps, { name: '', task_template_id: null }] }))
   }
 
   function removeStep(i: number) {
@@ -60,12 +85,16 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
     })
   }
 
-  function updateStep(i: number, val: string) {
-    setForm(f => { const steps = [...f.steps]; steps[i] = val; return { ...f, steps } })
+  function updateStepName(i: number, name: string) {
+    setForm(f => { const steps = [...f.steps]; steps[i] = { ...steps[i], name }; return { ...f, steps } })
+  }
+
+  function updateStepTemplate(i: number, task_template_id: string | null) {
+    setForm(f => { const steps = [...f.steps]; steps[i] = { ...steps[i], task_template_id }; return { ...f, steps } })
   }
 
   function handleSave() {
-    const steps = form.steps.map(s => s.trim()).filter(Boolean)
+    const steps = form.steps.map(s => ({ ...s, name: s.name.trim() })).filter(s => s.name)
     if (!form.name.trim()) { setSaveError('Name is required'); return }
     if (!form.category.trim()) { setSaveError('Category is required'); return }
     if (steps.length === 0) { setSaveError('At least one step is required'); return }
@@ -78,11 +107,10 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
       if (error) { setSaveError(error); return }
 
       if (editingId === 'new') {
-        // Re-fetch not available from client; reload
         window.location.reload()
       } else {
         setTemplates(ts => ts.map(t => t.id === editingId
-          ? { ...t, name: form.name, category: form.category, description: form.description || null, steps, is_active: form.is_active }
+          ? { ...t, name: form.name.trim(), category: form.category.trim(), description: form.description.trim() || null, steps, is_active: form.is_active }
           : t
         ))
         setEditingId(null)
@@ -92,7 +120,10 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
 
   function toggleActive(t: Template) {
     startTransition(async () => {
-      const { error } = await saveJourneyTemplate(t.id, { ...t, description: t.description ?? '', steps: t.steps, is_active: !t.is_active })
+      const { error } = await saveJourneyTemplate(t.id, {
+        name: t.name, category: t.category, description: t.description ?? '',
+        steps: t.steps, is_active: !t.is_active,
+      })
       if (!error) setTemplates(ts => ts.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x))
     })
   }
@@ -126,16 +157,25 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
             </button>
           </div>
 
-          {/* Steps preview or edit form */}
+          {/* Steps preview */}
           {expandedId === t.id && editingId !== t.id && (
             <div className="px-5 pb-4 border-t border-slate-100">
-              <div className="flex flex-wrap gap-2 mt-3">
-                {t.steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                    {step}
-                  </div>
-                ))}
+              <div className="flex flex-col gap-2 mt-3">
+                {t.steps.map((step, i) => {
+                  const linked = taskTemplates.find(tt => tt.id === step.task_template_id)
+                  return (
+                    <div key={i} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700">
+                      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                      <span className="flex-1">{step.name}</span>
+                      {linked && (
+                        <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                          <Link2 size={10} />
+                          {linked.name}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -144,10 +184,12 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
             <EditForm
               form={form}
               setForm={setForm}
+              taskTemplates={taskTemplates}
               onAddStep={addStep}
               onRemoveStep={removeStep}
               onMoveStep={moveStep}
-              onUpdateStep={updateStep}
+              onUpdateStepName={updateStepName}
+              onUpdateStepTemplate={updateStepTemplate}
               onSave={handleSave}
               onCancel={cancelEdit}
               isPending={isPending}
@@ -166,10 +208,12 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
           <EditForm
             form={form}
             setForm={setForm}
+            taskTemplates={taskTemplates}
             onAddStep={addStep}
             onRemoveStep={removeStep}
             onMoveStep={moveStep}
-            onUpdateStep={updateStep}
+            onUpdateStepName={updateStepName}
+            onUpdateStepTemplate={updateStepTemplate}
             onSave={handleSave}
             onCancel={cancelEdit}
             isPending={isPending}
@@ -190,19 +234,21 @@ export default function JourneyTemplatesClient({ initialTemplates }: Props) {
 }
 
 type FormProps = {
-  form: { name: string; category: string; description: string; steps: string[]; is_active: boolean }
+  form: { name: string; category: string; description: string; steps: StepDef[]; is_active: boolean }
   setForm: React.Dispatch<React.SetStateAction<any>>
+  taskTemplates: TaskTemplate[]
   onAddStep: () => void
   onRemoveStep: (i: number) => void
   onMoveStep: (from: number, to: number) => void
-  onUpdateStep: (i: number, val: string) => void
+  onUpdateStepName: (i: number, val: string) => void
+  onUpdateStepTemplate: (i: number, id: string | null) => void
   onSave: () => void
   onCancel: () => void
   isPending: boolean
   saveError: string | null
 }
 
-function EditForm({ form, setForm, onAddStep, onRemoveStep, onMoveStep, onUpdateStep, onSave, onCancel, isPending, saveError }: FormProps) {
+function EditForm({ form, setForm, taskTemplates, onAddStep, onRemoveStep, onMoveStep, onUpdateStepName, onUpdateStepTemplate, onSave, onCancel, isPending, saveError }: FormProps) {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
   return (
@@ -238,9 +284,12 @@ function EditForm({ form, setForm, onAddStep, onRemoveStep, onMoveStep, onUpdate
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-slate-700 mb-2">Steps (in order) *</label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-medium text-slate-700">Steps (in order) *</label>
+          <span className="text-xs text-slate-400">Optionally link a task template to auto-create tasks when the step activates</span>
+        </div>
         <div className="space-y-2">
-          {form.steps.map((step: string, i: number) => (
+          {form.steps.map((step: StepDef, i: number) => (
             <div
               key={i}
               draggable
@@ -252,13 +301,25 @@ function EditForm({ form, setForm, onAddStep, onRemoveStep, onMoveStep, onUpdate
               <GripVertical size={14} className="text-slate-300 shrink-0 cursor-grab" />
               <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
               <input
-                value={step}
-                onChange={e => onUpdateStep(i, e.target.value)}
+                value={step.name}
+                onChange={e => onUpdateStepName(i, e.target.value)}
                 className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder={`Step ${i + 1} name`}
               />
+              {/* Task template picker */}
+              <select
+                value={step.task_template_id ?? ''}
+                onChange={e => onUpdateStepTemplate(i, e.target.value || null)}
+                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-600 min-w-0 max-w-44"
+                title="Link a task template"
+              >
+                <option value="">No task template</option>
+                {taskTemplates.map(tt => (
+                  <option key={tt.id} value={tt.id}>{tt.name}</option>
+                ))}
+              </select>
               {form.steps.length > 1 && (
-                <button onClick={() => onRemoveStep(i)} className="text-slate-400 hover:text-red-500 transition-colors">
+                <button onClick={() => onRemoveStep(i)} className="text-slate-400 hover:text-red-500 transition-colors shrink-0">
                   <X size={14} />
                 </button>
               )}

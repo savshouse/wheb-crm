@@ -101,7 +101,6 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
         steps:advice_journey_steps(id, step_order, name, status)
       `)
       .eq('client_id', id)
-      .in('status', ['active', 'complete'])
       .order('created_at', { ascending: false }),
     supabase
       .from('advice_journey_templates')

@@ -5,11 +5,13 @@ import Link from 'next/link'
 import { format, parseISO, differenceInDays, isPast } from 'date-fns'
 import {
   User, Calendar, CheckCircle2, Circle, Clock,
-  ChevronRight, Plus, X, Check, AlertCircle, Ban,
-  ExternalLink, Route,
+  Plus, X, Check, AlertCircle, Ban, ExternalLink,
+  RotateCcw, Trash2, AlertTriangle,
 } from 'lucide-react'
-import { completeJourneyStep, addTaskToStep, completeStepTask, updateJourneyStatus } from '@/app/journey-actions'
+import { completeJourneyStep, addTaskToStep, completeStepTask, updateJourneyStatus, reopenJourneyStep, deleteJourney } from '@/app/journey-actions'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import TaskModal from '@/app/(app)/tasks/TaskModal'
 
 type Profile = { id: string; full_name: string | null; email: string }
 
@@ -52,6 +54,7 @@ type Props = {
   journey: Journey
   profiles: Profile[]
   currentUserId: string
+  userRole: string
 }
 
 const priorityBadge: Record<string, string> = {
@@ -60,8 +63,10 @@ const priorityBadge: Record<string, string> = {
   high:   'bg-red-100 text-red-700',
 }
 
-export default function JourneyDetail({ journey, profiles, currentUserId }: Props) {
-  const router = useRouter()
+export default function JourneyDetail({ journey, profiles, currentUserId, userRole }: Props) {
+  const router  = useRouter()
+  const supabase = createClient()
+
   const [isPending, startTransition] = useTransition()
   const [addingToStep, setAddingToStep] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -70,13 +75,36 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
   const [newTaskPriority, setNewTaskPriority] = useState('medium')
   const [error, setError] = useState<string | null>(null)
 
+  // TaskModal state
+  const [selectedTask, setSelectedTask] = useState<any | null>(null)
+
+  // Delete journey confirmation
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
   const sortedSteps = [...journey.steps].sort((a, b) => a.step_order - b.step_order)
   const daysOpen    = differenceInDays(new Date(), parseISO(journey.created_at))
   const clientHref  = journey.client ? `/clients/${journey.client.id}` : '#'
 
+  async function openTask(task: StepTask) {
+    const { data } = await supabase
+      .from('tasks')
+      .select('*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)')
+      .eq('id', task.id)
+      .single()
+    if (data) setSelectedTask(data)
+  }
+
   function handleCompleteStep(step: Step) {
     startTransition(async () => {
       const { error } = await completeJourneyStep(step.id, journey.id)
+      if (error) setError(error)
+      else router.refresh()
+    })
+  }
+
+  function handleReopenStep(step: Step) {
+    startTransition(async () => {
+      const { error } = await reopenJourneyStep(step.id, journey.id)
       if (error) setError(error)
       else router.refresh()
     })
@@ -109,11 +137,19 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
     })
   }
 
-  function handleStatusChange(status: 'complete' | 'cancelled') {
+  function handleStatusChange(status: 'complete' | 'cancelled' | 'active') {
     startTransition(async () => {
       const { error } = await updateJourneyStatus(journey.id, status)
       if (error) setError(error)
       else router.refresh()
+    })
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      const { error } = await deleteJourney(journey.id)
+      if (error) { setError(error); return }
+      router.push('/journeys')
     })
   }
 
@@ -131,6 +167,18 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
 
   return (
     <div className="p-6 max-w-3xl">
+      {/* TaskModal */}
+      {selectedTask && (
+        <TaskModal
+          task={selectedTask}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onClose={() => setSelectedTask(null)}
+          onSaved={() => { setSelectedTask(null); router.refresh() }}
+          onDeleted={() => { setSelectedTask(null); router.refresh() }}
+        />
+      )}
+
       {/* Journey header card */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
         <div className="flex items-start justify-between gap-4">
@@ -177,26 +225,55 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
             )}
           </div>
 
-          {journey.status === 'active' && (
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {journey.status === 'active' && (
+              <>
+                <button
+                  onClick={() => handleStatusChange('complete')}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  <Check size={13} />
+                  Complete
+                </button>
+                <button
+                  onClick={() => handleStatusChange('cancelled')}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                >
+                  <Ban size={13} />
+                  Cancel
+                </button>
+              </>
+            )}
+            {(journey.status === 'cancelled' || journey.status === 'complete') && (
               <button
-                onClick={() => handleStatusChange('complete')}
-                disabled={isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                <Check size={13} />
-                Complete
-              </button>
-              <button
-                onClick={() => handleStatusChange('cancelled')}
+                onClick={() => handleStatusChange('active')}
                 disabled={isPending}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
               >
-                <Ban size={13} />
-                Cancel
+                <RotateCcw size={13} />
+                Reopen
               </button>
-            </div>
-          )}
+            )}
+            {userRole === 'admin' && !confirmDelete && (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            )}
+            {userRole === 'admin' && confirmDelete && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                <AlertTriangle size={13} className="text-red-600" />
+                <span className="text-xs text-red-700">Delete permanently?</span>
+                <button onClick={handleDelete} disabled={isPending} className="text-xs font-semibold text-red-700 hover:text-red-900 disabled:opacity-50">Yes</button>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs text-slate-500 hover:text-slate-700">No</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -210,11 +287,11 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
 
       {/* Step pipeline */}
       <div className="space-y-3">
-        {sortedSteps.map((step, idx) => {
-          const openTasks    = step.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
-          const doneTasks    = step.tasks.filter(t => t.status === 'completed')
-          const isActive     = step.status === 'in_progress'
-          const isComplete   = step.status === 'complete'
+        {sortedSteps.map((step) => {
+          const openTasks  = step.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+          const doneTasks  = step.tasks.filter(t => t.status === 'completed')
+          const isActive   = step.status === 'in_progress'
+          const isComplete = step.status === 'complete'
           const isAddingHere = addingToStep === step.id
 
           return (
@@ -222,7 +299,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
               key={step.id}
               className={`bg-white rounded-2xl border transition-all ${
                 isActive   ? 'border-blue-300 shadow-sm' :
-                isComplete ? 'border-slate-100 opacity-75' :
+                isComplete ? 'border-slate-100 opacity-80' :
                              'border-slate-200'
               }`}
             >
@@ -244,27 +321,40 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
                     {format(parseISO(step.completed_at), 'd MMM')}
                   </span>
                 )}
-                {isActive && journey.status === 'active' && (
-                  <button
-                    onClick={() => handleCompleteStep(step)}
-                    disabled={isPending}
-                    title="Mark step complete"
-                    className="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:opacity-50 transition-colors shrink-0"
-                  >
-                    Complete step
-                  </button>
-                )}
+                {/* Step actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {isComplete && (
+                    <button
+                      onClick={() => handleReopenStep(step)}
+                      disabled={isPending}
+                      title="Reopen this step"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 disabled:opacity-50 transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw size={11} />
+                      Reopen
+                    </button>
+                  )}
+                  {isActive && journey.status === 'active' && (
+                    <button
+                      onClick={() => handleCompleteStep(step)}
+                      disabled={isPending}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:opacity-50 transition-colors"
+                    >
+                      Complete step
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Tasks */}
               {(step.tasks.length > 0 || isActive) && (
-                <div className="px-5 pb-4 border-t border-slate-100 pt-3 space-y-2">
+                <div className="px-5 pb-4 border-t border-slate-100 pt-3 space-y-1">
                   {step.tasks.map(task => {
                     const isTaskDone = task.status === 'completed' || task.status === 'cancelled'
                     const isOverdue  = task.due_date && !isTaskDone && isPast(parseISO(task.due_date))
 
                     return (
-                      <div key={task.id} className={`flex items-center gap-3 py-1 ${isTaskDone ? 'opacity-50' : ''}`}>
+                      <div key={task.id} className={`flex items-center gap-3 py-1 group ${isTaskDone ? 'opacity-50' : ''}`}>
                         <button
                           onClick={() => !isTaskDone && handleCompleteTask(task, step)}
                           disabled={isPending || isTaskDone}
@@ -275,9 +365,13 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
                             : <Circle size={16} />
                           }
                         </button>
-                        <span className={`flex-1 text-sm ${isTaskDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                        {/* Clickable task title → opens TaskModal */}
+                        <button
+                          onClick={() => openTask(task)}
+                          className={`flex-1 text-sm text-left hover:text-blue-600 transition-colors ${isTaskDone ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                        >
                           {task.title}
-                        </span>
+                        </button>
                         <div className="flex items-center gap-2 shrink-0">
                           {task.priority && (
                             <span className={`text-xs px-1.5 py-0.5 rounded-full ${priorityBadge[task.priority] ?? ''}`}>
@@ -339,12 +433,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId }: Prop
                           </select>
                         </div>
                         <div className="flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => setAddingToStep(null)}
-                            className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700"
-                          >
-                            Cancel
-                          </button>
+                          <button onClick={() => setAddingToStep(null)} className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700">Cancel</button>
                           <button
                             onClick={() => handleAddTask(step)}
                             disabled={isPending || !newTaskTitle.trim()}

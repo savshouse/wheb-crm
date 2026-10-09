@@ -10,7 +10,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: journey }, { data: profiles }] = await Promise.all([
+  const [{ data: journey }, { data: profiles }, { data: profile }] = await Promise.all([
     supabase
       .from('advice_journeys')
       .select(`
@@ -27,6 +27,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
       .eq('id', id)
       .single(),
     supabase.from('profiles').select('id, full_name, email').order('full_name'),
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
   ])
 
   if (!journey) notFound()
@@ -44,6 +45,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
           journey={journey as any}
           profiles={(profiles ?? []) as any[]}
           currentUserId={user.id}
+          userRole={profile?.role ?? 'user'}
         />
       </div>
     </div>
