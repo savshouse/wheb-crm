@@ -12,6 +12,7 @@ import {
   Building2,
   Users,
   ChevronRight,
+  ChevronDown,
   LayoutTemplate,
   BarChart2,
   Download,
@@ -19,17 +20,34 @@ import {
   Puzzle,
   Store,
   Route,
+  Wrench,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/clients', label: 'Companies', icon: Building2 },
-  { href: '/people', label: 'People', icon: Users },
-  { href: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { href: '/reports', label: 'Reports', icon: BarChart2 },
-  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { href: '/journeys', label: 'Journeys', icon: Route },
+  { href: '/',         label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/clients',  label: 'Companies', icon: Building2 },
+  { href: '/people',   label: 'People',    icon: Users },
+  { href: '/tasks',    label: 'Tasks',     icon: CheckSquare },
+  { href: '/reports',  label: 'Reports',   icon: BarChart2 },
+  { href: '/journeys', label: 'Journeys',  icon: Route },
+]
+
+const adminTemplateItems = [
+  { href: '/admin/journey-templates', label: 'Journey Templates', icon: Route },
+  { href: '/templates',               label: 'Task Templates',    icon: LayoutTemplate },
+]
+
+const adminTechnicalItems = [
+  { href: '/admin/add-ins',          label: 'Add-ins',          icon: Puzzle },
+  { href: '/admin/backups',          label: 'Backups',          icon: HardDrive },
+  { href: '/admin/export',           label: 'Export Data',      icon: Download },
+  { href: '/admin/store-submission', label: 'Store Submission', icon: Store },
+]
+
+const adminRoutes = [
+  '/admin/',
+  '/templates',
 ]
 
 type Props = {
@@ -39,12 +57,20 @@ type Props = {
 }
 
 export default function Navigation({ userEmail, userName, userRole }: Props) {
-  const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
-  const [viewedClientType, setViewedClientType] = useState<string | null>(null)
+  const pathname  = usePathname()
+  const router    = useRouter()
+  const supabase  = createClient()
 
-  // When viewing a client detail page, read the cached type so we highlight the correct nav item
+  const [viewedClientType, setViewedClientType] = useState<string | null>(null)
+  const [adminOpen, setAdminOpen] = useState(false)
+
+  // Auto-open admin section when on an admin route
+  useEffect(() => {
+    const onAdmin = adminRoutes.some(r => pathname.startsWith(r))
+    if (onAdmin) setAdminOpen(true)
+  }, [pathname])
+
+  // Cache client type for correct nav highlight on detail pages
   useEffect(() => {
     const match = pathname.match(/^\/clients\/([^/]+)/)
     if (match) {
@@ -66,13 +92,26 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
 
   function isActive(href: string) {
     if (href === '/') return pathname === '/'
-    // When on a client detail page, use the cached type to determine which section is active
     if (pathname.startsWith('/clients/')) {
       if (href === '/clients') return viewedClientType !== 'individual'
       if (href === '/people')  return viewedClientType === 'individual'
     }
     return pathname.startsWith(href)
   }
+
+  const linkClass = (href: string) =>
+    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+      isActive(href)
+        ? 'bg-blue-600 text-white'
+        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    }`
+
+  const subLinkClass = (href: string) =>
+    `flex items-center gap-3 pl-5 pr-3 py-2 rounded-lg text-sm transition-colors ${
+      isActive(href)
+        ? 'bg-blue-600 text-white font-medium'
+        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+    }`
 
   return (
     <aside className="w-60 shrink-0 flex flex-col h-full bg-slate-900 text-slate-100">
@@ -95,95 +134,64 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group ${
-              isActive(href)
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
+          <Link key={href} href={href} className={linkClass(href)}>
             <Icon size={18} className="shrink-0" />
             {label}
-            {isActive(href) && (
-              <ChevronRight size={14} className="ml-auto opacity-60" />
-            )}
+            {isActive(href) && <ChevronRight size={14} className="ml-auto opacity-60" />}
           </Link>
         ))}
 
         {userRole === 'admin' && (
-          <>
-            <div className="pt-4 pb-1 px-3">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Admin</p>
-            </div>
-            <Link
-              href="/admin/users"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/users')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
+          <div className="pt-3">
+            {/* Collapsible Admin header */}
+            <button
+              onClick={() => setAdminOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 uppercase tracking-wider hover:text-slate-300 hover:bg-slate-800 transition-colors"
             >
-              <Settings size={18} className="shrink-0" />
-              Users & Roles
-            </Link>
-            <Link
-              href="/admin/export"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/export')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Download size={18} className="shrink-0" />
-              Export Data
-            </Link>
-            <Link
-              href="/admin/backups"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/backups')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <HardDrive size={18} className="shrink-0" />
-              Backups
-            </Link>
-            <Link
-              href="/admin/add-ins"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/add-ins')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Puzzle size={18} className="shrink-0" />
-              Add-ins
-            </Link>
-            <Link
-              href="/admin/journey-templates"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/journey-templates')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Route size={18} className="shrink-0" />
-              Journey Templates
-            </Link>
-            <Link
-              href="/admin/store-submission"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive('/admin/store-submission')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Store size={18} className="shrink-0" />
-              Store Submission
-            </Link>
-          </>
+              Admin
+              {adminOpen
+                ? <ChevronDown size={13} className="opacity-60" />
+                : <ChevronRight size={13} className="opacity-60" />
+              }
+            </button>
+
+            {adminOpen && (
+              <div className="mt-0.5 space-y-0.5">
+
+                {/* Users & Roles */}
+                <Link href="/admin/users" className={linkClass('/admin/users')}>
+                  <Settings size={18} className="shrink-0" />
+                  Users & Roles
+                  {isActive('/admin/users') && <ChevronRight size={14} className="ml-auto opacity-60" />}
+                </Link>
+
+                {/* Templates sub-group */}
+                <div className="pt-2 pb-0.5 px-3">
+                  <p className="text-xs text-slate-600 uppercase tracking-wider">Templates</p>
+                </div>
+                {adminTemplateItems.map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href} className={subLinkClass(href)}>
+                    <Icon size={16} className="shrink-0" />
+                    {label}
+                    {isActive(href) && <ChevronRight size={13} className="ml-auto opacity-60" />}
+                  </Link>
+                ))}
+
+                {/* Technical sub-group */}
+                <div className="pt-2 pb-0.5 px-3">
+                  <p className="text-xs text-slate-600 uppercase tracking-wider">Technical</p>
+                </div>
+                {adminTechnicalItems.map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href} className={subLinkClass(href)}>
+                    <Icon size={16} className="shrink-0" />
+                    {label}
+                    {isActive(href) && <ChevronRight size={13} className="ml-auto opacity-60" />}
+                  </Link>
+                ))}
+
+              </div>
+            )}
+          </div>
         )}
       </nav>
 
