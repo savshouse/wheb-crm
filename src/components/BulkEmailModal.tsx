@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { sendBulkEmail, type Recipient, type EmailAttachment } from '@/app/email-actions'
 import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Search, Paperclip, UserMinus, Plus } from 'lucide-react'
+import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
 
 type Template = {
   id:       string
@@ -22,9 +23,13 @@ function mergeVars(template: string, vars: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`)
 }
 
-function buildVars(r: Recipient) {
+function buildVars(r: Recipient): Record<string, string> {
   const parts = r.full_name?.split(' ') ?? []
-  return { first_name: parts[0] ?? '', full_name: r.full_name ?? '', email: r.email, employer: r.employer ?? '', account_manager: r.account_manager ?? '' }
+  const base: Record<string, string> = { first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') }
+  for (const [k, v] of Object.entries(r)) {
+    if (!(k in base)) base[k] = v ?? ''
+  }
+  return base
 }
 
 export default function BulkEmailModal({ recipients: initialRecipients, onClose }: Props) {

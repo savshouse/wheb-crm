@@ -15,14 +15,15 @@ function mergeVars(template: string, vars: Record<string, string>): string {
 
 function buildVars(recipient: Recipient): Record<string, string> {
   const nameParts = recipient.full_name?.split(' ') ?? []
-  return {
-    first_name:      nameParts[0]  ?? '',
-    last_name:       nameParts.slice(1).join(' ') ?? '',
-    full_name:       recipient.full_name ?? '',
-    email:           recipient.email,
-    employer:        recipient.employer ?? '',
-    account_manager: recipient.account_manager ?? '',
+  const base: Record<string, string> = {
+    first_name: nameParts[0] ?? '',
+    last_name:  nameParts.slice(1).join(' '),
   }
+  // All other Recipient fields become merge vars directly
+  for (const [k, v] of Object.entries(recipient)) {
+    if (!(k in base)) base[k] = v ?? ''
+  }
+  return base
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

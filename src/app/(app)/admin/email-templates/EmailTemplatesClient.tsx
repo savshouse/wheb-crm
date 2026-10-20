@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { saveEmailTemplate, deleteEmailTemplate } from '@/app/email-actions'
 import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
+import { UNLAYER_MERGE_TAGS } from '@/lib/merge-tags'
 
 // Load Unlayer editor client-side only (it uses browser APIs)
 const EmailEditor = dynamic(() => import('react-email-editor'), { ssr: false, loading: () => (
@@ -28,14 +29,6 @@ type Template = {
 
 type Props = { initialTemplates: Template[] }
 
-// Unlayer merge tags config — shows in the editor toolbar
-const MERGE_TAGS = {
-  first_name:      { name: 'First Name',       value: '{{first_name}}' },
-  full_name:       { name: 'Full Name',         value: '{{full_name}}' },
-  email:           { name: 'Email Address',     value: '{{email}}' },
-  employer:        { name: 'Employer',          value: '{{employer}}' },
-  account_manager: { name: 'Account Manager',  value: '{{account_manager}}' },
-}
 
 export default function EmailTemplatesClient({ initialTemplates }: Props) {
   const [templates, setTemplates] = useState<Template[]>(initialTemplates)
@@ -283,7 +276,7 @@ function EditorPanel({ form, setForm, initialDesign, onSave, onCancel, isPending
           onReady={handleReady}
           minHeight={600}
           options={{
-            mergeTags: MERGE_TAGS,
+            mergeTags: UNLAYER_MERGE_TAGS,
             features: { preheaderText: false },
             appearance: { theme: 'light', panels: { tools: { dock: 'left' } } },
           }}

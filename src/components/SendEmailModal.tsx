@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { sendSingleEmail, type Recipient, type EmailAttachment } from '@/app/email-actions'
 import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Paperclip, Plus } from 'lucide-react'
+import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
 
 type Template = { id: string; name: string; category: string | null; subject: string; html_body: string }
 
@@ -35,7 +36,8 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
 
   const template = templates.find(t => t.id === templateId)
   const nameParts = recipient.full_name?.split(' ') ?? []
-  const vars = { first_name: nameParts[0] ?? '', full_name: recipient.full_name ?? '', email: recipient.email, employer: recipient.employer ?? '', account_manager: recipient.account_manager ?? '' }
+  const vars: Record<string, string> = { first_name: nameParts[0] ?? '', last_name: nameParts.slice(1).join(' ') }
+  for (const [k, v] of Object.entries(recipient)) { if (!(k in vars)) vars[k] = v ?? '' }
 
   const previewSubject = template ? mergeVars(template.subject, vars) : ''
   const previewHtml    = template ? mergeVars(template.html_body, vars) : ''
