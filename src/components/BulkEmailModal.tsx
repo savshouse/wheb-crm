@@ -191,7 +191,7 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
     if (!templateId || !selected.length) return
     startTransition(async () => {
       const res = await emailApi({ op: 'sendBulk', templateId, recipients: selected, cc: ccList, attachments })
-      setResult(res)
+      setResult({ sent: res.sent ?? 0, error: res.error })
     })
   }
 
