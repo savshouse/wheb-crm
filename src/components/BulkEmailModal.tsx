@@ -2,7 +2,18 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { sendBulkEmail, type Recipient, type EmailAttachment } from '@/app/email-actions'
+import type { Recipient, EmailAttachment } from '@/lib/email-types'
+
+async function emailApi(body: Record<string, unknown>): Promise<{ sent?: number; error: string | null }> {
+  try {
+    const res = await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const json = await res.json()
+    if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+    return json
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) }
+  }
+}
 import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Search, Paperclip, UserMinus, Plus, Filter } from 'lucide-react'
 import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
 
@@ -179,7 +190,7 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   function handleSend() {
     if (!templateId || !selected.length) return
     startTransition(async () => {
-      const res = await sendBulkEmail({ templateId, recipients: selected, cc: ccList, attachments })
+      const res = await emailApi({ op: 'sendBulk', templateId, recipients: selected, cc: ccList, attachments })
       setResult(res)
     })
   }

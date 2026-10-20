@@ -7,7 +7,7 @@ import { Plus, Users, Search, Upload, Mail } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
 import DataTable, { ColumnDef } from '@/components/DataTable'
 import BulkEmailModal from '@/components/BulkEmailModal'
-import type { Recipient } from '@/app/email-actions'
+import type { Recipient } from '@/lib/email-types'
 
 type Person = {
   id: string

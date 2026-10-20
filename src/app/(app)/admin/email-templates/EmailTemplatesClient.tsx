@@ -2,8 +2,18 @@
 
 import { useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
-import { deleteEmailTemplate } from '@/app/email-actions'
 import { createClient } from '@/lib/supabase/client'
+
+async function emailApi(body: Record<string, unknown>): Promise<{ error: string | null }> {
+  try {
+    const res = await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const json = await res.json()
+    if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+    return json
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) }
+  }
+}
 import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
 import { UNLAYER_MERGE_TAGS } from '@/lib/merge-tags'
@@ -106,7 +116,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
 
   function handleDelete(id: string) {
     startTransition(async () => {
-      const { error } = await deleteEmailTemplate(id)
+      const { error } = await emailApi({ op: 'deleteTemplate', id })
       if (!error) {
         setTemplates(ts => ts.filter(t => t.id !== id))
         setConfirmDelete(null)

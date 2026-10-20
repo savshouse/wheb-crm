@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Mail } from 'lucide-react'
 import SendEmailModal from '@/components/SendEmailModal'
-import type { Recipient } from '@/app/email-actions'
+import type { Recipient } from '@/lib/email-types'
 
 type Props = {
   recipient: Recipient
