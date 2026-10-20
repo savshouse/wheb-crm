@@ -1,32 +1,41 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
+import dynamic from 'next/dynamic'
 import { saveEmailTemplate, deleteEmailTemplate } from '@/app/email-actions'
-import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, Code2, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
+import type { EditorRef } from 'react-email-editor'
+
+// Load Unlayer editor client-side only (it uses browser APIs)
+const EmailEditor = dynamic(() => import('react-email-editor'), { ssr: false, loading: () => (
+  <div className="flex items-center justify-center h-[600px] bg-slate-50 rounded-xl border border-slate-200">
+    <div className="flex items-center gap-2 text-slate-400 text-sm">
+      <Loader2 size={16} className="animate-spin" />
+      Loading editor…
+    </div>
+  </div>
+) })
 
 type Template = {
-  id: string
-  name: string
-  category: string | null
-  subject: string
-  html_body: string
-  created_at: string
+  id:          string
+  name:        string
+  category:    string | null
+  subject:     string
+  html_body:   string
+  design_json: any | null
+  created_at:  string
 }
 
 type Props = { initialTemplates: Template[] }
 
-const VARIABLES = ['{{first_name}}', '{{full_name}}', '{{email}}', '{{employer}}', '{{account_manager}}']
-
-const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b;">
-  <h2 style="margin: 0 0 16px;">Hello {{first_name}},</h2>
-  <p style="margin: 0 0 16px; line-height: 1.6;">
-    Your message here.
-  </p>
-  <p style="margin: 0; color: #64748b; font-size: 13px;">
-    Warren House Employee Benefits Ltd<br/>
-    <a href="mailto:info@warren-house.co.uk" style="color: #3b82f6;">info@warren-house.co.uk</a>
-  </p>
-</div>`
+// Unlayer merge tags config — shows in the editor toolbar
+const MERGE_TAGS = {
+  first_name:      { name: 'First Name',       value: '{{first_name}}' },
+  full_name:       { name: 'Full Name',         value: '{{full_name}}' },
+  email:           { name: 'Email Address',     value: '{{email}}' },
+  employer:        { name: 'Employer',          value: '{{employer}}' },
+  account_manager: { name: 'Account Manager',  value: '{{account_manager}}' },
+}
 
 export default function EmailTemplatesClient({ initialTemplates }: Props) {
   const [templates, setTemplates] = useState<Template[]>(initialTemplates)
@@ -36,11 +45,13 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
-  const blank = { name: '', category: '', subject: '', html_body: STARTER_HTML }
+  const blank = { name: '', category: '', subject: '' }
   const [form, setForm] = useState(blank)
+  const [editingDesign, setEditingDesign] = useState<any | null>(null)
 
   function startEdit(t: Template) {
-    setForm({ name: t.name, category: t.category ?? '', subject: t.subject, html_body: t.html_body })
+    setForm({ name: t.name, category: t.category ?? '', subject: t.subject })
+    setEditingDesign(t.design_json ?? null)
     setEditingId(t.id)
     setExpandedId(t.id)
     setSaveError(null)
@@ -48,6 +59,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
 
   function startNew() {
     setForm(blank)
+    setEditingDesign(null)
     setEditingId('new')
     setSaveError(null)
   }
@@ -57,21 +69,24 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
     setSaveError(null)
   }
 
-  function handleSave() {
+  function handleSave(html: string, design: any) {
     if (!form.name.trim())    { setSaveError('Name is required'); return }
     if (!form.subject.trim()) { setSaveError('Subject is required'); return }
-    if (!form.html_body.trim()) { setSaveError('HTML body is required'); return }
+    if (!html.trim())         { setSaveError('Email body is empty'); return }
 
     startTransition(async () => {
       const { error } = await saveEmailTemplate(
         editingId === 'new' ? null : editingId,
-        { name: form.name.trim(), category: form.category.trim(), subject: form.subject.trim(), html_body: form.html_body }
+        { name: form.name.trim(), category: form.category.trim(), subject: form.subject.trim(), html_body: html, design_json: design }
       )
       if (error) { setSaveError(error); return }
       if (editingId === 'new') {
         window.location.reload()
       } else {
-        setTemplates(ts => ts.map(t => t.id === editingId ? { ...t, ...form } : t))
+        setTemplates(ts => ts.map(t => t.id === editingId
+          ? { ...t, ...form, html_body: html, design_json: design }
+          : t
+        ))
         setEditingId(null)
       }
     })
@@ -114,7 +129,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
                 <button onClick={() => setConfirmDelete(null)} className="text-xs text-slate-500 hover:text-slate-700">No</button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => startEdit(t)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Edit">
                   <Pencil size={15} />
                 </button>
@@ -125,28 +140,32 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
             )}
           </div>
 
+          {/* Preview panel */}
           {expandedId === t.id && editingId !== t.id && (
             <div className="border-t border-slate-100">
-              <div className="px-5 py-3 bg-slate-50">
-                <p className="text-xs font-medium text-slate-500 mb-1">Subject</p>
-                <p className="text-sm text-slate-700">{t.subject}</p>
+              <div className="px-5 py-3 bg-slate-50 flex items-center gap-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Subject</p>
+                  <p className="text-sm text-slate-700 mt-0.5">{t.subject}</p>
+                </div>
               </div>
               <div className="px-5 py-3">
-                <p className="text-xs font-medium text-slate-500 mb-2">Preview</p>
+                <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1"><Eye size={11} /> Preview</p>
                 <iframe
                   srcDoc={t.html_body}
-                  className="w-full h-64 border border-slate-200 rounded-lg bg-white"
+                  className="w-full h-64 border border-slate-200 rounded-xl bg-white"
                   sandbox="allow-same-origin"
-                  title="Email preview"
+                  title="Preview"
                 />
               </div>
             </div>
           )}
 
           {editingId === t.id && (
-            <EditForm
+            <EditorPanel
               form={form}
               setForm={setForm}
+              initialDesign={editingDesign}
               onSave={handleSave}
               onCancel={cancelEdit}
               isPending={isPending}
@@ -159,12 +178,14 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
 
       {editingId === 'new' ? (
         <div className="bg-white rounded-2xl border border-blue-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="px-5 py-4 border-b border-slate-100 bg-blue-50">
             <p className="text-sm font-semibold text-slate-900">New email template</p>
+            <p className="text-xs text-slate-500 mt-0.5">Drag blocks from the left panel to build your email. Use the # merge tag button to insert personalisation fields.</p>
           </div>
-          <EditForm
+          <EditorPanel
             form={form}
             setForm={setForm}
+            initialDesign={null}
             onSave={handleSave}
             onCancel={cancelEdit}
             isPending={isPending}
@@ -185,22 +206,42 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
   )
 }
 
-type FormProps = {
-  form: { name: string; category: string; subject: string; html_body: string }
-  setForm: React.Dispatch<React.SetStateAction<any>>
-  onSave: () => void
-  onCancel: () => void
-  isPending: boolean
-  saveError: string | null
-  setSaveError: (e: string | null) => void
+// ─── Editor panel ─────────────────────────────────────────────────────────────
+
+type EditorProps = {
+  form:           { name: string; category: string; subject: string }
+  setForm:        React.Dispatch<React.SetStateAction<any>>
+  initialDesign:  any | null
+  onSave:         (html: string, design: any) => void
+  onCancel:       () => void
+  isPending:      boolean
+  saveError:      string | null
+  setSaveError:   (e: string | null) => void
 }
 
-function EditForm({ form, setForm, onSave, onCancel, isPending, saveError, setSaveError }: FormProps) {
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit')
+function EditorPanel({ form, setForm, initialDesign, onSave, onCancel, isPending, saveError, setSaveError }: EditorProps) {
+  const editorRef = useRef<EditorRef>(null)
+  const [editorReady, setEditorReady] = useState(false)
+
+  function handleReady() {
+    setEditorReady(true)
+    if (initialDesign) {
+      editorRef.current?.editor?.loadDesign(initialDesign)
+    }
+  }
+
+  function handleSaveClick() {
+    if (!form.name.trim())    { setSaveError('Name is required'); return }
+    if (!form.subject.trim()) { setSaveError('Subject is required'); return }
+    editorRef.current?.editor?.exportHtml((data: any) => {
+      onSave(data.html, data.design)
+    })
+  }
 
   return (
-    <div className="px-5 py-4 space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="p-5 space-y-4">
+      {/* Meta fields */}
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">Template name *</label>
           <input
@@ -219,70 +260,34 @@ function EditForm({ form, setForm, onSave, onCancel, isPending, saveError, setSa
             placeholder="e.g. Onboarding"
           />
         </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">Email subject *</label>
+          <input
+            value={form.subject}
+            onChange={e => { setForm((f: any) => ({ ...f, subject: e.target.value })); setSaveError(null) }}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Welcome to your benefits, {{first_name}}"
+          />
+        </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-slate-700 mb-1">Subject *</label>
-        <input
-          value={form.subject}
-          onChange={e => { setForm((f: any) => ({ ...f, subject: e.target.value })); setSaveError(null) }}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="e.g. Welcome to your employee benefits, {{first_name}}"
+      {/* Merge tag hint */}
+      <p className="text-xs text-slate-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+        <strong>Merge fields:</strong> click the <strong>#</strong> button in the text editor toolbar to insert personalisation (First Name, Full Name, Employer, etc.) — or type <code className="bg-white px-1 rounded">{'{{first_name}}'}</code> directly.
+      </p>
+
+      {/* Unlayer visual editor */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <EmailEditor
+          ref={editorRef}
+          onReady={handleReady}
+          minHeight={600}
+          options={{
+            mergeTags: MERGE_TAGS,
+            features: { preheaderText: false },
+            appearance: { theme: 'light', panels: { tools: { dock: 'left' } } },
+          }}
         />
-      </div>
-
-      {/* Variable chips */}
-      <div>
-        <p className="text-xs text-slate-500 mb-1.5">Available merge fields — click to copy:</p>
-        <div className="flex flex-wrap gap-1.5">
-          {VARIABLES.map(v => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => navigator.clipboard.writeText(v)}
-              className="text-xs px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-mono transition-colors"
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* HTML editor with preview tab */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <label className="text-xs font-medium text-slate-700">HTML body *</label>
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden ml-auto">
-            <button
-              onClick={() => setTab('edit')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium transition-colors ${tab === 'edit' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Code2 size={11} /> HTML
-            </button>
-            <button
-              onClick={() => setTab('preview')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium transition-colors ${tab === 'preview' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Eye size={11} /> Preview
-            </button>
-          </div>
-        </div>
-        {tab === 'edit' ? (
-          <textarea
-            value={form.html_body}
-            onChange={e => { setForm((f: any) => ({ ...f, html_body: e.target.value })); setSaveError(null) }}
-            rows={16}
-            spellCheck={false}
-            className="w-full font-mono text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-          />
-        ) : (
-          <iframe
-            srcDoc={form.html_body}
-            className="w-full h-96 border border-slate-200 rounded-lg bg-white"
-            sandbox="allow-same-origin"
-            title="Preview"
-          />
-        )}
       </div>
 
       {saveError && <p className="text-xs text-red-600">{saveError}</p>}
@@ -292,11 +297,11 @@ function EditForm({ form, setForm, onSave, onCancel, isPending, saveError, setSa
           Cancel
         </button>
         <button
-          onClick={onSave}
-          disabled={isPending}
+          onClick={handleSaveClick}
+          disabled={isPending || !editorReady}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          <Check size={14} />
+          {isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           {isPending ? 'Saving…' : 'Save template'}
         </button>
       </div>

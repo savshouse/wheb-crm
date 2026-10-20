@@ -9,7 +9,7 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'WHEB <no-reply@warren-house
 
 // ─── Variable substitution ────────────────────────────────────────────────────
 
-function merge(template: string, vars: Record<string, string>): string {
+function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`)
 }
 
@@ -35,17 +35,35 @@ export type Recipient = {
   account_manager: string | null
 }
 
+export type EmailAttachment = {
+  filename: string
+  content:  string  // base64
+}
+
 // ─── Template CRUD ────────────────────────────────────────────────────────────
 
 export async function saveEmailTemplate(
   id: string | null,
-  payload: { name: string; category: string; subject: string; html_body: string }
+  payload: {
+    name:        string
+    category:    string
+    subject:     string
+    html_body:   string
+    design_json: any | null
+  }
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  const data = { ...payload, updated_at: new Date().toISOString() }
+  const data = {
+    name:        payload.name,
+    category:    payload.category,
+    subject:     payload.subject,
+    html_body:   payload.html_body,
+    design_json: payload.design_json ?? null,
+    updated_at:  new Date().toISOString(),
+  }
 
   if (id) {
     const { error } = await supabase.from('email_templates').update(data).eq('id', id)
@@ -74,8 +92,10 @@ export async function deleteEmailTemplate(id: string): Promise<{ error: string |
 // ─── Bulk send ────────────────────────────────────────────────────────────────
 
 export async function sendBulkEmail(payload: {
-  templateId: string
-  recipients: Recipient[]
+  templateId:  string
+  recipients:  Recipient[]
+  cc?:         string[]
+  attachments?: EmailAttachment[]
 }): Promise<{ sent: number; error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -83,7 +103,6 @@ export async function sendBulkEmail(payload: {
 
   if (!payload.recipients.length) return { sent: 0, error: 'No recipients' }
 
-  // Fetch template
   const { data: template } = await supabase
     .from('email_templates')
     .select('id, name, subject, html_body')
@@ -92,37 +111,38 @@ export async function sendBulkEmail(payload: {
 
   if (!template) return { sent: 0, error: 'Template not found' }
 
-  // Build batch messages
-  const messages = payload.recipients
-    .filter(r => r.email)
-    .map(r => {
-      const vars = buildVars(r)
-      return {
-        from:    FROM_EMAIL,
-        to:      r.email,
-        subject: merge(template.subject, vars),
-        html:    merge(template.html_body, vars),
-      }
-    })
+  const validRecipients = payload.recipients.filter(r => r.email)
+  if (!validRecipients.length) return { sent: 0, error: 'No recipients with email addresses' }
 
-  if (!messages.length) return { sent: 0, error: 'No recipients with email addresses' }
+  // Build attachments (base64 → Buffer)
+  const resendAttachments = (payload.attachments ?? []).map(a => ({
+    filename: a.filename,
+    content:  Buffer.from(a.content, 'base64'),
+  }))
 
-  // Resend batch (max 100 per call)
-  try {
-    const batches: typeof messages[] = []
-    for (let i = 0; i < messages.length; i += 100) {
-      batches.push(messages.slice(i, i + 100))
+  // Build batch — each recipient gets a personalised merge
+  const messages = validRecipients.map(r => {
+    const vars = buildVars(r)
+    return {
+      from:        FROM_EMAIL,
+      to:          r.email,
+      cc:          payload.cc?.filter(Boolean) ?? [],
+      subject:     mergeVars(template.subject, vars),
+      html:        mergeVars(template.html_body, vars),
+      attachments: resendAttachments,
     }
+  })
 
-    for (const batch of batches) {
-      const { error: sendError } = await resend.batch.send(batch)
+  try {
+    // Resend batch max 100 per call
+    for (let i = 0; i < messages.length; i += 100) {
+      const { error: sendError } = await resend.batch.send(messages.slice(i, i + 100))
       if (sendError) return { sent: 0, error: sendError.message }
     }
   } catch (err: any) {
     return { sent: 0, error: err?.message ?? 'Send failed' }
   }
 
-  // Log the send
   await supabase.from('email_sends').insert({
     template_id:     template.id,
     template_name:   template.name,
@@ -132,4 +152,32 @@ export async function sendBulkEmail(payload: {
   })
 
   return { sent: messages.length, error: null }
+}
+
+// ─── Single send (from client/person page) ───────────────────────────────────
+
+export async function sendSingleEmail(payload: {
+  templateId:  string
+  recipient:   Recipient
+  cc?:         string[]
+  attachments?: EmailAttachment[]
+}): Promise<{ error: string | null }> {
+  const result = await sendBulkEmail({
+    templateId:  payload.templateId,
+    recipients:  [payload.recipient],
+    cc:          payload.cc,
+    attachments: payload.attachments,
+  })
+  return { error: result.error }
+}
+
+// ─── Fetch templates (for client-side components) ───────────────────────────
+
+export async function getEmailTemplates(): Promise<{ id: string; name: string; category: string | null; subject: string; html_body: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('email_templates')
+    .select('id, name, category, subject, html_body')
+    .order('name')
+  return (data ?? []) as any[]
 }

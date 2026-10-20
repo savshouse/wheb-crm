@@ -18,6 +18,7 @@ import CollapsibleTimeline from './CollapsibleTimeline'
 import AdviceLog from './AdviceLog'
 import ClientJourneys from './ClientJourneys'
 import RemindersBell from '@/components/RemindersBell'
+import EmailButton from './EmailButton'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -254,6 +255,15 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isIndividual && client.email && (
+              <EmailButton recipient={{
+                id:              client.id,
+                email:           client.email,
+                full_name:       client.name,
+                employer:        null,
+                account_manager: (client.account_manager as any)?.full_name ?? (client.account_manager as any)?.email ?? null,
+              }} />
+            )}
             <Link
               href={`/clients/${id}/edit`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
