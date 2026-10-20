@@ -4,7 +4,7 @@ import { createActionClient } from '@/lib/supabase/server'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-type SupabaseClient = Awaited<ReturnType<typeof createClient>>
+type SupabaseClient = Awaited<ReturnType<typeof createActionClient>>
 
 /** Create tasks from a task_template linked to a journey step. */
 async function createTasksFromTemplate(
