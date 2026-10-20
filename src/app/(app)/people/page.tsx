@@ -3,9 +3,11 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Users, Search, Upload } from 'lucide-react'
+import { Plus, Users, Search, Upload, Mail } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
 import DataTable, { ColumnDef } from '@/components/DataTable'
+import BulkEmailModal from '@/components/BulkEmailModal'
+import type { Recipient } from '@/app/email-actions'
 
 type Person = {
   id: string
@@ -106,6 +108,7 @@ export default function PeoplePage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'prospect' | 'inactive'>('all')
   const [loading, setLoading] = useState(true)
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -144,14 +147,39 @@ export default function PeoplePage() {
     return true
   })
 
+  const emailRecipients: Recipient[] = filtered
+    .filter(p => p.email)
+    .map(p => ({
+      id:              p.id,
+      email:           p.email!,
+      full_name:       p.name,
+      employer:        p.employer?.name ?? null,
+      account_manager: p.account_manager?.full_name ?? p.account_manager?.email ?? null,
+    }))
+
   return (
     <div className="p-6">
+      {emailModalOpen && (
+        <BulkEmailModal
+          recipients={emailRecipients}
+          onClose={() => setEmailModalOpen(false)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">People</h1>
           <p className="text-sm text-slate-500 mt-0.5">{counts.active} active · {counts.prospect} prospects · {counts.inactive} inactive</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEmailModalOpen(true)}
+            disabled={emailRecipients.length === 0}
+            title={`Email ${emailRecipients.length} filtered people`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Mail size={15} />
+            Email ({emailRecipients.length})
+          </button>
           <Link href="/clients/bulk-upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
             <Upload size={15} />Bulk import
           </Link>

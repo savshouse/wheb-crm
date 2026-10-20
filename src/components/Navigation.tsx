@@ -21,6 +21,7 @@ import {
   Store,
   Route,
   Wrench,
+  Mail,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -34,6 +35,7 @@ const navItems = [
 ]
 
 const adminTemplateItems = [
+  { href: '/admin/email-templates',   label: 'Email Templates',   icon: Mail },
   { href: '/admin/journey-templates', label: 'Journey Templates', icon: Route },
   { href: '/templates',               label: 'Task Templates',    icon: LayoutTemplate },
 ]
@@ -48,6 +50,7 @@ const adminTechnicalItems = [
 const adminRoutes = [
   '/admin/',
   '/templates',
+  '/admin/email-templates',
 ]
 
 type Props = {
