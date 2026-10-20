@@ -48,13 +48,18 @@ export async function updateScheme(
     is_active: boolean
   }>
 ): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
-  if (error) return { error: error.message }
-  return { error: null }
+    const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[updateScheme]', e)
+    return { error: `DEBUG — ${e?.message ?? String(e)}` }
+  }
 }
 
 export async function deleteScheme(schemeId: string, employerId: string): Promise<{ error: string | null }> {
