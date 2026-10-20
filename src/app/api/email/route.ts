@@ -85,13 +85,25 @@ export async function POST(request: NextRequest) {
           if (sendError) return NextResponse.json({ sent: 0, error: sendError.message })
         }
 
-        await supabase.from('email_sends').insert({
+        const { data: sendRecord } = await supabase.from('email_sends').insert({
           template_id:     template.id,
           template_name:   template.name,
           subject:         template.subject,
           recipient_count: messages.length,
           sent_by:         user.id,
-        })
+          source:          'bulk',
+        }).select('id').single()
+
+        if (sendRecord) {
+          await supabase.from('email_send_recipients').insert(
+            validRecipients.map(r => ({
+              email_send_id: sendRecord.id,
+              client_id:     r.id || null,
+              email:         r.email,
+              full_name:     r.full_name,
+            }))
+          )
+        }
 
         return NextResponse.json({ sent: messages.length, error: null })
       }
@@ -129,13 +141,23 @@ export async function POST(request: NextRequest) {
         })
         if (sendError) return NextResponse.json({ error: sendError.message })
 
-        await supabase.from('email_sends').insert({
+        const { data: sendRecord } = await supabase.from('email_sends').insert({
           template_id:     template.id,
           template_name:   template.name,
           subject:         template.subject,
           recipient_count: 1,
           sent_by:         user.id,
-        })
+          source:          'single',
+        }).select('id').single()
+
+        if (sendRecord) {
+          await supabase.from('email_send_recipients').insert({
+            email_send_id: sendRecord.id,
+            client_id:     recipient.id || null,
+            email:         recipient.email,
+            full_name:     recipient.full_name,
+          })
+        }
 
         return NextResponse.json({ error: null })
       }

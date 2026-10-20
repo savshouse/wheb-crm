@@ -19,6 +19,7 @@ import AdviceLog from './AdviceLog'
 import ClientJourneys from './ClientJourneys'
 import RemindersBell from '@/components/RemindersBell'
 import EmailButton from './EmailButton'
+import ClientEmailHistory from './ClientEmailHistory'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -355,6 +356,9 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
             tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
           />
+
+          {/* Email history */}
+          <ClientEmailHistory clientId={id} />
 
           {/* Activity timelines — meetings (left) and completed tasks (right) */}
           <div className="grid grid-cols-2 gap-4">

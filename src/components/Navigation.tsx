@@ -30,6 +30,7 @@ const navItems = [
   { href: '/clients',  label: 'Companies', icon: Building2 },
   { href: '/people',   label: 'People',    icon: Users },
   { href: '/tasks',    label: 'Tasks',     icon: CheckSquare },
+  { href: '/emails',   label: 'Emails',    icon: Mail },
   { href: '/reports',  label: 'Reports',   icon: BarChart2 },
   { href: '/journeys', label: 'Journeys',  icon: Route },
 ]
