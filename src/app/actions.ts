@@ -952,28 +952,3 @@ export async function triggerBackup(): Promise<{
     return { error: err instanceof Error ? err.message : 'Backup failed' }
   }
 }
-
-// ─── Scheme save (diagnostic — imported by EmployerBenefits while actions-benefits.ts is broken) ───
-export async function updateSchemeFromActions(
-  schemeId: string,
-  employerId: string,
-  data: Partial<{
-    scheme_type: string
-    scheme_name: string
-    provider: string | null
-    policy_reference: string | null
-    salary_definition: string | null
-    cover_level: string | null
-    policy_wording_url: string | null
-    notes: string | null
-    is_active: boolean
-  }>
-): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
-  if (error) return { error: error.message }
-  return { error: null }
-}
