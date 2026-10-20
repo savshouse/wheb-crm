@@ -6,7 +6,7 @@ export default async function EmailTemplatesPage() {
 
   const { data: templates } = await supabase
     .from('email_templates')
-    .select('id, name, category, subject, html_body, created_at')
+    .select('id, name, category, subject, html_body, design_json, created_at')
     .order('name')
 
   return (

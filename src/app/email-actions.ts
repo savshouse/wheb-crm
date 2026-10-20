@@ -46,36 +46,38 @@ export type EmailAttachment = {
 export async function saveEmailTemplate(
   id: string | null,
   payload: {
-    name:        string
-    category:    string
-    subject:     string
-    html_body:   string
-    design_json: any | null
+    name:     string
+    category: string
+    subject:  string
+    html_body: string
   }
-): Promise<{ error: string | null }> {
+): Promise<{ id: string | null; error: string | null }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  if (!user) return { id: null, error: 'Unauthorized' }
 
   const data = {
-    name:        payload.name,
-    category:    payload.category,
-    subject:     payload.subject,
-    html_body:   payload.html_body,
-    design_json: payload.design_json ?? null,
-    updated_at:  new Date().toISOString(),
+    name:       payload.name,
+    category:   payload.category,
+    subject:    payload.subject,
+    html_body:  payload.html_body,
+    updated_at: new Date().toISOString(),
   }
 
   if (id) {
     const { error } = await supabase.from('email_templates').update(data).eq('id', id)
-    if (error) return { error: error.message }
+    if (error) return { id: null, error: error.message }
+    revalidatePath('/admin/email-templates')
+    return { id, error: null }
   } else {
-    const { error } = await supabase.from('email_templates').insert({ ...data, created_by: user.id })
-    if (error) return { error: error.message }
+    const { data: row, error } = await supabase.from('email_templates')
+      .insert({ ...data, created_by: user.id })
+      .select('id')
+      .single()
+    if (error) return { id: null, error: error.message }
+    revalidatePath('/admin/email-templates')
+    return { id: row.id, error: null }
   }
-
-  revalidatePath('/admin/email-templates')
-  return { error: null }
 }
 
 export async function deleteEmailTemplate(id: string): Promise<{ error: string | null }> {

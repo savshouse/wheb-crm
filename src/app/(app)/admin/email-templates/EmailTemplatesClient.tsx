@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import { saveEmailTemplate, deleteEmailTemplate } from '@/app/email-actions'
+import { createClient } from '@/lib/supabase/client'
 import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
 import { UNLAYER_MERGE_TAGS } from '@/lib/merge-tags'
@@ -68,11 +69,19 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
     if (!html.trim())         { setSaveError('Email body is empty'); return }
 
     startTransition(async () => {
-      const { error } = await saveEmailTemplate(
+      const { id: savedId, error } = await saveEmailTemplate(
         editingId === 'new' ? null : editingId,
-        { name: form.name.trim(), category: form.category.trim(), subject: form.subject.trim(), html_body: html, design_json: design }
+        { name: form.name.trim(), category: form.category.trim(), subject: form.subject.trim(), html_body: html }
       )
       if (error) { setSaveError(error); return }
+
+      // Save design_json directly from browser client to avoid server action body size limits
+      const templateId = editingId === 'new' ? savedId : editingId
+      if (templateId && design) {
+        const supabase = createClient()
+        await supabase.from('email_templates').update({ design_json: design }).eq('id', templateId)
+      }
+
       if (editingId === 'new') {
         window.location.reload()
       } else {
