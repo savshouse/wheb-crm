@@ -3,8 +3,12 @@ import { createActionClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import type { Recipient, EmailAttachment } from '@/lib/email-types'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'WHEB <no-reply@warren-house.co.uk>'
+
+function getResend() {
+  if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set')
+  return new Resend(process.env.RESEND_API_KEY)
+}
 
 function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`)
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
         })
 
         for (let i = 0; i < messages.length; i += 100) {
-          const { error: sendError } = await resend.batch.send(messages.slice(i, i + 100))
+          const { error: sendError } = await getResend().batch.send(messages.slice(i, i + 100))
           if (sendError) return NextResponse.json({ sent: 0, error: sendError.message })
         }
 
@@ -115,7 +119,7 @@ export async function POST(request: NextRequest) {
           content:  Buffer.from(a.content, 'base64'),
         }))
 
-        const { error: sendError } = await resend.emails.send({
+        const { error: sendError } = await getResend().emails.send({
           from:        FROM_EMAIL,
           to:          recipient.email,
           cc:          cc?.filter(Boolean) ?? [],
