@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createActionClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
 import { syncTaskOnSave, getValidAccessToken, deleteTodoTask } from '@/lib/microsoft-graph'
@@ -10,7 +10,7 @@ import { checkJourneyStepAdvance } from './journey-actions'
 // ─── Clients ─────────────────────────────────────────────────
 
 export async function createClient_action(formData: FormData) {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -41,7 +41,7 @@ export async function updateClient(
   clientId: string,
   formData: FormData
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -133,7 +133,7 @@ export async function addRelationship(
   relationshipType: string,
   notes?: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -173,7 +173,7 @@ export async function removeRelationship(
   relationshipId: string,
   clientId: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -213,7 +213,7 @@ export async function updateEmployer(
   clientId: string,
   employerId: string | null
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -248,7 +248,7 @@ export async function updateEmployer(
 // ─── Meetings ────────────────────────────────────────────────
 
 export async function createMeeting(formData: FormData) {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -310,7 +310,7 @@ export async function createMeeting(formData: FormData) {
 // ─── Tasks ───────────────────────────────────────────────────
 
 export async function createTask(formData: FormData) {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -349,7 +349,7 @@ export async function createSubTask(data: {
   clientId: string
   description?: string | null
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -385,7 +385,7 @@ export async function applyTemplateToTask(
   templateId: string,
   clientId: string,
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -483,7 +483,7 @@ export async function updateTask(
   clientId: string,
   data: { title: string; due_date: string | null; priority: string; description?: string | null; opened_date?: string | null; meeting_id?: string | null }
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -502,7 +502,7 @@ export async function updateTask(
 }
 
 export async function updateTaskStatus(taskId: string, status: string, clientId: string) {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -530,7 +530,7 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
 }
 
 export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, note?: string) {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -561,7 +561,7 @@ export async function createTemplate(data: {
   category?: string | null
   items: Array<{ title: string; priority: string; order_index: number; relative_due_days: number | null }>
 }): Promise<{ id: string | null; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { id: null, error: 'Unauthorized' }
 
@@ -594,7 +594,7 @@ export async function importTemplate(data: {
     level: number
   }>
 }): Promise<{ id: string | null; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { id: null, error: 'Unauthorized' }
 
@@ -645,7 +645,7 @@ export async function importTemplate(data: {
 }
 
 export async function deleteTemplate(templateId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -663,7 +663,7 @@ export async function addTemplateItem(data: {
   relativeDueDays: number | null
   parentItemId?: string | null
 }): Promise<{ item: { id: string; title: string; priority: string; order_index: number; relative_due_days: number | null; parent_item_id: string | null } | null; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { item: null, error: 'Unauthorized' }
 
@@ -687,7 +687,7 @@ export async function updateTemplate(data: {
   description: string | null
   category: string | null
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -707,7 +707,7 @@ export async function updateTemplateItem(data: {
   priority: string
   relative_due_days: number | null
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -722,7 +722,7 @@ export async function updateTemplateItem(data: {
 }
 
 export async function removeTemplateItem(itemId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -738,7 +738,7 @@ export async function updateProfile(data: {
   fullName: string | null
   avatarUrl: string | null
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -759,7 +759,7 @@ export async function updateMeeting(
   clientId: string,
   data: { title: string; meeting_date: string; notes: string | null }
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -792,7 +792,7 @@ export async function updateMeeting(
 // ─── Task comments ───────────────────────────────────────────
 
 export async function addTaskComment(taskId: string, content: string, clientId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -817,7 +817,7 @@ export async function bulkCreatePeople(people: Array<{
   ni_number: string | null
   status: 'active' | 'prospect' | 'inactive'
 }>): Promise<{ count: number; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { count: 0, error: 'Unauthorized' }
 
@@ -837,7 +837,7 @@ export async function bulkCreatePeople(people: Array<{
 // ─── Admin ─────────────────────────────────────────────────────
 
 export async function deleteTask(taskId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -879,7 +879,7 @@ export async function updateUserRole(
   userId: string,
   role: 'admin' | 'manager' | 'staff'
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -900,7 +900,7 @@ export async function inviteUser(data: {
   fullName: string
   role: 'admin' | 'manager' | 'staff'
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -938,7 +938,7 @@ export async function triggerBackup(): Promise<{
   counts?: Record<string, number>
   exportedAt?: string
 }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 

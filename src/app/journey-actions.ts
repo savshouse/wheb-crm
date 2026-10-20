@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createActionClient } from '@/lib/supabase/server'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ export async function createJourney(payload: {
   meetingId: string | null
   notes: string
 }): Promise<{ journeyId: string | null; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { journeyId: null, error: 'Unauthorized' }
 
@@ -159,7 +159,7 @@ export async function updateJourneyStatus(
   journeyId: string,
   status: 'active' | 'complete' | 'cancelled'
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -187,7 +187,7 @@ export async function completeJourneyStep(
   stepId: string,
   journeyId: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -233,7 +233,7 @@ export async function reopenJourneyStep(
   stepId: string,
   journeyId: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -268,7 +268,7 @@ export async function reopenJourneyStep(
 }
 
 export async function deleteJourney(journeyId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -301,7 +301,7 @@ export async function addTaskToStep(payload: {
   dueDate: string | null
   priority: string
 }): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -333,7 +333,7 @@ export async function completeStepTask(
   journeyId: string,
   clientId: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -365,7 +365,7 @@ export async function completeStepTask(
  * Advances or reopens the linked journey step as appropriate.
  */
 export async function checkJourneyStepAdvance(taskId: string, newStatus: string): Promise<void> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
 
   const { data: task } = await supabase
     .from('tasks')
@@ -416,7 +416,7 @@ export async function saveJourneyTemplate(
     is_active: boolean
   }
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 

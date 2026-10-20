@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createActionClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -51,7 +51,7 @@ export async function saveEmailTemplate(
     html_body: string
   }
 ): Promise<{ id: string | null; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { id: null, error: 'Unauthorized' }
 
@@ -78,7 +78,7 @@ export async function saveEmailTemplate(
 }
 
 export async function deleteEmailTemplate(id: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -96,7 +96,7 @@ export async function sendBulkEmail(payload: {
   cc?:         string[]
   attachments?: EmailAttachment[]
 }): Promise<{ sent: number; error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { sent: 0, error: 'Unauthorized' }
 
@@ -173,7 +173,7 @@ export async function sendSingleEmail(payload: {
 // ─── Fetch templates (for client-side components) ───────────────────────────
 
 export async function getEmailTemplates(): Promise<{ id: string; name: string; category: string | null; subject: string; html_body: string }[]> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data } = await supabase
     .from('email_templates')
     .select('id, name, category, subject, html_body')

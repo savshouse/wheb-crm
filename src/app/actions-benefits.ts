@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createActionClient } from '@/lib/supabase/server'
 import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 export type { SchemeType } from '@/lib/benefit-types'
 
@@ -19,7 +19,7 @@ export async function createScheme(
     notes?: string | null
   }
 ): Promise<{ error: string | null; id?: string }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -48,7 +48,7 @@ export async function updateScheme(
     is_active: boolean
   }>
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -58,7 +58,7 @@ export async function updateScheme(
 }
 
 export async function deleteScheme(schemeId: string, employerId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -93,7 +93,7 @@ export async function createMembership(
   clientId: string,
   data: MembershipPayload
 ): Promise<{ error: string | null; id?: string }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -114,7 +114,7 @@ export async function updateMembership(
   contributionChanged: boolean,
   changeReason?: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -151,7 +151,7 @@ export async function updateMembership(
 }
 
 export async function deleteMembership(membershipId: string, clientId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -165,7 +165,7 @@ export async function removeMembership(
   clientId: string,
   { reason, date, notes }: { reason: string; date: string; notes: string }
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
@@ -201,7 +201,7 @@ export async function addContributionChange(
     change_reason?: string | null
   }
 ): Promise<{ error: string | null }> {
-  const supabase = await createClient()
+  const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
