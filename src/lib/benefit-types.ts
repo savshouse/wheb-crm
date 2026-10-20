@@ -21,3 +21,23 @@ export const REMOVAL_REASONS = [
 export const REMOVAL_REASON_LABELS: Record<string, string> = Object.fromEntries(
   REMOVAL_REASONS.map(r => [r.value, r.label])
 )
+
+export type MembershipPayload = {
+  scheme_id?: string | null
+  scheme_type: string
+  scheme_name?: string | null
+  provider?: string | null
+  policy_reference?: string | null
+  enrolment_type: string
+  enrolled_date?: string | null
+  membership_start_date?: string | null
+  opted_out?: boolean
+  opted_out_date?: string | null
+  employer_contribution_pct?: number | null
+  employer_contribution_gbp?: number | null
+  employee_contribution_pct?: number | null
+  employee_contribution_gbp?: number | null
+  salary_at_calculation?: number | null
+  cover_level?: string | null
+  notes?: string | null
+}

@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 import {
   createMembership, updateMembership, removeMembership, addContributionChange,
-  type MembershipPayload,
 } from '@/app/actions-benefits'
+import type { MembershipPayload } from '@/lib/benefit-types'
 import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import {
   Shield, Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,

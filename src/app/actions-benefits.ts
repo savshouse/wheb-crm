@@ -1,7 +1,7 @@
 'use server'
 
 import { createActionClient } from '@/lib/supabase/server'
-import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
+import { REMOVAL_REASON_LABELS, type MembershipPayload } from '@/lib/benefit-types'
 
 // ─── Schemes ──────────────────────────────────────────────────────────────────
 
@@ -47,8 +47,13 @@ export async function updateScheme(
     is_active: boolean
   }>
 ): Promise<{ error: string | null }> {
-  // DIAGNOSTIC STUB — if this message appears in the UI, the function body is reachable
-  return { error: 'STUB: function body reached — schemeId=' + schemeId }
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
+  if (error) return { error: error.message }
+  return { error: null }
 }
 
 export async function deleteScheme(schemeId: string, employerId: string): Promise<{ error: string | null }> {
@@ -62,26 +67,6 @@ export async function deleteScheme(schemeId: string, employerId: string): Promis
 }
 
 // ─── Memberships ──────────────────────────────────────────────────────────────
-
-export type MembershipPayload = {
-  scheme_id?: string | null
-  scheme_type: string
-  scheme_name?: string | null
-  provider?: string | null
-  policy_reference?: string | null
-  enrolment_type: string
-  enrolled_date?: string | null
-  membership_start_date?: string | null
-  opted_out?: boolean
-  opted_out_date?: string | null
-  employer_contribution_pct?: number | null
-  employer_contribution_gbp?: number | null
-  employee_contribution_pct?: number | null
-  employee_contribution_gbp?: number | null
-  salary_at_calculation?: number | null
-  cover_level?: string | null
-  notes?: string | null
-}
 
 export async function createMembership(
   clientId: string,
