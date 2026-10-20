@@ -18,18 +18,23 @@ export async function createScheme(
     notes?: string | null
   }
 ): Promise<{ error: string | null; id?: string }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { data: scheme, error } = await supabase
-    .from('benefit_schemes')
-    .insert({ employer_id: employerId, created_by: user.id, ...data })
-    .select('id')
-    .single()
+    const { data: scheme, error } = await supabase
+      .from('benefit_schemes')
+      .insert({ employer_id: employerId, created_by: user.id, ...data })
+      .select('id')
+      .single()
 
-  if (error) return { error: error.message }
-  return { error: null, id: scheme.id }
+    if (error) return { error: error.message }
+    return { error: null, id: scheme.id }
+  } catch (e: any) {
+    console.error('[createScheme]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 export async function updateScheme(
@@ -47,23 +52,33 @@ export async function updateScheme(
     is_active: boolean
   }>
 ): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
-  if (error) return { error: error.message }
-  return { error: null }
+    const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[updateScheme]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 export async function deleteScheme(schemeId: string, employerId: string): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { error } = await supabase.from('benefit_schemes').delete().eq('id', schemeId)
-  if (error) return { error: error.message }
-  return { error: null }
+    const { error } = await supabase.from('benefit_schemes').delete().eq('id', schemeId)
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[deleteScheme]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 // ─── Memberships ──────────────────────────────────────────────────────────────
@@ -72,18 +87,23 @@ export async function createMembership(
   clientId: string,
   data: MembershipPayload
 ): Promise<{ error: string | null; id?: string }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { data: membership, error } = await supabase
-    .from('benefit_memberships')
-    .insert({ client_id: clientId, created_by: user.id, ...data })
-    .select('id')
-    .single()
+    const { data: membership, error } = await supabase
+      .from('benefit_memberships')
+      .insert({ client_id: clientId, created_by: user.id, ...data })
+      .select('id')
+      .single()
 
-  if (error) return { error: error.message }
-  return { error: null, id: membership.id }
+    if (error) return { error: error.message }
+    return { error: null, id: membership.id }
+  } catch (e: any) {
+    console.error('[createMembership]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 export async function updateMembership(
@@ -93,50 +113,59 @@ export async function updateMembership(
   contributionChanged: boolean,
   changeReason?: string
 ): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  // If contributions changed, snapshot the old values into history first
-  if (contributionChanged) {
-    const { data: existing } = await supabase
-      .from('benefit_memberships')
-      .select('employer_contribution_pct, employer_contribution_gbp, employee_contribution_pct, employee_contribution_gbp, salary_at_calculation')
-      .eq('id', membershipId)
-      .single()
+    if (contributionChanged) {
+      const { data: existing } = await supabase
+        .from('benefit_memberships')
+        .select('employer_contribution_pct, employer_contribution_gbp, employee_contribution_pct, employee_contribution_gbp, salary_at_calculation')
+        .eq('id', membershipId)
+        .single()
 
-    if (existing) {
-      await supabase.from('benefit_contribution_changes').insert({
-        membership_id: membershipId,
-        effective_date: new Date().toISOString().split('T')[0],
-        employer_contribution_pct: data.employer_contribution_pct ?? existing.employer_contribution_pct,
-        employer_contribution_gbp: data.employer_contribution_gbp ?? existing.employer_contribution_gbp,
-        employee_contribution_pct: data.employee_contribution_pct ?? existing.employee_contribution_pct,
-        employee_contribution_gbp: data.employee_contribution_gbp ?? existing.employee_contribution_gbp,
-        salary_at_calculation: data.salary_at_calculation ?? existing.salary_at_calculation,
-        change_reason: changeReason || null,
-        created_by: user.id,
-      })
+      if (existing) {
+        await supabase.from('benefit_contribution_changes').insert({
+          membership_id: membershipId,
+          effective_date: new Date().toISOString().split('T')[0],
+          employer_contribution_pct: data.employer_contribution_pct ?? existing.employer_contribution_pct,
+          employer_contribution_gbp: data.employer_contribution_gbp ?? existing.employer_contribution_gbp,
+          employee_contribution_pct: data.employee_contribution_pct ?? existing.employee_contribution_pct,
+          employee_contribution_gbp: data.employee_contribution_gbp ?? existing.employee_contribution_gbp,
+          salary_at_calculation: data.salary_at_calculation ?? existing.salary_at_calculation,
+          change_reason: changeReason || null,
+          created_by: user.id,
+        })
+      }
     }
+
+    const { error } = await supabase
+      .from('benefit_memberships')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', membershipId)
+
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[updateMembership]', e)
+    return { error: e?.message ?? String(e) }
   }
-
-  const { error } = await supabase
-    .from('benefit_memberships')
-    .update({ ...data, updated_at: new Date().toISOString() })
-    .eq('id', membershipId)
-
-  if (error) return { error: error.message }
-  return { error: null }
 }
 
 export async function deleteMembership(membershipId: string, clientId: string): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { error } = await supabase.from('benefit_memberships').delete().eq('id', membershipId)
-  if (error) return { error: error.message }
-  return { error: null }
+    const { error } = await supabase.from('benefit_memberships').delete().eq('id', membershipId)
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[deleteMembership]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 export async function removeMembership(
@@ -144,27 +173,32 @@ export async function removeMembership(
   clientId: string,
   { reason, date, notes }: { reason: string; date: string; notes: string }
 ): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const reasonLabel = REMOVAL_REASON_LABELS[reason] ?? reason
-  const changeReason = notes ? `Removed: ${reasonLabel} — ${notes}` : `Removed: ${reasonLabel}`
+    const reasonLabel = REMOVAL_REASON_LABELS[reason] ?? reason
+    const changeReason = notes ? `Removed: ${reasonLabel} — ${notes}` : `Removed: ${reasonLabel}`
 
-  await supabase.from('benefit_contribution_changes').insert({
-    membership_id: membershipId,
-    effective_date: date,
-    change_reason: changeReason,
-    created_by: user.id,
-  })
+    await supabase.from('benefit_contribution_changes').insert({
+      membership_id: membershipId,
+      effective_date: date,
+      change_reason: changeReason,
+      created_by: user.id,
+    })
 
-  const { error } = await supabase
-    .from('benefit_memberships')
-    .update({ ended_date: date, end_reason: reason, updated_at: new Date().toISOString() } as any)
-    .eq('id', membershipId)
+    const { error } = await supabase
+      .from('benefit_memberships')
+      .update({ ended_date: date, end_reason: reason, updated_at: new Date().toISOString() } as any)
+      .eq('id', membershipId)
 
-  if (error) return { error: error.message }
-  return { error: null }
+    if (error) return { error: error.message }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[removeMembership]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
 
 export async function addContributionChange(
@@ -180,26 +214,30 @@ export async function addContributionChange(
     change_reason?: string | null
   }
 ): Promise<{ error: string | null }> {
-  const supabase = await createActionClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
+  try {
+    const supabase = await createActionClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Unauthorized' }
 
-  const { error } = await supabase.from('benefit_contribution_changes').insert({
-    membership_id: membershipId,
-    created_by: user.id,
-    ...data,
-  })
-  if (error) return { error: error.message }
+    const { error } = await supabase.from('benefit_contribution_changes').insert({
+      membership_id: membershipId,
+      created_by: user.id,
+      ...data,
+    })
+    if (error) return { error: error.message }
 
-  // Also update current membership values
-  await supabase.from('benefit_memberships').update({
-    employer_contribution_pct: data.employer_contribution_pct,
-    employer_contribution_gbp: data.employer_contribution_gbp,
-    employee_contribution_pct: data.employee_contribution_pct,
-    employee_contribution_gbp: data.employee_contribution_gbp,
-    salary_at_calculation: data.salary_at_calculation,
-    updated_at: new Date().toISOString(),
-  }).eq('id', membershipId)
+    await supabase.from('benefit_memberships').update({
+      employer_contribution_pct: data.employer_contribution_pct,
+      employer_contribution_gbp: data.employer_contribution_gbp,
+      employee_contribution_pct: data.employee_contribution_pct,
+      employee_contribution_gbp: data.employee_contribution_gbp,
+      salary_at_calculation: data.salary_at_calculation,
+      updated_at: new Date().toISOString(),
+    }).eq('id', membershipId)
 
-  return { error: null }
+    return { error: null }
+  } catch (e: any) {
+    console.error('[addContributionChange]', e)
+    return { error: e?.message ?? String(e) }
+  }
 }
