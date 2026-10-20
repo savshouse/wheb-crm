@@ -11,7 +11,7 @@ export default async function ClientEmailHistory({ clientId }: Props) {
   const { data: rows } = await supabase
     .from('email_send_recipients')
     .select(`
-      id, email, full_name, created_at,
+      id, email, full_name, created_at, rendered_subject, rendered_html,
       send:email_sends(id, subject, template_name, sent_at, source,
         sender:profiles!email_sends_sent_by_fkey(full_name, email))
     `)

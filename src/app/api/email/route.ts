@@ -96,12 +96,17 @@ export async function POST(request: NextRequest) {
 
         if (sendRecord) {
           await supabase.from('email_send_recipients').insert(
-            validRecipients.map(r => ({
-              email_send_id: sendRecord.id,
-              client_id:     r.id || null,
-              email:         r.email,
-              full_name:     r.full_name,
-            }))
+            validRecipients.map(r => {
+              const vars = buildVars(r)
+              return {
+                email_send_id:    sendRecord.id,
+                client_id:        r.id || null,
+                email:            r.email,
+                full_name:        r.full_name,
+                rendered_subject: mergeVars(template.subject, vars),
+                rendered_html:    mergeVars(template.html_body, vars),
+              }
+            })
           )
         }
 
@@ -151,11 +156,14 @@ export async function POST(request: NextRequest) {
         }).select('id').single()
 
         if (sendRecord) {
+          const vars = buildVars(recipient)
           await supabase.from('email_send_recipients').insert({
-            email_send_id: sendRecord.id,
-            client_id:     recipient.id || null,
-            email:         recipient.email,
-            full_name:     recipient.full_name,
+            email_send_id:    sendRecord.id,
+            client_id:        recipient.id || null,
+            email:            recipient.email,
+            full_name:        recipient.full_name,
+            rendered_subject: mergeVars(template.subject, vars),
+            rendered_html:    mergeVars(template.html_body, vars),
           })
         }
 
