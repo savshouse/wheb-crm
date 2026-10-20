@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 export type { SchemeType } from '@/lib/benefit-types'
@@ -31,7 +30,6 @@ export async function createScheme(
     .single()
 
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${employerId}`)
   return { error: null, id: scheme.id }
 }
 
@@ -56,7 +54,6 @@ export async function updateScheme(
 
   const { error } = await supabase.from('benefit_schemes').update(data).eq('id', schemeId)
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${employerId}`)
   return { error: null }
 }
 
@@ -67,7 +64,6 @@ export async function deleteScheme(schemeId: string, employerId: string): Promis
 
   const { error } = await supabase.from('benefit_schemes').delete().eq('id', schemeId)
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${employerId}`)
   return { error: null }
 }
 
@@ -108,7 +104,6 @@ export async function createMembership(
     .single()
 
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${clientId}`)
   return { error: null, id: membership.id }
 }
 
@@ -152,7 +147,6 @@ export async function updateMembership(
     .eq('id', membershipId)
 
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -163,7 +157,6 @@ export async function deleteMembership(membershipId: string, clientId: string): 
 
   const { error } = await supabase.from('benefit_memberships').delete().eq('id', membershipId)
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -192,7 +185,6 @@ export async function removeMembership(
     .eq('id', membershipId)
 
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -230,6 +222,5 @@ export async function addContributionChange(
     updated_at: new Date().toISOString(),
   }).eq('id', membershipId)
 
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }

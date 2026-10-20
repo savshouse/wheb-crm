@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -153,8 +152,6 @@ export async function createJourney(payload: {
     }
   }
 
-  revalidatePath(`/clients/${payload.clientId}`)
-  revalidatePath('/journeys')
   return { journeyId: journey.id, error: null }
 }
 
@@ -183,9 +180,6 @@ export async function updateJourneyStatus(
 
   if (error) return { error: error.message }
 
-  if (journey?.client_id) revalidatePath(`/clients/${journey.client_id}`)
-  revalidatePath('/journeys')
-  revalidatePath(`/journeys/${journeyId}`)
   return { error: null }
 }
 
@@ -232,9 +226,6 @@ export async function completeJourneyStep(
       .eq('id', journeyId)
   }
 
-  if (clientId) revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/journeys')
-  revalidatePath(`/journeys/${journeyId}`)
   return { error: null }
 }
 
@@ -273,9 +264,6 @@ export async function reopenJourneyStep(
     .eq('id', journeyId)
     .single()
 
-  if (journey?.client_id) revalidatePath(`/clients/${journey.client_id}`)
-  revalidatePath('/journeys')
-  revalidatePath(`/journeys/${journeyId}`)
   return { error: null }
 }
 
@@ -301,8 +289,6 @@ export async function deleteJourney(journeyId: string): Promise<{ error: string 
   const { error } = await supabase.from('advice_journeys').delete().eq('id', journeyId)
   if (error) return { error: error.message }
 
-  if (journey?.client_id) revalidatePath(`/clients/${journey.client_id}`)
-  revalidatePath('/journeys')
   return { error: null }
 }
 
@@ -338,8 +324,6 @@ export async function addTaskToStep(payload: {
     .eq('id', payload.stepId)
     .eq('status', 'pending')
 
-  revalidatePath(`/journeys/${payload.journeyId}`)
-  revalidatePath(`/clients/${payload.clientId}`)
   return { error: null }
 }
 
@@ -373,8 +357,6 @@ export async function completeStepTask(
     return completeJourneyStep(stepId, journeyId)
   }
 
-  revalidatePath(`/journeys/${journeyId}`)
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -455,6 +437,5 @@ export async function saveJourneyTemplate(
     if (error) return { error: error.message }
   }
 
-  revalidatePath('/admin/journey-templates')
   return { error: null }
 }

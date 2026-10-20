@@ -62,6 +62,10 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   const [filterScheme, setFilterScheme] = useState('')
   const [filterMonth, setFilterMonth]   = useState('')   // '1'–'12' or ''
   const [filterYear, setFilterYear]     = useState('')   // '2024' etc or ''
+  const [filterActive, setFilterActive] = useState(false)
+
+  // Employer contacts (for CC suggestions when a scheme is selected)
+  const [employerContacts, setEmployerContacts] = useState<{ email: string; label: string }[]>([])
 
   useEffect(() => {
     supabase.from('email_templates').select('id, name, category, subject, html_body').order('name').then(({ data }) => {
@@ -76,6 +80,31 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
     }
   }, [])
 
+  // Fetch employer contacts when scheme filter changes
+  useEffect(() => {
+    if (!filterScheme) { setEmployerContacts([]); return }
+    supabase
+      .from('benefit_schemes')
+      .select('employer_id')
+      .eq('scheme_name', filterScheme)
+      .limit(1)
+      .single()
+      .then(({ data: scheme }) => {
+        if (!scheme?.employer_id) return
+        supabase
+          .from('contacts')
+          .select('first_name, last_name, email, job_title')
+          .eq('client_id', scheme.employer_id)
+          .not('email', 'is', null)
+          .then(({ data: contacts }) => {
+            if (contacts) setEmployerContacts(contacts.map(c => ({
+              email: c.email as string,
+              label: [c.first_name, c.last_name].filter(Boolean).join(' ') + (c.job_title ? ` (${c.job_title})` : ''),
+            })))
+          })
+      })
+  }, [filterScheme])
+
   const template   = templates.find(t => t.id === templateId)
   const selected   = recipients.filter(r => r.selected)
   const previewR   = selected[previewIdx] ?? selected[0]
@@ -83,7 +112,10 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   const previewSubject = template ? mergeVars(template.subject, previewVars) : ''
   const previewHtml    = template ? mergeVars(template.html_body, previewVars) : ''
 
+  const filterHasValue = !!(filterScheme || filterMonth || filterYear)
+
   const filteredR = recipients.filter(r => {
+    if (filterActive && filterHasValue && !matchesFilter(r.id)) return false
     if (!recipientSearch) return true
     const q = recipientSearch.toLowerCase()
     return (r.full_name ?? '').toLowerCase().includes(q) || r.email.toLowerCase().includes(q)
@@ -120,11 +152,13 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   const filterMatchCount = recipients.filter(r => matchesFilter(r.id)).length
 
   function applyFilter() {
+    setFilterActive(true)
     setRecipients(rs => rs.map(r => ({ ...r, selected: matchesFilter(r.id) })))
   }
 
   function clearFilter() {
     setFilterScheme(''); setFilterMonth(''); setFilterYear('')
+    setFilterActive(false)
   }
 
   // Attachment helpers
@@ -231,6 +265,21 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
                     className="flex-1 text-sm outline-none min-w-32 bg-transparent"
                   />
                 </div>
+                {employerContacts.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-xs text-slate-400">Suggested for {filterScheme}:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {employerContacts.map(c => (
+                        <button key={c.email}
+                          onClick={() => setCcList(l => [...new Set([...l, c.email])])}
+                          disabled={ccList.includes(c.email)}
+                          className="flex items-center gap-1 bg-slate-100 border border-slate-200 text-xs rounded-full px-2.5 py-1 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-default transition-colors">
+                          <Plus size={9} />{c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Attachments */}
@@ -323,11 +372,16 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-500">{filterMatchCount} match{filterMatchCount !== 1 ? 'es' : ''}</span>
-                    <button onClick={applyFilter}
-                      className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors">
-                      Select matching
+                    <button onClick={applyFilter} disabled={!filterHasValue}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                      Apply filter
                     </button>
                   </div>
+                  {filterActive && (
+                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                      <Filter size={11} />Filter active — showing {filteredR.length} of {recipients.length} people
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -337,9 +391,13 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
                   <input type="text" value={recipientSearch} onChange={e => setRecipientSearch(e.target.value)} placeholder="Search recipients…"
                     className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <button onClick={() => { const all = recipients.every(r => r.selected); setRecipients(rs => rs.map(r => ({ ...r, selected: !all }))) }}
+                <button onClick={() => {
+                    const visibleIds = new Set(filteredR.map(r => r.id))
+                    const allVisible = filteredR.every(r => r.selected)
+                    setRecipients(rs => rs.map(r => visibleIds.has(r.id) ? { ...r, selected: !allVisible } : r))
+                  }}
                   className="px-3 py-2 text-xs border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors shrink-0">
-                  {recipients.every(r => r.selected) ? 'Deselect all' : 'Select all'}
+                  {filteredR.every(r => r.selected) ? 'Deselect all' : 'Select all'}
                 </button>
               </div>
 

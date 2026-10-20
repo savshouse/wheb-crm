@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 
@@ -67,7 +66,6 @@ export async function saveEmailTemplate(
   if (id) {
     const { error } = await supabase.from('email_templates').update(data).eq('id', id)
     if (error) return { id: null, error: error.message }
-    revalidatePath('/admin/email-templates')
     return { id, error: null }
   } else {
     const { data: row, error } = await supabase.from('email_templates')
@@ -75,7 +73,6 @@ export async function saveEmailTemplate(
       .select('id')
       .single()
     if (error) return { id: null, error: error.message }
-    revalidatePath('/admin/email-templates')
     return { id: row.id, error: null }
   }
 }
@@ -88,7 +85,6 @@ export async function deleteEmailTemplate(id: string): Promise<{ error: string |
   const { error } = await supabase.from('email_templates').delete().eq('id', id)
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/email-templates')
   return { error: null }
 }
 

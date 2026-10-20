@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
@@ -35,7 +34,6 @@ export async function createClient_action(formData: FormData) {
 
   if (error) throw error
 
-  revalidatePath('/clients')
   redirect(`/clients/${data.id}`)
 }
 
@@ -124,8 +122,6 @@ export async function updateClient(
     await supabase.from('activity_log').insert(activityRows)
   }
 
-  revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/clients')
   return { error: null }
 }
 
@@ -170,8 +166,6 @@ export async function addRelationship(
     },
   ])
 
-  revalidatePath(`/clients/${individualId}`)
-  revalidatePath(`/clients/${relatedId}`)
   return { error: null }
 }
 
@@ -211,8 +205,6 @@ export async function removeRelationship(
         old_value: indivName, note: rel.relationship_type, performed_by: user.id,
       },
     ])
-    revalidatePath(`/clients/${rel.individual_id}`)
-    revalidatePath(`/clients/${rel.related_id}`)
   }
   return { error: null }
 }
@@ -250,7 +242,6 @@ export async function updateEmployer(
     })
   }
 
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -313,7 +304,6 @@ export async function createMeeting(formData: FormData) {
     }
   }
 
-  revalidatePath(`/clients/${clientId}`)
   redirect(`/clients/${clientId}`)
 }
 
@@ -348,7 +338,6 @@ export async function createTask(formData: FormData) {
   })
 
   syncTaskOnSave(task.id).catch(console.error)
-  revalidatePath(`/clients/${clientId}`)
 }
 
 export async function createSubTask(data: {
@@ -388,8 +377,6 @@ export async function createSubTask(data: {
   })
 
   syncTaskOnSave(task.id).catch(console.error)
-  revalidatePath(`/clients/${data.clientId}`)
-  revalidatePath('/tasks')
   return { error: null }
 }
 
@@ -488,8 +475,6 @@ export async function applyTemplateToTask(
     return { error: `${totalItems - failedItems.length} of ${totalItems} tasks created. Failed: ${failedItems.join('; ')}` }
   }
 
-  revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/tasks')
   return { error: null }
 }
 
@@ -513,9 +498,6 @@ export async function updateTask(
 
   if (error) return { error: error.message }
   syncTaskOnSave(taskId).catch(console.error)
-  revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/tasks')
-  revalidatePath('/')
   return { error: null }
 }
 
@@ -545,10 +527,6 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
 
   syncTaskOnSave(taskId).catch(console.error)
   checkJourneyStepAdvance(taskId, status).catch(console.error)
-  revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/tasks')
-  revalidatePath('/journeys')
-  revalidatePath('/')
 }
 
 export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, note?: string) {
@@ -573,9 +551,6 @@ export async function reassignTask(taskId: string, newAssigneeId: string, client
     note:         note || null,
   })
 
-  revalidatePath(`/clients/${clientId}`)
-  revalidatePath('/tasks')
-  revalidatePath('/')
 }
 
 // ─── Templates ───────────────────────────────────────────────
@@ -605,7 +580,6 @@ export async function createTemplate(data: {
     if (itemsError) return { id: template.id, error: itemsError.message }
   }
 
-  revalidatePath('/templates')
   return { id: template.id, error: null }
 }
 
@@ -667,7 +641,6 @@ export async function importTemplate(data: {
     }
   }
 
-  revalidatePath('/templates')
   return { id: tmpl.id, error: null }
 }
 
@@ -679,7 +652,6 @@ export async function deleteTemplate(templateId: string): Promise<{ error: strin
   const { error } = await supabase.from('task_templates').delete().eq('id', templateId)
   if (error) return { error: error.message }
 
-  revalidatePath('/templates')
   return { error: null }
 }
 
@@ -706,7 +678,6 @@ export async function addTemplateItem(data: {
 
   if (error) return { item: null, error: error.message }
 
-  revalidatePath('/templates')
   return { item, error: null }
 }
 
@@ -727,7 +698,6 @@ export async function updateTemplate(data: {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/templates')
   return { error: null }
 }
 
@@ -748,7 +718,6 @@ export async function updateTemplateItem(data: {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/templates')
   return { error: null }
 }
 
@@ -760,7 +729,6 @@ export async function removeTemplateItem(itemId: string): Promise<{ error: strin
   const { error } = await supabase.from('task_template_items').delete().eq('id', itemId)
   if (error) return { error: error.message }
 
-  revalidatePath('/templates')
   return { error: null }
 }
 
@@ -781,7 +749,6 @@ export async function updateProfile(data: {
   }).eq('id', user.id)
 
   if (error) return { error: error.message }
-  revalidatePath('/')
   return { error: null }
 }
 
@@ -819,7 +786,6 @@ export async function updateMeeting(
   if (historyRows.length > 0)
     await supabase.from('meeting_history').insert(historyRows)
 
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -837,7 +803,6 @@ export async function addTaskComment(taskId: string, content: string, clientId: 
   })
 
   if (error) return { error: error.message }
-  revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -866,7 +831,6 @@ export async function bulkCreatePeople(people: Array<{
   const { data, error } = await supabase.from('clients').insert(rows).select('id')
   if (error) return { count: 0, error: error.message }
 
-  revalidatePath('/clients')
   return { count: data?.length ?? 0, error: null }
 }
 
@@ -928,7 +892,6 @@ export async function updateUserRole(
     .eq('id', userId)
 
   if (error) return { error: error.message }
-  revalidatePath('/admin/users')
   return { error: null }
 }
 
@@ -963,7 +926,6 @@ export async function inviteUser(data: {
     role: data.role,
   })
 
-  revalidatePath('/admin/users')
   return { error: null }
 }
 
@@ -985,7 +947,6 @@ export async function triggerBackup(): Promise<{
 
   try {
     const result = await performBackup()
-    revalidatePath('/admin/backups')
     return { error: null, ...result }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Backup failed' }
