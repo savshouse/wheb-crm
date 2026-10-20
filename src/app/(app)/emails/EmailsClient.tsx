@@ -21,7 +21,7 @@ export default function EmailsClient({ sends }: Props) {
   const columns = useMemo<ColumnDef<Send>[]>(() => [
     {
       key:    'subject',
-      header: 'Subject',
+      label:  'Subject',
       render: row => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
@@ -34,12 +34,12 @@ export default function EmailsClient({ sends }: Props) {
         </div>
       ),
       sortValue: row => row.subject,
-      filterOptions: [...new Set(sends.map(s => s.subject))].sort().map(v => ({ label: v, value: v })),
+      filterOptions: [...new Set(sends.map(s => s.subject))].sort(),
       filterValue: row => row.subject,
     },
     {
       key:    'sent_at',
-      header: 'Date',
+      label:  'Date',
       render: row => row.sent_at
         ? <span className="text-sm text-slate-700">{format(parseISO(row.sent_at), 'd MMM yyyy, h:mm a')}</span>
         : <span className="text-sm text-slate-400">—</span>,
@@ -47,29 +47,26 @@ export default function EmailsClient({ sends }: Props) {
     },
     {
       key:    'source',
-      header: 'Source',
+      label:  'Source',
       render: row => {
-        const label = row.source === 'single' ? 'Single Email' : 'Mass Email'
-        const cls   = row.source === 'single'
+        const lbl = row.source === 'single' ? 'Single Email' : 'Mass Email'
+        const cls = row.source === 'single'
           ? 'bg-slate-100 text-slate-600'
           : 'bg-blue-100 text-blue-700'
         return (
           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cls}`}>
             {row.source === 'single' ? <User size={10} /> : <Users size={10} />}
-            {label}
+            {lbl}
           </span>
         )
       },
-      sortValue: row => row.source ?? '',
-      filterOptions: [
-        { label: 'Mass Email',    value: 'bulk'   },
-        { label: 'Single Email',  value: 'single' },
-      ],
-      filterValue: row => row.source ?? '',
+      sortValue:     row => row.source ?? '',
+      filterOptions: ['Mass Email', 'Single Email'],
+      filterValue:   row => row.source === 'single' ? 'Single Email' : 'Mass Email',
     },
     {
       key:    'recipient_count',
-      header: 'Recipients',
+      label:  'Recipients',
       render: row => (
         <span className="text-sm text-slate-700">{row.recipient_count}</span>
       ),
@@ -77,15 +74,15 @@ export default function EmailsClient({ sends }: Props) {
     },
     {
       key:    'sent_by',
-      header: 'Sent By',
+      label:  'Sent By',
       render: row => (
         <span className="text-sm text-slate-700">
           {row.sender?.full_name ?? row.sender?.email ?? '—'}
         </span>
       ),
-      sortValue: row => row.sender?.full_name ?? row.sender?.email ?? '',
-      filterOptions: [...new Set(sends.map(s => s.sender?.full_name ?? s.sender?.email ?? ''))].filter(Boolean).sort().map(v => ({ label: v, value: v })),
-      filterValue: row => row.sender?.full_name ?? row.sender?.email ?? '',
+      sortValue:     row => row.sender?.full_name ?? row.sender?.email ?? '',
+      filterOptions: [...new Set(sends.map(s => s.sender?.full_name ?? s.sender?.email ?? ''))].filter(Boolean).sort() as string[],
+      filterValue:   row => row.sender?.full_name ?? row.sender?.email ?? '',
     },
   ], [sends])
 
