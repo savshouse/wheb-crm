@@ -3,9 +3,6 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
-import {
-  createMembership, updateMembership, removeMembership, addContributionChange,
-} from '@/app/actions'
 import type { MembershipPayload } from '@/lib/benefit-types'
 import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import {
@@ -13,6 +10,21 @@ import {
   History, AlertCircle, CheckCircle,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+
+async function benefitApi(body: Record<string, unknown>): Promise<{ error: string | null; id?: string }> {
+  try {
+    const res = await fetch('/api/benefits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+    return json
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) }
+  }
+}
 
 type ContribChange = {
   id: string
@@ -284,9 +296,9 @@ export default function PersonBenefits({
           payload.employee_contribution_pct !== editing.employee_contribution_pct ||
           payload.employee_contribution_gbp !== editing.employee_contribution_gbp
         )
-        result = await updateMembership(editing.id, clientId, payload, contribChanged, 'Edited via profile')
+        result = await benefitApi({ op: 'updateMembership', membershipId: editing.id, clientId, data: payload, contributionChanged: contribChanged, changeReason: 'Edited via profile' })
       } else {
-        result = await createMembership(clientId, payload)
+        result = await benefitApi({ op: 'createMembership', clientId, data: payload })
       }
       if (result.error) { setError(result.error); return }
       setShowModal(false)
@@ -302,7 +314,7 @@ export default function PersonBenefits({
   async function handleRemove(reason: string, date: string, notes: string) {
     if (!removeModal) return
     try {
-      await removeMembership(removeModal.id, clientId, { reason, date, notes })
+      await benefitApi({ op: 'removeMembership', membershipId: removeModal.id, clientId, reason, date, notes })
       setRemoveModal(null)
       await fetchData()
     } catch (e: any) {
@@ -407,7 +419,7 @@ export default function PersonBenefits({
           salary={salary}
           onSave={async (data) => {
             try {
-              await addContributionChange(showContribModal.id, clientId, data)
+              await benefitApi({ op: 'addContributionChange', membershipId: showContribModal.id, clientId, data })
               setShowContribModal(null)
               await fetchData()
             } catch (e: any) {

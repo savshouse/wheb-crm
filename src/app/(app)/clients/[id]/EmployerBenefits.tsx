@@ -3,11 +3,25 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
-import { createScheme, updateScheme, deleteScheme, removeMembership } from '@/app/actions'
 import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
+
+async function benefitApi(body: Record<string, unknown>): Promise<{ error: string | null; id?: string }> {
+  try {
+    const res = await fetch('/api/benefits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+    return json
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) }
+  }
+}
 
 type Member = {
   id: string
@@ -141,8 +155,8 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
         notes: form.notes || null,
       }
       const result = editScheme
-        ? await updateScheme(editScheme.id, employerId, payload)
-        : await createScheme(employerId, payload)
+        ? await benefitApi({ op: 'updateScheme', schemeId: editScheme.id, employerId, data: payload })
+        : await benefitApi({ op: 'createScheme', employerId, data: payload })
       if (result.error) { setError(result.error); return }
       setShowModal(false)
       await fetchSchemes()
@@ -155,7 +169,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
 
   async function handleDelete(s: Scheme) {
     try {
-      await deleteScheme(s.id, employerId)
+      await benefitApi({ op: 'deleteScheme', schemeId: s.id, employerId })
       setConfirmDel(null)
       await fetchSchemes()
     } catch (e: any) {
@@ -166,7 +180,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   async function handleRemoveMember(reason: string, date: string, notes: string) {
     if (!removeModal) return
     try {
-      await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
+      await benefitApi({ op: 'removeMembership', membershipId: removeModal.memberId, clientId: removeModal.clientId, reason, date, notes })
       setRemoveModal(null)
       await fetchSchemes()
     } catch (e: any) {
