@@ -952,3 +952,9 @@ export async function triggerBackup(): Promise<{
     return { error: err instanceof Error ? err.message : 'Backup failed' }
   }
 }
+
+// ─── Benefits (re-exported to ensure server bundle registration) ──────────────
+export {
+  createScheme, updateScheme, deleteScheme,
+  createMembership, updateMembership, deleteMembership, removeMembership, addContributionChange,
+} from './benefit-actions'

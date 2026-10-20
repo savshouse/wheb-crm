@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
-import { createScheme, updateScheme, deleteScheme, removeMembership } from '@/app/benefit-actions'
+import { createScheme, updateScheme, deleteScheme, removeMembership } from '@/app/actions'
 import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
