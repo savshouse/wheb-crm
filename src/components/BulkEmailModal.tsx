@@ -3,8 +3,12 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { sendBulkEmail, type Recipient, type EmailAttachment } from '@/app/email-actions'
-import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Search, Paperclip, UserMinus, Plus } from 'lucide-react'
+import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Search, Paperclip, UserMinus, Plus, Filter } from 'lucide-react'
 import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
+
+type Membership = { client_id: string; scheme_name: string | null; scheme_type: string | null; enrolled_date: string | null }
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 type Template = {
   id:       string
@@ -53,10 +57,23 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   const [isPending, startTransition]    = useTransition()
   const [result, setResult]             = useState<{ sent: number; error: string | null } | null>(null)
 
+  // Membership filter state
+  const [memberships, setMemberships]   = useState<Membership[]>([])
+  const [filterScheme, setFilterScheme] = useState('')
+  const [filterMonth, setFilterMonth]   = useState('')   // '1'–'12' or ''
+  const [filterYear, setFilterYear]     = useState('')   // '2024' etc or ''
+
   useEffect(() => {
     supabase.from('email_templates').select('id, name, category, subject, html_body').order('name').then(({ data }) => {
       if (data) { setTemplates(data as Template[]); if (data.length) setTemplateId(data[0].id) }
     })
+    const ids = initialRecipients.map(r => r.id)
+    if (ids.length) {
+      supabase.from('benefit_memberships')
+        .select('client_id, scheme_name, scheme_type, enrolled_date')
+        .in('client_id', ids)
+        .then(({ data }) => { if (data) setMemberships(data as Membership[]) })
+    }
   }, [])
 
   const template   = templates.find(t => t.id === templateId)
@@ -79,6 +96,36 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   }
 
   function removeCc(email: string) { setCcList(l => l.filter(e => e !== email)) }
+
+  // Membership filter helpers
+  const availableSchemes = [...new Set(memberships.map(m => m.scheme_name).filter(Boolean))].sort() as string[]
+  const availableYears   = [...new Set(
+    memberships.map(m => m.enrolled_date ? new Date(m.enrolled_date).getFullYear().toString() : null).filter(Boolean)
+  )].sort((a, b) => Number(b) - Number(a)) as string[]
+
+  function matchesFilter(recipientId: string) {
+    const ms = memberships.filter(m => m.client_id === recipientId)
+    if (!filterScheme && !filterMonth && !filterYear) return true
+    return ms.some(m => {
+      const schemeOk = !filterScheme || m.scheme_name === filterScheme
+      if (!filterMonth && !filterYear) return schemeOk
+      if (!m.enrolled_date) return false
+      const d = new Date(m.enrolled_date)
+      const monthOk = !filterMonth || (d.getMonth() + 1) === parseInt(filterMonth)
+      const yearOk  = !filterYear  || d.getFullYear() === parseInt(filterYear)
+      return schemeOk && monthOk && yearOk
+    })
+  }
+
+  const filterMatchCount = recipients.filter(r => matchesFilter(r.id)).length
+
+  function applyFilter() {
+    setRecipients(rs => rs.map(r => ({ ...r, selected: matchesFilter(r.id) })))
+  }
+
+  function clearFilter() {
+    setFilterScheme(''); setFilterMonth(''); setFilterYear('')
+  }
 
   // Attachment helpers
   function handleFiles(files: FileList | null) {
@@ -238,6 +285,52 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
             </div>
           ) : (
             <div>
+              {/* Filter panel */}
+              {memberships.length > 0 && (
+                <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Filter size={13} className="text-slate-500" />
+                    <span className="text-xs font-semibold text-slate-700">Filter &amp; select</span>
+                    {(filterScheme || filterMonth || filterYear) && (
+                      <button onClick={clearFilter} className="ml-auto text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"><X size={11} />Clear</button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Scheme</label>
+                      <select value={filterScheme} onChange={e => setFilterScheme(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">Any scheme</option>
+                        {availableSchemes.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Enrolled month</label>
+                      <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">Any month</option>
+                        {MONTHS.map((m, i) => <option key={i} value={String(i + 1)}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Year</label>
+                      <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                        <option value="">Any year</option>
+                        {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">{filterMatchCount} match{filterMatchCount !== 1 ? 'es' : ''}</span>
+                    <button onClick={applyFilter}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors">
+                      Select matching
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-3 mb-4">
                 <div className="relative flex-1">
                   <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
