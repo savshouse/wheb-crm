@@ -2,7 +2,6 @@
 
 import { createActionClient } from '@/lib/supabase/server'
 import { REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
-export type { SchemeType } from '@/lib/benefit-types'
 
 // ─── Schemes ──────────────────────────────────────────────────────────────────
 

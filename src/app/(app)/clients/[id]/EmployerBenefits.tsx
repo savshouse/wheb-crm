@@ -129,39 +129,51 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
     if (!form.scheme_name.trim()) { setError('Scheme name is required'); return }
     setError(null)
     startTransition(async () => {
-      const payload = {
-        scheme_type: form.scheme_type,
-        scheme_name: form.scheme_name.trim(),
-        provider: form.provider || null,
-        policy_reference: form.policy_reference || null,
-        salary_definition: form.salary_definition || null,
-        cover_level: form.cover_level || null,
-        policy_wording_url: form.policy_wording_url || null,
-        notes: form.notes || null,
+      try {
+        const payload = {
+          scheme_type: form.scheme_type,
+          scheme_name: form.scheme_name.trim(),
+          provider: form.provider || null,
+          policy_reference: form.policy_reference || null,
+          salary_definition: form.salary_definition || null,
+          cover_level: form.cover_level || null,
+          policy_wording_url: form.policy_wording_url || null,
+          notes: form.notes || null,
+        }
+        const result = editScheme
+          ? await updateScheme(editScheme.id, employerId, payload)
+          : await createScheme(employerId, payload)
+        if (result.error) { setError(result.error); return }
+        setShowModal(false)
+        await fetchSchemes()
+      } catch (e: any) {
+        setError(`Save failed: ${e?.message ?? String(e)}`)
       }
-      const result = editScheme
-        ? await updateScheme(editScheme.id, employerId, payload)
-        : await createScheme(employerId, payload)
-      if (result.error) { setError(result.error); return }
-      setShowModal(false)
-      await fetchSchemes()
     })
   }
 
   function handleDelete(s: Scheme) {
     startTransition(async () => {
-      await deleteScheme(s.id, employerId)
-      setConfirmDel(null)
-      await fetchSchemes()
+      try {
+        await deleteScheme(s.id, employerId)
+        setConfirmDel(null)
+        await fetchSchemes()
+      } catch (e: any) {
+        console.error('[handleDelete]', e)
+      }
     })
   }
 
   function handleRemoveMember(reason: string, date: string, notes: string) {
     if (!removeModal) return
     startTransition(async () => {
-      await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
-      setRemoveModal(null)
-      await fetchSchemes()
+      try {
+        await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
+        setRemoveModal(null)
+        await fetchSchemes()
+      } catch (e: any) {
+        console.error('[handleRemoveMember]', e)
+      }
     })
   }
 

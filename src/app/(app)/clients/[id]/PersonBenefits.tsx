@@ -274,32 +274,40 @@ export default function PersonBenefits({
     }
     setError(null)
     startTransition(async () => {
-      const payload = buildPayload(form, salary)
-      let result: { error: string | null }
-      if (editing) {
-        const contribChanged = (
-          payload.employer_contribution_pct !== editing.employer_contribution_pct ||
-          payload.employer_contribution_gbp !== editing.employer_contribution_gbp ||
-          payload.employee_contribution_pct !== editing.employee_contribution_pct ||
-          payload.employee_contribution_gbp !== editing.employee_contribution_gbp
-        )
-        result = await updateMembership(editing.id, clientId, payload, contribChanged, 'Edited via profile')
-      } else {
-        result = await createMembership(clientId, payload)
+      try {
+        const payload = buildPayload(form, salary)
+        let result: { error: string | null }
+        if (editing) {
+          const contribChanged = (
+            payload.employer_contribution_pct !== editing.employer_contribution_pct ||
+            payload.employer_contribution_gbp !== editing.employer_contribution_gbp ||
+            payload.employee_contribution_pct !== editing.employee_contribution_pct ||
+            payload.employee_contribution_gbp !== editing.employee_contribution_gbp
+          )
+          result = await updateMembership(editing.id, clientId, payload, contribChanged, 'Edited via profile')
+        } else {
+          result = await createMembership(clientId, payload)
+        }
+        if (result.error) { setError(result.error); return }
+        setShowModal(false)
+        setEditing(null)
+        await fetchData()
+      } catch (e: any) {
+        setError(`Save failed: ${e?.message ?? String(e)}`)
       }
-      if (result.error) { setError(result.error); return }
-      setShowModal(false)
-      setEditing(null)
-      await fetchData()
     })
   }
 
   function handleRemove(reason: string, date: string, notes: string) {
     if (!removeModal) return
     startTransition(async () => {
-      await removeMembership(removeModal.id, clientId, { reason, date, notes })
-      setRemoveModal(null)
-      await fetchData()
+      try {
+        await removeMembership(removeModal.id, clientId, { reason, date, notes })
+        setRemoveModal(null)
+        await fetchData()
+      } catch (e: any) {
+        console.error('[handleRemove]', e)
+      }
     })
   }
 
@@ -400,9 +408,13 @@ export default function PersonBenefits({
           salary={salary}
           onSave={async (data) => {
             startTransition(async () => {
-              await addContributionChange(showContribModal.id, clientId, data)
-              setShowContribModal(null)
-              await fetchData()
+              try {
+                await addContributionChange(showContribModal.id, clientId, data)
+                setShowContribModal(null)
+                await fetchData()
+              } catch (e: any) {
+                console.error('[addContributionChange]', e)
+              }
             })
           }}
           onClose={() => setShowContribModal(null)}
