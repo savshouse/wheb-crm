@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
-import { saveEmailTemplate, deleteEmailTemplate } from '@/app/email-actions'
+import { deleteEmailTemplate } from '@/app/email-actions'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
@@ -69,22 +69,32 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
     if (!html.trim())         { setSaveError('Email body is empty'); return }
 
     startTransition(async () => {
-      const { id: savedId, error } = await saveEmailTemplate(
-        editingId === 'new' ? null : editingId,
-        { name: form.name.trim(), category: form.category.trim(), subject: form.subject.trim(), html_body: html }
-      )
-      if (error) { setSaveError(error); return }
-
-      // Save design_json directly from browser client to avoid server action body size limits
-      const templateId = editingId === 'new' ? savedId : editingId
-      if (templateId && design) {
-        const supabase = createClient()
-        await supabase.from('email_templates').update({ design_json: design }).eq('id', templateId)
+      // Use browser client directly — avoids server action body size limits for large html_body/design_json
+      const supabase = createClient()
+      const payload = {
+        name:        form.name.trim(),
+        category:    form.category.trim() || null,
+        subject:     form.subject.trim(),
+        html_body:   html,
+        design_json: design ?? null,
+        updated_at:  new Date().toISOString(),
       }
 
       if (editingId === 'new') {
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: row, error } = await supabase
+          .from('email_templates')
+          .insert({ ...payload, created_by: user?.id ?? null })
+          .select('id')
+          .single()
+        if (error) { setSaveError(error.message); return }
         window.location.reload()
       } else {
+        const { error } = await supabase
+          .from('email_templates')
+          .update(payload)
+          .eq('id', editingId!)
+        if (error) { setSaveError(error.message); return }
         setTemplates(ts => ts.map(t => t.id === editingId
           ? { ...t, ...form, html_body: html, design_json: design }
           : t
