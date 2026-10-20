@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 import { createScheme, updateScheme, deleteScheme, removeMembership } from '@/app/benefit-actions'
@@ -82,7 +82,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   const [form, setForm]             = useState<FormState>(emptyForm())
   const [confirmDel, setConfirmDel]     = useState<Scheme | null>(null)
   const [removeModal, setRemoveModal]   = useState<{ memberId: string; clientId: string; name: string } | null>(null)
-  const [isPending, startTransition]    = useTransition()
+  const [isSaving, setIsSaving]         = useState(false)
   const [error, setError]               = useState<string | null>(null)
 
   async function fetchSchemes() {
@@ -125,56 +125,53 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
     setShowModal(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.scheme_name.trim()) { setError('Scheme name is required'); return }
     setError(null)
-    startTransition(async () => {
-      try {
-        const payload = {
-          scheme_type: form.scheme_type,
-          scheme_name: form.scheme_name.trim(),
-          provider: form.provider || null,
-          policy_reference: form.policy_reference || null,
-          salary_definition: form.salary_definition || null,
-          cover_level: form.cover_level || null,
-          policy_wording_url: form.policy_wording_url || null,
-          notes: form.notes || null,
-        }
-        const result = editScheme
-          ? await updateScheme(editScheme.id, employerId, payload)
-          : await createScheme(employerId, payload)
-        if (result.error) { setError(result.error); return }
-        setShowModal(false)
-        await fetchSchemes()
-      } catch (e: any) {
-        setError(`Save failed: ${e?.message ?? String(e)}`)
+    setIsSaving(true)
+    try {
+      const payload = {
+        scheme_type: form.scheme_type,
+        scheme_name: form.scheme_name.trim(),
+        provider: form.provider || null,
+        policy_reference: form.policy_reference || null,
+        salary_definition: form.salary_definition || null,
+        cover_level: form.cover_level || null,
+        policy_wording_url: form.policy_wording_url || null,
+        notes: form.notes || null,
       }
-    })
+      const result = editScheme
+        ? await updateScheme(editScheme.id, employerId, payload)
+        : await createScheme(employerId, payload)
+      if (result.error) { setError(result.error); return }
+      setShowModal(false)
+      await fetchSchemes()
+    } catch (e: any) {
+      setError(`Save failed: ${e?.message ?? String(e)}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  function handleDelete(s: Scheme) {
-    startTransition(async () => {
-      try {
-        await deleteScheme(s.id, employerId)
-        setConfirmDel(null)
-        await fetchSchemes()
-      } catch (e: any) {
-        console.error('[handleDelete]', e)
-      }
-    })
+  async function handleDelete(s: Scheme) {
+    try {
+      await deleteScheme(s.id, employerId)
+      setConfirmDel(null)
+      await fetchSchemes()
+    } catch (e: any) {
+      console.error('[handleDelete]', e)
+    }
   }
 
-  function handleRemoveMember(reason: string, date: string, notes: string) {
+  async function handleRemoveMember(reason: string, date: string, notes: string) {
     if (!removeModal) return
-    startTransition(async () => {
-      try {
-        await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
-        setRemoveModal(null)
-        await fetchSchemes()
-      } catch (e: any) {
-        console.error('[handleRemoveMember]', e)
-      }
-    })
+    try {
+      await removeMembership(removeModal.memberId, removeModal.clientId, { reason, date, notes })
+      setRemoveModal(null)
+      await fetchSchemes()
+    } catch (e: any) {
+      console.error('[handleRemoveMember]', e)
+    }
   }
 
   function toggleExpand(id: string) {
@@ -196,7 +193,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
       <div className="bg-white border border-dashed border-slate-300 rounded-xl px-4 py-6 text-center">
         <p className="text-sm text-slate-400">No benefit schemes set up yet</p>
       </div>
-      {showModal && <SchemeModal form={form} onChange={f} onSave={handleSave} onClose={() => setShowModal(false)} isEdit={false} isPending={isPending} error={error} />}
+      {showModal && <SchemeModal form={form} onChange={f} onSave={handleSave} onClose={() => setShowModal(false)} isEdit={false} isPending={isSaving} error={error} />}
     </div>
   )
 
@@ -353,7 +350,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
           onSave={handleSave}
           onClose={() => setShowModal(false)}
           isEdit={!!editScheme}
-          isPending={isPending}
+          isPending={isSaving}
           error={error}
         />
       )}
@@ -363,7 +360,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
           memberName={removeModal.name}
           onConfirm={handleRemoveMember}
           onClose={() => setRemoveModal(null)}
-          isPending={isPending}
+          isPending={isSaving}
         />
       )}
 
@@ -380,8 +377,8 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                 <strong>{confirmDel.scheme_name}</strong> will be permanently removed along with all member records.
               </p>
               <div className="flex gap-3 mt-5">
-                <button onClick={() => handleDelete(confirmDel)} disabled={isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
-                  {isPending ? 'Deleting…' : 'Yes, delete'}
+                <button onClick={() => handleDelete(confirmDel)} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
+                  Yes, delete
                 </button>
                 <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
                   Cancel

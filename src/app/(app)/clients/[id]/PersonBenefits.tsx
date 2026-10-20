@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SCHEME_TYPES, REMOVAL_REASON_LABELS } from '@/lib/benefit-types'
 import {
@@ -216,7 +216,7 @@ export default function PersonBenefits({
   const [removeModal, setRemoveModal]           = useState<Membership | null>(null)
   const [showContribModal, setShowContribModal] = useState<Membership | null>(null)
   const [showFormer, setShowFormer]             = useState(false)
-  const [isPending, startTransition]            = useTransition()
+  const [isSaving, setIsSaving]                 = useState(false)
   const [error, setError]                       = useState<string | null>(null)
 
   async function fetchData() {
@@ -266,49 +266,48 @@ export default function PersonBenefits({
     setShowModal(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.scheme_type) { setError('Scheme type required'); return }
     if (!editing && form.scheme_id && memberships.some(m => m.scheme_id === form.scheme_id && !m.ended_date)) {
       setError('This person already has an active membership for that scheme')
       return
     }
     setError(null)
-    startTransition(async () => {
-      try {
-        const payload = buildPayload(form, salary)
-        let result: { error: string | null }
-        if (editing) {
-          const contribChanged = (
-            payload.employer_contribution_pct !== editing.employer_contribution_pct ||
-            payload.employer_contribution_gbp !== editing.employer_contribution_gbp ||
-            payload.employee_contribution_pct !== editing.employee_contribution_pct ||
-            payload.employee_contribution_gbp !== editing.employee_contribution_gbp
-          )
-          result = await updateMembership(editing.id, clientId, payload, contribChanged, 'Edited via profile')
-        } else {
-          result = await createMembership(clientId, payload)
-        }
-        if (result.error) { setError(result.error); return }
-        setShowModal(false)
-        setEditing(null)
-        await fetchData()
-      } catch (e: any) {
-        setError(`Save failed: ${e?.message ?? String(e)}`)
+    setIsSaving(true)
+    try {
+      const payload = buildPayload(form, salary)
+      let result: { error: string | null }
+      if (editing) {
+        const contribChanged = (
+          payload.employer_contribution_pct !== editing.employer_contribution_pct ||
+          payload.employer_contribution_gbp !== editing.employer_contribution_gbp ||
+          payload.employee_contribution_pct !== editing.employee_contribution_pct ||
+          payload.employee_contribution_gbp !== editing.employee_contribution_gbp
+        )
+        result = await updateMembership(editing.id, clientId, payload, contribChanged, 'Edited via profile')
+      } else {
+        result = await createMembership(clientId, payload)
       }
-    })
+      if (result.error) { setError(result.error); return }
+      setShowModal(false)
+      setEditing(null)
+      await fetchData()
+    } catch (e: any) {
+      setError(`Save failed: ${e?.message ?? String(e)}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  function handleRemove(reason: string, date: string, notes: string) {
+  async function handleRemove(reason: string, date: string, notes: string) {
     if (!removeModal) return
-    startTransition(async () => {
-      try {
-        await removeMembership(removeModal.id, clientId, { reason, date, notes })
-        setRemoveModal(null)
-        await fetchData()
-      } catch (e: any) {
-        console.error('[handleRemove]', e)
-      }
-    })
+    try {
+      await removeMembership(removeModal.id, clientId, { reason, date, notes })
+      setRemoveModal(null)
+      await fetchData()
+    } catch (e: any) {
+      console.error('[handleRemove]', e)
+    }
   }
 
   function toggleExpand(id: string) {
@@ -398,7 +397,7 @@ export default function PersonBenefits({
           employerSchemes={employerSchemes} pickScheme={pickScheme}
           salary={salary}
           onSave={handleSave} onClose={() => setShowModal(false)}
-          isEdit={!!editing} isPending={isPending} error={error}
+          isEdit={!!editing} isPending={isSaving} error={error}
         />
       )}
 
@@ -407,18 +406,16 @@ export default function PersonBenefits({
           membership={showContribModal}
           salary={salary}
           onSave={async (data) => {
-            startTransition(async () => {
-              try {
-                await addContributionChange(showContribModal.id, clientId, data)
-                setShowContribModal(null)
-                await fetchData()
-              } catch (e: any) {
-                console.error('[addContributionChange]', e)
-              }
-            })
+            try {
+              await addContributionChange(showContribModal.id, clientId, data)
+              setShowContribModal(null)
+              await fetchData()
+            } catch (e: any) {
+              console.error('[addContributionChange]', e)
+            }
           }}
           onClose={() => setShowContribModal(null)}
-          isPending={isPending}
+          isPending={isSaving}
         />
       )}
 
@@ -427,7 +424,7 @@ export default function PersonBenefits({
           memberName={removeModal.scheme?.scheme_name ?? removeModal.scheme_name ?? SCHEME_LABEL[removeModal.scheme_type] ?? removeModal.scheme_type}
           onConfirm={handleRemove}
           onClose={() => setRemoveModal(null)}
-          isPending={isPending}
+          isPending={isSaving}
         />
       )}
     </div>
