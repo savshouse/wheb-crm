@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
 import { Mail, Lock, ArrowRight, CheckCircle2 } from 'lucide-react'
 
 type Mode = 'magic' | 'password'
@@ -174,9 +175,14 @@ export default function LoginPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1.5">
-                    Password
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="password" className="block text-sm font-medium text-slate-300">
+                      Password
+                    </label>
+                    <Link href="/auth/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
+                      Forgot password?
+                    </Link>
+                  </div>
                   <input
                     id="password"
                     type="password"

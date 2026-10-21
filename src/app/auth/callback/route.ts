@@ -19,7 +19,11 @@ export async function GET(request: Request) {
   // OTP / magic link / invite token flow
   if (tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
-    if (!error) return NextResponse.redirect(`${origin}${next}`)
+    if (!error) {
+      // Recovery tokens land on the update-password page so the user can set a new password
+      const dest = type === 'recovery' ? '/auth/update-password' : next
+      return NextResponse.redirect(`${origin}${dest}`)
+    }
   }
 
   return NextResponse.redirect(`${origin}/auth/login?error=Could not authenticate`)
