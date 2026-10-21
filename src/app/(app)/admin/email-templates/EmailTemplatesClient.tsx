@@ -14,7 +14,7 @@ async function emailApi(body: Record<string, unknown>): Promise<{ error: string 
     return { error: e?.message ?? String(e) }
   }
 }
-import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2, Upload, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2, Upload, Search, Copy, CheckCheck } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
 import { UNLAYER_MERGE_TAGS } from '@/lib/merge-tags'
 import EmailImportModal from '@/components/EmailImportModal'
@@ -89,6 +89,61 @@ function htmlToUnlayerDesign(html: string) {
       },
     },
   }
+}
+
+const MERGE_FIELD_DOCS = [
+  { tag: '{{first_name}}',      label: 'First Name',       note: 'Recipient\'s first name' },
+  { tag: '{{last_name}}',       label: 'Last Name',        note: 'Recipient\'s surname' },
+  { tag: '{{full_name}}',       label: 'Full Name',        note: 'First + last name' },
+  { tag: '{{email}}',           label: 'Email Address',    note: 'Recipient\'s email' },
+  { tag: '{{employer}}',        label: 'Employer',         note: 'Company name (individual clients only)' },
+  { tag: '{{account_manager}}', label: 'Account Manager',  note: 'Assigned AM\'s name' },
+  { tag: '{{payroll_id}}',      label: 'Payroll ID',       note: 'Employee / payroll reference' },
+  { tag: '{{contribution_rate}}', label: 'Contribution Rate', note: 'Employee % — requires scheme selection at send time' },
+  { tag: '{{monthly_deduction}}', label: 'Monthly Deduction', note: 'Employee £/month — requires scheme selection at send time' },
+]
+
+function MergeFieldsPanel() {
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  function copy(tag: string) {
+    navigator.clipboard.writeText(tag).catch(() => {})
+    setCopied(tag)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-100 transition-colors"
+      >
+        <span className="text-sm font-medium text-blue-800">Available merge fields</span>
+        {open ? <ChevronDown size={14} className="text-blue-600" /> : <ChevronRight size={14} className="text-blue-600" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {MERGE_FIELD_DOCS.map(f => (
+            <button
+              key={f.tag}
+              onClick={() => copy(f.tag)}
+              className="flex items-center justify-between gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2 text-left hover:border-blue-400 hover:bg-blue-50 transition-colors group"
+              title={`Click to copy ${f.tag}`}
+            >
+              <div className="min-w-0">
+                <code className="text-xs font-mono text-blue-700">{f.tag}</code>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">{f.note}</p>
+              </div>
+              <div className="shrink-0 text-blue-400 group-hover:text-blue-600">
+                {copied === f.tag ? <CheckCheck size={13} className="text-green-500" /> : <Copy size={13} />}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function EmailTemplatesClient({ initialTemplates }: Props) {
@@ -222,6 +277,8 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
         )}
       </div>
 
+      <MergeFieldsPanel />
+
       {filtered.length === 0 && search && (
         <p className="text-sm text-slate-400 text-center py-8">No templates match "{search}"</p>
       )}
@@ -300,25 +357,21 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
         </div>
       ))}
 
-      {/* New template form */}
-      {editingId === 'new' ? (
-        <div className="bg-white rounded-2xl border border-blue-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 bg-blue-50">
-            <p className="text-sm font-semibold text-slate-900">New email template</p>
-            <p className="text-xs text-slate-500 mt-0.5">Drag blocks from the left panel to build your email. Use the # merge tag button to insert personalisation fields.</p>
-          </div>
-          <EditorPanel
-            form={form}
-            setForm={setForm}
-            initialDesign={null}
-            onSave={handleSave}
-            onCancel={cancelEdit}
-            isPending={isPending}
-            saveError={saveError}
-            setSaveError={setSaveError}
-          />
-        </div>
-      ) : (
+      {/* New template full-screen editor */}
+      {editingId === 'new' && (
+        <EditorPanel
+          form={form}
+          setForm={setForm}
+          initialDesign={null}
+          onSave={handleSave}
+          onCancel={cancelEdit}
+          isPending={isPending}
+          saveError={saveError}
+          setSaveError={setSaveError}
+        />
+      )}
+
+      {editingId !== 'new' && (
         <div className="flex gap-3">
           <button
             onClick={startNew}
@@ -340,7 +393,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
   )
 }
 
-// ─── Unlayer visual editor panel ──────────────────────────────────────────────
+// ─── Unlayer visual editor panel (full-screen overlay) ───────────────────────
 
 type EditorProps = {
   form:           { name: string; category: string; subject: string }
@@ -373,68 +426,69 @@ function EditorPanel({ form, setForm, initialDesign, onSave, onCancel, isPending
   }
 
   return (
-    <div className="p-5 space-y-4">
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">Template name *</label>
-          <input
-            value={form.name}
-            onChange={e => { setForm((f: any) => ({ ...f, name: e.target.value })); setSaveError(null) }}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g. New Joiner Welcome"
-          />
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      {/* Top bar */}
+      <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-0.5">Template name *</label>
+            <input
+              value={form.name}
+              onChange={e => { setForm((f: any) => ({ ...f, name: e.target.value })); setSaveError(null) }}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+              placeholder="e.g. New Joiner Welcome"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-0.5">Category</label>
+            <input
+              value={form.category}
+              onChange={e => setForm((f: any) => ({ ...f, category: e.target.value }))}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+              placeholder="e.g. Onboarding"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <label className="block text-xs font-medium text-slate-500 mb-0.5">Email subject *</label>
+            <input
+              value={form.subject}
+              onChange={e => { setForm((f: any) => ({ ...f, subject: e.target.value })); setSaveError(null) }}
+              className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Welcome to your benefits, {{first_name}}"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">Category</label>
-          <input
-            value={form.category}
-            onChange={e => setForm((f: any) => ({ ...f, category: e.target.value }))}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g. Onboarding"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">Email subject *</label>
-          <input
-            value={form.subject}
-            onChange={e => { setForm((f: any) => ({ ...f, subject: e.target.value })); setSaveError(null) }}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Welcome to your benefits, {{first_name}}"
-          />
+        <div className="shrink-0 flex items-center gap-3 ml-4">
+          {saveError && <p className="text-xs text-red-600 max-w-xs">{saveError}</p>}
+          <p className="text-xs text-slate-400 hidden lg:block">
+            Click <strong>#</strong> in the toolbar to insert merge fields
+          </p>
+          <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveClick}
+            disabled={isPending || !editorReady}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {isPending ? 'Saving…' : 'Save template'}
+          </button>
         </div>
       </div>
 
-      <p className="text-xs text-slate-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-        <strong>Merge fields:</strong> click the <strong>#</strong> button in the text editor toolbar to insert personalisation (First Name, Full Name, Employer, etc.) — or type <code className="bg-white px-1 rounded">{'{{first_name}}'}</code> directly.
-      </p>
-
-      <div className="border border-slate-200 rounded-xl overflow-hidden">
+      {/* Editor fills remaining height */}
+      <div className="flex-1 min-h-0">
         <EmailEditor
           ref={editorRef}
           onReady={handleReady}
-          minHeight={600}
+          minHeight="100%"
           options={{
             mergeTags: UNLAYER_MERGE_TAGS,
             features: { preheaderText: false },
             appearance: { theme: 'light', panels: { tools: { dock: 'left' } } },
           }}
         />
-      </div>
-
-      {saveError && <p className="text-xs text-red-600">{saveError}</p>}
-
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-        <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors">
-          Cancel
-        </button>
-        <button
-          onClick={handleSaveClick}
-          disabled={isPending || !editorReady}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-          {isPending ? 'Saving…' : 'Save template'}
-        </button>
       </div>
     </div>
   )
