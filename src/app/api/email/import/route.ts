@@ -34,8 +34,18 @@ export async function POST(request: NextRequest) {
       const data = reader.getFileData()
       const subject  = (data as any).subject  ?? ''
       const bodyHtml = (data as any).bodyHtml ?? ''
+      const htmlRaw  = (data as any).html as Uint8Array | undefined
       const bodyText = (data as any).body     ?? ''
-      const html = bodyHtml.trim() ? bodyHtml : (bodyText.trim() ? plainToHtml(bodyText) : '')
+
+      // PidTagHtml (Uint8Array) holds the raw HTML bytes when PidTagBodyHtml (string) is empty
+      const htmlFromRaw = htmlRaw && htmlRaw.length > 0
+        ? new TextDecoder('utf-8', { fatal: false }).decode(htmlRaw)
+        : ''
+
+      const html = bodyHtml.trim()   ? bodyHtml
+                 : htmlFromRaw.trim() ? htmlFromRaw
+                 : bodyText.trim()   ? plainToHtml(bodyText)
+                 : ''
       return NextResponse.json({ subject, html_body: html, source: 'msg' })
     }
 
