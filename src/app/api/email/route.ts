@@ -5,6 +5,35 @@ import type { Recipient, EmailAttachment } from '@/lib/email-types'
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'WHEB <no-reply@warren-house.co.uk>'
 
+function fmtPct(n: number | null | undefined): string {
+  return n != null ? `${n}%` : ''
+}
+
+function fmtGbp(n: number | null | undefined): string {
+  if (n == null) return ''
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(Number(n))
+}
+
+async function buildSchemeVars(
+  supabase: Awaited<ReturnType<typeof createActionClient>>,
+  schemeId: string,
+  clientIds: string[],
+): Promise<Record<string, { contribution_rate: string; monthly_deduction: string }>> {
+  const { data } = await supabase
+    .from('benefit_memberships')
+    .select('client_id, employee_contribution_pct, employee_contribution_gbp')
+    .eq('scheme_id', schemeId)
+    .in('client_id', clientIds)
+  const map: Record<string, { contribution_rate: string; monthly_deduction: string }> = {}
+  for (const row of data ?? []) {
+    map[row.client_id] = {
+      contribution_rate: fmtPct(row.employee_contribution_pct),
+      monthly_deduction: fmtGbp(row.employee_contribution_gbp),
+    }
+  }
+  return map
+}
+
 function getResend() {
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set')
   return new Resend(process.env.RESEND_API_KEY)
@@ -43,11 +72,12 @@ export async function POST(request: NextRequest) {
   try {
     switch (op) {
       case 'sendBulk': {
-        const { templateId, recipients, cc, attachments } = body as {
-          templateId: string
-          recipients: Recipient[]
-          cc?: string[]
+        const { templateId, recipients, cc, attachments, schemeId } = body as {
+          templateId:  string
+          recipients:  Recipient[]
+          cc?:         string[]
           attachments?: EmailAttachment[]
+          schemeId?:   string
         }
 
         if (!recipients?.length) return NextResponse.json({ sent: 0, error: 'No recipients' })
@@ -63,13 +93,17 @@ export async function POST(request: NextRequest) {
         const validRecipients = recipients.filter(r => r.email)
         if (!validRecipients.length) return NextResponse.json({ sent: 0, error: 'No recipients with email addresses' })
 
+        const schemeVars = schemeId
+          ? await buildSchemeVars(supabase, schemeId, validRecipients.map(r => r.id))
+          : {}
+
         const resendAttachments = (attachments ?? []).map(a => ({
           filename: a.filename,
           content:  Buffer.from(a.content, 'base64'),
         }))
 
         const messages = validRecipients.map(r => {
-          const vars = buildVars(r)
+          const vars = { ...buildVars(r), ...(schemeVars[r.id] ?? {}) }
           return {
             from:        FROM_EMAIL,
             to:          r.email,
@@ -97,7 +131,7 @@ export async function POST(request: NextRequest) {
         if (sendRecord) {
           await supabase.from('email_send_recipients').insert(
             validRecipients.map(r => {
-              const vars = buildVars(r)
+              const vars = { ...buildVars(r), ...(schemeVars[r.id] ?? {}) }
               return {
                 email_send_id:    sendRecord.id,
                 client_id:        r.id || null,
@@ -114,11 +148,12 @@ export async function POST(request: NextRequest) {
       }
 
       case 'sendSingle': {
-        const { templateId, recipient, cc, attachments } = body as {
-          templateId: string
-          recipient: Recipient
-          cc?: string[]
+        const { templateId, recipient, cc, attachments, schemeId } = body as {
+          templateId:  string
+          recipient:   Recipient
+          cc?:         string[]
           attachments?: EmailAttachment[]
+          schemeId?:   string
         }
 
         const { data: template } = await supabase
@@ -130,7 +165,10 @@ export async function POST(request: NextRequest) {
         if (!template) return NextResponse.json({ error: 'Template not found' })
         if (!recipient?.email) return NextResponse.json({ error: 'Recipient has no email address' })
 
-        const vars = buildVars(recipient)
+        const singleSchemeVars = schemeId
+          ? await buildSchemeVars(supabase, schemeId, [recipient.id])
+          : {}
+        const vars = { ...buildVars(recipient), ...(singleSchemeVars[recipient.id] ?? {}) }
         const resendAttachments = (attachments ?? []).map(a => ({
           filename: a.filename,
           content:  Buffer.from(a.content, 'base64'),
@@ -156,7 +194,6 @@ export async function POST(request: NextRequest) {
         }).select('id').single()
 
         if (sendRecord) {
-          const vars = buildVars(recipient)
           await supabase.from('email_send_recipients').insert({
             email_send_id:    sendRecord.id,
             client_id:        recipient.id || null,

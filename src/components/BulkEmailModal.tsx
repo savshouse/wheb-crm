@@ -17,7 +17,7 @@ async function emailApi(body: Record<string, unknown>): Promise<{ sent?: number;
 import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Search, Paperclip, UserMinus, Plus, Filter } from 'lucide-react'
 import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
 
-type Membership = { client_id: string; scheme_name: string | null; scheme_type: string | null; enrolled_date: string | null }
+type Membership = { client_id: string; scheme_id: string | null; scheme_name: string | null; scheme_type: string | null; enrolled_date: string | null }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -75,6 +75,9 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
   const [filterYear, setFilterYear]     = useState('')   // '2024' etc or ''
   const [filterActive, setFilterActive] = useState(false)
 
+  // Scheme for contribution merge tags
+  const [schemeId, setSchemeId] = useState('')
+
   // Employer contacts (for CC suggestions when a scheme is selected)
   const [employerContacts, setEmployerContacts] = useState<{ email: string; label: string }[]>([])
 
@@ -85,7 +88,7 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
     const ids = initialRecipients.map(r => r.id)
     if (ids.length) {
       supabase.from('benefit_memberships')
-        .select('client_id, scheme_name, scheme_type, enrolled_date')
+        .select('client_id, scheme_id, scheme_name, scheme_type, enrolled_date')
         .in('client_id', ids)
         .then(({ data }) => { if (data) setMemberships(data as Membership[]) })
     }
@@ -162,6 +165,14 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
 
   const filterMatchCount = recipients.filter(r => matchesFilter(r.id)).length
 
+  const availableSchemeOptions = [...new Map(
+    memberships
+      .filter(m => m.scheme_id && m.scheme_name)
+      .map(m => [m.scheme_id!, { id: m.scheme_id!, name: m.scheme_name! }])
+  ).values()].sort((a, b) => a.name.localeCompare(b.name))
+
+  const needsScheme = !!(template && /\{\{(contribution_rate|monthly_deduction)\}\}/.test(template.html_body + template.subject))
+
   function applyFilter() {
     setFilterActive(true)
     setRecipients(rs => rs.map(r => ({ ...r, selected: matchesFilter(r.id) })))
@@ -189,8 +200,9 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
 
   function handleSend() {
     if (!templateId || !selected.length) return
+    if (needsScheme && !schemeId) return
     startTransition(async () => {
-      const res = await emailApi({ op: 'sendBulk', templateId, recipients: selected, cc: ccList, attachments })
+      const res = await emailApi({ op: 'sendBulk', templateId, recipients: selected, cc: ccList, attachments, schemeId: schemeId || undefined })
       setResult({ sent: res.sent ?? 0, error: res.error })
     })
   }
@@ -256,6 +268,30 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
                   </div>
                 )}
               </div>
+
+              {/* Contribution scheme picker — only when template uses those merge tags */}
+              {needsScheme && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    Contribution scheme <span className="text-red-500">*</span>
+                    <span className="font-normal text-slate-400 ml-1">— needed for contribution_rate / monthly_deduction merge tags</span>
+                  </label>
+                  {availableSchemeOptions.length === 0 ? (
+                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                      No scheme memberships found for these recipients.
+                    </p>
+                  ) : (
+                    <div className="relative">
+                      <select value={schemeId} onChange={e => setSchemeId(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none pr-8">
+                        <option value="">Select a scheme…</option>
+                        {availableSchemeOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* CC */}
               <div>
@@ -447,7 +483,7 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
             </div>
             <div className="flex items-center gap-3">
               <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors">Cancel</button>
-              <button onClick={handleSend} disabled={isPending || !templateId || !selected.length || templates.length === 0}
+              <button onClick={handleSend} disabled={isPending || !templateId || !selected.length || templates.length === 0 || (needsScheme && !schemeId)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
                 {isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
                 {isPending ? 'Sending…' : `Send to ${selected.filter(r => r.email).length}`}

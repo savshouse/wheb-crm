@@ -18,6 +18,7 @@ import { X, Mail, Eye, AlertCircle, CheckCircle2, Loader2, ChevronDown, Papercli
 import { MERGE_TAG_DEFS } from '@/lib/merge-tags'
 
 type Template = { id: string; name: string; category: string | null; subject: string; html_body: string }
+type SchemeOption = { id: string; name: string }
 
 type Props = {
   recipient: Recipient
@@ -38,17 +39,33 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
   const fileInputRef                  = useRef<HTMLInputElement>(null)
   const [isPending, startTransition]  = useTransition()
   const [result, setResult]           = useState<{ error: string | null } | null>(null)
+  const [schemes, setSchemes]         = useState<SchemeOption[]>([])
+  const [schemeId, setSchemeId]       = useState('')
 
   useEffect(() => {
     supabase.from('email_templates').select('id, name, category, subject, html_body').order('name').then(({ data }) => {
       if (data) { setTemplates(data as Template[]); if (data.length) setTemplateId(data[0].id) }
     })
+    supabase
+      .from('benefit_memberships')
+      .select('scheme_id, scheme_name')
+      .eq('client_id', recipient.id)
+      .then(({ data }) => {
+        if (!data) return
+        const unique = [...new Map(
+          data.filter(m => m.scheme_id && m.scheme_name)
+              .map(m => [m.scheme_id!, { id: m.scheme_id!, name: m.scheme_name! }])
+        ).values()].sort((a, b) => a.name.localeCompare(b.name))
+        setSchemes(unique)
+      })
   }, [])
 
   const template = templates.find(t => t.id === templateId)
   const nameParts = recipient.full_name?.split(' ') ?? []
   const vars: Record<string, string> = { first_name: nameParts[0] ?? '', last_name: nameParts.slice(1).join(' ') }
   for (const [k, v] of Object.entries(recipient)) { if (!(k in vars)) vars[k] = v ?? '' }
+
+  const needsScheme = !!(template && /\{\{(contribution_rate|monthly_deduction)\}\}/.test(template.html_body + template.subject))
 
   const previewSubject = template ? mergeVars(template.subject, vars) : ''
   const previewHtml    = template ? mergeVars(template.html_body, vars) : ''
@@ -72,8 +89,9 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
 
   function handleSend() {
     if (!templateId) return
+    if (needsScheme && !schemeId) return
     startTransition(async () => {
-      const res = await emailApi({ op: 'sendSingle', templateId, recipient, cc: ccList, attachments })
+      const res = await emailApi({ op: 'sendSingle', templateId, recipient, cc: ccList, attachments, schemeId: schemeId || undefined })
       setResult(res)
     })
   }
@@ -123,6 +141,30 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
               </div>
             )}
           </div>
+
+          {/* Contribution scheme picker */}
+          {needsScheme && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                Contribution scheme <span className="text-red-500">*</span>
+                <span className="font-normal text-slate-400 ml-1">— needed for contribution_rate / monthly_deduction</span>
+              </label>
+              {schemes.length === 0 ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                  No scheme memberships found for this person.
+                </p>
+              ) : (
+                <div className="relative">
+                  <select value={schemeId} onChange={e => setSchemeId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none pr-8">
+                    <option value="">Select a scheme…</option>
+                    {schemes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* CC */}
           <div>
@@ -181,7 +223,7 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex items-center justify-end gap-3 shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors">Cancel</button>
-          <button onClick={handleSend} disabled={isPending || !templateId || templates.length === 0}
+          <button onClick={handleSend} disabled={isPending || !templateId || templates.length === 0 || (needsScheme && !schemeId)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
             {isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
             {isPending ? 'Sending…' : 'Send email'}
