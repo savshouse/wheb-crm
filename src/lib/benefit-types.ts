@@ -33,6 +33,8 @@ export type MembershipPayload = {
   membership_start_date?: string | null
   opted_out?: boolean
   opted_out_date?: string | null
+  opt_in_date?: string | null
+  re_enrolled_date?: string | null
   employer_contribution_pct?: number | null
   employer_contribution_gbp?: number | null
   employee_contribution_pct?: number | null
