@@ -7,7 +7,7 @@ export default async function UsersPage() {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, full_name, email, role, created_at, updated_at')
+    .select('id, full_name, email, role, is_archived, created_at, updated_at')
     .order('full_name')
 
   return (

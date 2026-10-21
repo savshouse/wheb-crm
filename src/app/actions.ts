@@ -930,6 +930,67 @@ export async function inviteUser(data: {
   return { error: null }
 }
 
+export async function archiveUser(userId: string): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+  if (user.id === userId) return { error: 'You cannot archive your own account' }
+
+  const { data: caller } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (caller?.role !== 'admin') return { error: 'Admin access required' }
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { error: banErr } = await admin.auth.admin.updateUserById(userId, { ban_duration: '87600h' })
+  if (banErr) return { error: banErr.message }
+
+  await admin.from('profiles').update({ is_archived: true, updated_at: new Date().toISOString() }).eq('id', userId)
+  return { error: null }
+}
+
+export async function restoreUser(userId: string): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: caller } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (caller?.role !== 'admin') return { error: 'Admin access required' }
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { error: unbanErr } = await admin.auth.admin.updateUserById(userId, { ban_duration: 'none' })
+  if (unbanErr) return { error: unbanErr.message }
+
+  await admin.from('profiles').update({ is_archived: false, updated_at: new Date().toISOString() }).eq('id', userId)
+  return { error: null }
+}
+
+export async function adminChangeUserEmail(userId: string, email: string): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: caller } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (caller?.role !== 'admin') return { error: 'Admin access required' }
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { error: authErr } = await admin.auth.admin.updateUserById(userId, { email })
+  if (authErr) return { error: authErr.message }
+
+  await admin.from('profiles').update({ email, updated_at: new Date().toISOString() }).eq('id', userId)
+  return { error: null }
+}
+
 // ─── Backup ───────────────────────────────────────────────────
 
 export async function triggerBackup(): Promise<{

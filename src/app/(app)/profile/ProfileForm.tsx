@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Save, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Camera, Save, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, Lock } from 'lucide-react'
 import { updateProfile } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import CropModal from './CropModal'
@@ -31,6 +31,28 @@ export default function ProfileForm({
   const fileRef = useRef<HTMLInputElement>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  // Change password
+  const [newPassword,  setNewPassword]  = useState('')
+  const [confirmPw,    setConfirmPw]    = useState('')
+  const [showPw,       setShowPw]       = useState(false)
+  const [pwSaving,     setPwSaving]     = useState(false)
+  const [pwError,      setPwError]      = useState<string | null>(null)
+  const [pwSuccess,    setPwSuccess]    = useState(false)
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPassword !== confirmPw) { setPwError("Passwords don't match"); return }
+    if (newPassword.length < 8) { setPwError('Password must be at least 8 characters'); return }
+    setPwSaving(true); setPwError(null); setPwSuccess(false)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPwSaving(false)
+    if (error) { setPwError(error.message) } else {
+      setPwSuccess(true); setNewPassword(''); setConfirmPw('')
+      setTimeout(() => setPwSuccess(false), 4000)
+    }
+  }
 
   async function handleSync() {
     setSyncing(true)
@@ -160,6 +182,45 @@ export default function ProfileForm({
             <Save size={15} />{isPending ? 'Saving...' : 'Save profile'}
           </button>
         </form>
+
+        {/* Change password */}
+        <div className="mt-6 bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="text-base font-semibold text-slate-900 mb-1 flex items-center gap-2">
+            <Lock size={16} className="text-slate-400" />Change password
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Leave blank if you sign in with magic links and don&apos;t need a password.
+          </p>
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="New password (min 8 characters)"
+                className="w-full px-3 py-2 pr-10 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button type="button" onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={confirmPw}
+              onChange={e => setConfirmPw(e.target.value)}
+              placeholder="Confirm new password"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {pwError   && <p className="text-sm text-red-600">{pwError}</p>}
+            {pwSuccess  && <p className="text-sm text-green-600">Password updated successfully.</p>}
+            <button type="submit" disabled={pwSaving || !newPassword || !confirmPw}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+              {pwSaving ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Lock size={14} />}
+              {pwSaving ? 'Saving…' : 'Update password'}
+            </button>
+          </form>
+        </div>
 
         {/* Microsoft To Do integration */}
         <div className="mt-6 bg-white rounded-xl border border-slate-200 p-6">
