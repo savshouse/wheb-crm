@@ -48,15 +48,21 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
     })
     supabase
       .from('benefit_memberships')
-      .select('scheme_id, scheme_name')
+      .select('scheme_id')
       .eq('client_id', recipient.id)
-      .then(({ data }) => {
-        if (!data) return
-        const unique = [...new Map(
-          data.filter(m => m.scheme_id && m.scheme_name)
-              .map(m => [m.scheme_id!, { id: m.scheme_id!, name: m.scheme_name! }])
-        ).values()].sort((a, b) => a.name.localeCompare(b.name))
-        setSchemes(unique)
+      .not('scheme_id', 'is', null)
+      .then(async ({ data }) => {
+        if (!data?.length) return
+        const ids = [...new Set(data.map(m => m.scheme_id).filter(Boolean))] as string[]
+        const { data: liveSchemes } = await supabase
+          .from('benefit_schemes')
+          .select('id, scheme_name')
+          .in('id', ids)
+        const sorted = (liveSchemes ?? [])
+          .filter(s => s.scheme_name)
+          .map(s => ({ id: s.id as string, name: s.scheme_name as string }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+        setSchemes(sorted)
       })
   }, [])
 
@@ -111,7 +117,7 @@ export default function SendEmailModal({ recipient, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">

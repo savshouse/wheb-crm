@@ -90,7 +90,22 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
       supabase.from('benefit_memberships')
         .select('client_id, scheme_id, scheme_name, scheme_type, enrolled_date')
         .in('client_id', ids)
-        .then(({ data }) => { if (data) setMemberships(data as Membership[]) })
+        .then(async ({ data }) => {
+          if (!data) return
+          const schemeIds = [...new Set(data.map(m => m.scheme_id).filter(Boolean))] as string[]
+          let liveNames: Record<string, string> = {}
+          if (schemeIds.length) {
+            const { data: schemes } = await supabase
+              .from('benefit_schemes').select('id, scheme_name').in('id', schemeIds)
+            for (const s of schemes ?? []) {
+              if (s.id && s.scheme_name) liveNames[s.id] = s.scheme_name
+            }
+          }
+          setMemberships(data.map(m => ({
+            ...m,
+            scheme_name: (m.scheme_id && liveNames[m.scheme_id]) ? liveNames[m.scheme_id] : m.scheme_name,
+          })) as Membership[])
+        })
     }
   }, [])
 
