@@ -69,6 +69,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   const supabase = createClient()
 
   const [isPending, startTransition] = useTransition()
+  const [completingSubTask, setCompletingSubTask] = useState<string | null>(null)
   const [addingToStep, setAddingToStep] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskAssignee, setNewTaskAssignee] = useState(currentUserId)
@@ -117,6 +118,17 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
       if (error) setError(error)
       else router.refresh()
     })
+  }
+
+  async function handleToggleSubTask(subId: string, currentStatus: string) {
+    setCompletingSubTask(subId)
+    const newStatus = currentStatus === 'completed' ? 'open' : 'completed'
+    await supabase
+      .from('tasks')
+      .update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null })
+      .eq('id', subId)
+    setCompletingSubTask(null)
+    router.refresh()
   }
 
   function handleAddTask(step: Step) {
@@ -432,12 +444,16 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                               const isSubOverdue = sub.due_date && !isSubDone && isPast(parseISO(sub.due_date))
                               return (
                                 <div key={sub.id} className={`flex items-center gap-2 py-0.5 ${isSubDone ? 'opacity-50' : ''}`}>
-                                  <div className="shrink-0">
+                                  <button
+                                    onClick={() => handleToggleSubTask(sub.id, sub.status)}
+                                    disabled={completingSubTask === sub.id}
+                                    className="shrink-0 text-slate-300 hover:text-green-500 disabled:opacity-40 transition-colors"
+                                  >
                                     {isSubDone
                                       ? <CheckCircle2 size={13} className="text-green-400" />
-                                      : <Circle size={13} className="text-slate-300" />
+                                      : <Circle size={13} />
                                     }
-                                  </div>
+                                  </button>
                                   <span className={`flex-1 text-xs ${isSubDone ? 'line-through text-slate-400' : 'text-slate-600'}`}>
                                     {sub.title}
                                   </span>
