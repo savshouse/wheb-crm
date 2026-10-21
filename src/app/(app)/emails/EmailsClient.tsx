@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Mail, Users, User, X, Loader2 } from 'lucide-react'
+import { Mail, Users, User, X, Loader2, Search } from 'lucide-react'
 import DataTable, { ColumnDef } from '@/components/DataTable'
 import { createClient } from '@/lib/supabase/client'
 
@@ -32,6 +32,17 @@ export default function EmailsClient({ sends }: Props) {
   const [recipients, setRecipients] = useState<RecipientRow[]>([])
   const [loading, setLoading]       = useState(false)
   const [previewR, setPreviewR]     = useState<RecipientRow | null>(null)
+  const [search, setSearch]         = useState('')
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    if (!q) return sends
+    return sends.filter(s =>
+      s.subject.toLowerCase().includes(q) ||
+      s.template_name.toLowerCase().includes(q) ||
+      (s.sender?.full_name ?? s.sender?.email ?? '').toLowerCase().includes(q)
+    )
+  }, [sends, search])
 
   async function openSend(send: Send) {
     setSelected(send)
@@ -129,8 +140,22 @@ export default function EmailsClient({ sends }: Props) {
 
   return (
     <>
+      <div className="relative mb-4">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by subject, template or sender…"
+          className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <X size={13} />
+          </button>
+        )}
+      </div>
       <DataTable
-        data={sends}
+        data={filtered}
         columns={columns}
         storageKey="emails-list"
         rowKey={r => r.id}
@@ -140,7 +165,7 @@ export default function EmailsClient({ sends }: Props) {
       {/* Send detail modal */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[85vh] flex flex-col">
             {/* Header */}
             <div className="flex items-start justify-between px-6 py-4 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3 min-w-0">

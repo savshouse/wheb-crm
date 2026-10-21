@@ -23,9 +23,14 @@ type Row = {
 
 type Props = { rows: Row[] }
 
+const PAGE_SIZE = 4
+
 export default function ClientEmailHistoryToggle({ rows }: Props) {
   const [open, setOpen]       = useState(true)
   const [preview, setPreview] = useState<Row | null>(null)
+  const [showAll, setShowAll] = useState(false)
+
+  const visible = showAll ? rows : rows.slice(0, PAGE_SIZE)
 
   return (
     <>
@@ -47,7 +52,7 @@ export default function ClientEmailHistoryToggle({ rows }: Props) {
 
         {open && (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {rows.map((row, i) => {
+            {visible.map((row, i) => {
               const send = row.send
               if (!send) return null
               const date    = send.sent_at ? format(parseISO(send.sent_at), 'd MMM yyyy, h:mm a') : '—'
@@ -83,6 +88,14 @@ export default function ClientEmailHistoryToggle({ rows }: Props) {
                 </button>
               )
             })}
+            {rows.length > PAGE_SIZE && (
+              <button
+                onClick={() => setShowAll(s => !s)}
+                className="w-full py-2.5 text-xs text-blue-600 hover:text-blue-800 border-t border-slate-100 bg-slate-50 transition-colors"
+              >
+                {showAll ? 'Show fewer' : `Show all ${rows.length} emails`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -90,7 +103,7 @@ export default function ClientEmailHistoryToggle({ rows }: Props) {
       {/* Email preview modal */}
       {preview && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[85vh] flex flex-col">
             {/* Header */}
             <div className="flex items-start justify-between px-6 py-4 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3 min-w-0">

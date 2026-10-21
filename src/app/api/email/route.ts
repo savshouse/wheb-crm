@@ -26,9 +26,11 @@ async function buildSchemeVars(
     .in('client_id', clientIds)
   const map: Record<string, { contribution_rate: string; monthly_deduction: string }> = {}
   for (const row of data ?? []) {
+    const annualGbp = row.employee_contribution_gbp
     map[row.client_id] = {
       contribution_rate: fmtPct(row.employee_contribution_pct),
-      monthly_deduction: fmtGbp(row.employee_contribution_gbp),
+      // employee_contribution_gbp is stored as an annual figure; divide by 12 for monthly
+      monthly_deduction: fmtGbp(annualGbp != null ? annualGbp / 12 : null),
     }
   }
   return map
