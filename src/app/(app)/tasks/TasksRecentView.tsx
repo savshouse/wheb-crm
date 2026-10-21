@@ -7,7 +7,7 @@ import TaskModal from './TaskModal'
 import { createClient } from '@/lib/supabase/client'
 import { updateTaskStatus } from '@/app/actions'
 
-const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
+const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), journey_step:advice_journey_steps(id,name,step_order,journey:advice_journeys(id,title))'
 
 type Props = {
   profiles: any[]

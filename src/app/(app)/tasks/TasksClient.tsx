@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
-import { Clock, Building2, User } from 'lucide-react'
+import { Clock, Building2, User, Route } from 'lucide-react'
 import Link from 'next/link'
 import TaskStatusButton from './TaskStatusButton'
 import TaskModal from './TaskModal'
@@ -92,6 +92,16 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
                       )}
                       {task.meeting && (
                         <span className="text-xs text-slate-400">From: {task.meeting.title}</span>
+                      )}
+                      {task.journey_step?.journey && (
+                        <Link
+                          href={`/journeys/${task.journey_step.journey.id}`}
+                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Route size={11} />
+                          {task.journey_step.journey.title}
+                        </Link>
                       )}
                     </div>
                   </div>

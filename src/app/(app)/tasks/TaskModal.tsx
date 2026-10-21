@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink, CalendarDays } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink, CalendarDays, Route } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -496,6 +496,18 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
             {task.client && task.client.name && (
               <Link href={`/clients/${task.client.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium" onClick={safeClose}>
                 <Building2 size={12} />{task.client.name}
+              </Link>
+            )}
+            {task.journey_step?.journey && (
+              <Link
+                href={`/journeys/${task.journey_step.journey.id}`}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                onClick={safeClose}
+              >
+                <Route size={11} />
+                {task.journey_step.journey.title}
+                <span className="text-indigo-400">›</span>
+                {task.journey_step.name}
               </Link>
             )}
             {task.client?.id && (meetingId || task.meeting) && (() => {

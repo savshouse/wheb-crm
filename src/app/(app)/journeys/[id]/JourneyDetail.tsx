@@ -6,7 +6,7 @@ import { format, parseISO, differenceInDays, isPast } from 'date-fns'
 import {
   User, Calendar, CheckCircle2, Circle, Clock,
   Plus, X, Check, AlertCircle, Ban, ExternalLink,
-  RotateCcw, Trash2, AlertTriangle,
+  RotateCcw, Trash2, AlertTriangle, ListTree,
 } from 'lucide-react'
 import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
@@ -23,6 +23,7 @@ type StepTask = {
   due_date: string | null
   assigned_to: string | null
   assignee: Profile | null
+  sub_tasks?: { id: string; status: string }[]
 }
 
 type Step = {
@@ -286,6 +287,35 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
         </div>
       )}
 
+      {/* Progress bar */}
+      {sortedSteps.length > 0 && (() => {
+        const completedCount = sortedSteps.filter(s => s.status === 'complete').length
+        const activeStep = sortedSteps.find(s => s.status === 'in_progress')
+        const pct = Math.round((completedCount / sortedSteps.length) * 100)
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-700">
+                {activeStep ? `Current: ${activeStep.name}` : completedCount === sortedSteps.length ? 'All steps complete' : 'Not started'}
+              </span>
+              <span className="text-xs text-slate-500">{completedCount} / {sortedSteps.length} steps · {pct}%</span>
+            </div>
+            <div className="flex gap-1">
+              {sortedSteps.map(step => (
+                <div
+                  key={step.id}
+                  title={step.name}
+                  className={`h-2 flex-1 rounded-full transition-colors ${
+                    step.status === 'complete'    ? 'bg-green-500' :
+                    step.status === 'in_progress' ? 'bg-blue-500'  : 'bg-slate-200'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Step pipeline */}
       <div className="space-y-3">
         {sortedSteps.map((step) => {
@@ -374,6 +404,12 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                           {task.title}
                         </button>
                         <div className="flex items-center gap-2 shrink-0">
+                          {task.sub_tasks && task.sub_tasks.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-xs text-slate-400" title="Sub-tasks">
+                              <ListTree size={11} />
+                              {task.sub_tasks.filter(st => st.status === 'completed').length}/{task.sub_tasks.length}
+                            </span>
+                          )}
                           {task.priority && (
                             <span className={`text-xs px-1.5 py-0.5 rounded-full ${priorityBadge[task.priority] ?? ''}`}>
                               {task.priority}

@@ -21,7 +21,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
         meeting:meetings!advice_journeys_meeting_id_fkey(id, title, meeting_date),
         steps:advice_journey_steps(
           id, step_order, name, status, completed_at,
-          tasks(id, title, status, priority, due_date, assigned_to, assignee:profiles!tasks_assigned_to_fkey(id, full_name, email))
+          tasks(id, title, status, priority, due_date, assigned_to, assignee:profiles!tasks_assigned_to_fkey(id, full_name, email), sub_tasks:tasks!parent_task_id(id, status))
         )
       `)
       .eq('id', id)

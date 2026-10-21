@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckSquare, List, CalendarDays, Kanban, Clock } from 'lucide-react'
+import { CheckSquare, List, CalendarDays, Kanban, Clock, Search, X as XIcon } from 'lucide-react'
+import { parseISO, isToday, isPast, addDays, startOfDay } from 'date-fns'
 import TasksClient from './TasksClient'
 import TasksCalendarView from './TasksCalendarView'
 import TasksKanbanView from './TasksKanbanView'
@@ -32,7 +33,7 @@ const VIEWS = [
   { key: 'recent'   as const, icon: Clock,        label: 'Recent'   },
 ]
 
-const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
+const TASK_SELECT = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), journey_step:advice_journey_steps(id,name,step_order,journey:advice_journeys(id,title))'
 
 export default function TasksPageClient({
   myTasks: initialMy,
@@ -48,6 +49,9 @@ export default function TasksPageClient({
 }: Props) {
   const router = useRouter()
   const [view, setView] = useState<View>('list')
+  const [search, setSearch]               = useState('')
+  const [filterPriority, setFilterPriority] = useState('')
+  const [filterDue, setFilterDue]         = useState('')
   const [myTasks, setMyTasks]             = useState(initialMy)
   const [teamTasks, setTeamTasks]         = useState(initialTeam)
   const [completedTasks, setCompletedTasks] = useState(initialCompleted)
@@ -154,6 +158,25 @@ export default function TasksPageClient({
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  function applyFilters(tasks: any[]) {
+    const today = startOfDay(new Date())
+    const weekEnd = addDays(today, 7)
+    return tasks.filter(t => {
+      if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false
+      if (filterPriority && t.priority !== filterPriority) return false
+      if (filterDue) {
+        const d = t.due_date ? startOfDay(parseISO(t.due_date)) : null
+        if (filterDue === 'overdue')  return d !== null && d < today
+        if (filterDue === 'today')    return d !== null && isToday(parseISO(t.due_date))
+        if (filterDue === 'week')     return d !== null && d >= today && d <= weekEnd
+        if (filterDue === 'no-date')  return !t.due_date
+      }
+      return true
+    })
+  }
+
+  const hasFilter = search || filterPriority || filterDue
+
   // Deduplicated union for calendar/kanban
   const myIds = new Set(myTasks.map((t: any) => t.id))
   const allActiveTasks = [...myTasks, ...teamTasks.filter((t: any) => !myIds.has(t.id))]
@@ -192,52 +215,106 @@ export default function TasksPageClient({
 
       {view === 'list' && (
         <>
-          {showMine && (
-            <section className="mb-8">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-                {highlightOverdue ? `Overdue (${myTasks.length})` : `My tasks (${myTasks.length})`}
-              </h2>
-              {!myTasks.length ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-                  <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
-                  <p className="text-slate-500 text-sm">
-                    {highlightOverdue ? 'No overdue tasks' : 'No tasks assigned to you'}
-                  </p>
-                </div>
-              ) : (
-                <TasksClient
-                  tasks={myTasks}
-                  profiles={profiles}
-                  currentUserId={currentUserId}
-                  highlightOverdue={highlightOverdue}
-                  onTaskSaved={updateTaskInLists}
-                  onTaskDeleted={deleteTaskFromLists}
-                />
+          {/* Search + filter bar */}
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            <div className="relative flex-1 min-w-48">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search tasks…"
+                className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <XIcon size={13} />
+                </button>
               )}
-            </section>
-          )}
-          {showTeam && (
-            <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-                {filter === 'team'
-                  ? `All open tasks (${teamTasks.length})`
-                  : `Team tasks (${teamTasks.length})`}
-              </h2>
-              {!teamTasks.length ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
-                  <p className="text-slate-500 text-sm">No other open tasks</p>
-                </div>
-              ) : (
-                <TasksClient
-                  tasks={teamTasks}
-                  profiles={profiles}
-                  currentUserId={currentUserId}
-                  onTaskSaved={updateTaskInLists}
-                  onTaskDeleted={deleteTaskFromLists}
-                />
-              )}
-            </section>
-          )}
+            </div>
+            <select
+              value={filterPriority}
+              onChange={e => setFilterPriority(e.target.value)}
+              className="py-2 px-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
+            >
+              <option value="">All priorities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <select
+              value={filterDue}
+              onChange={e => setFilterDue(e.target.value)}
+              className="py-2 px-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
+            >
+              <option value="">All dates</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="week">Due this week</option>
+              <option value="no-date">No due date</option>
+            </select>
+            {hasFilter && (
+              <button
+                onClick={() => { setSearch(''); setFilterPriority(''); setFilterDue('') }}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg border border-slate-200 bg-white"
+              >
+                <XIcon size={12} />
+                Clear
+              </button>
+            )}
+          </div>
+
+          {showMine && (() => {
+            const filtered = applyFilters(myTasks)
+            return (
+              <section className="mb-8">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                  {highlightOverdue ? `Overdue (${filtered.length})` : `My tasks (${filtered.length})`}
+                </h2>
+                {!filtered.length ? (
+                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                    <CheckSquare size={32} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-slate-500 text-sm">
+                      {hasFilter ? 'No tasks match your filters' : highlightOverdue ? 'No overdue tasks' : 'No tasks assigned to you'}
+                    </p>
+                  </div>
+                ) : (
+                  <TasksClient
+                    tasks={filtered}
+                    profiles={profiles}
+                    currentUserId={currentUserId}
+                    highlightOverdue={highlightOverdue}
+                    onTaskSaved={updateTaskInLists}
+                    onTaskDeleted={deleteTaskFromLists}
+                  />
+                )}
+              </section>
+            )
+          })()}
+          {showTeam && (() => {
+            const filtered = applyFilters(teamTasks)
+            return (
+              <section>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                  {filter === 'team'
+                    ? `All open tasks (${filtered.length})`
+                    : `Team tasks (${filtered.length})`}
+                </h2>
+                {!filtered.length ? (
+                  <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
+                    <p className="text-slate-500 text-sm">{hasFilter ? 'No tasks match your filters' : 'No other open tasks'}</p>
+                  </div>
+                ) : (
+                  <TasksClient
+                    tasks={filtered}
+                    profiles={profiles}
+                    currentUserId={currentUserId}
+                    onTaskSaved={updateTaskInLists}
+                    onTaskDeleted={deleteTaskFromLists}
+                  />
+                )}
+              </section>
+            )
+          })()}
         </>
       )}
 

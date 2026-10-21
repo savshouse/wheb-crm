@@ -19,7 +19,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     .eq('id', user.id)
     .single()
 
-  const taskSelect = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title)'
+  const taskSelect = '*, client:clients(id,name), assignee:profiles!tasks_assigned_to_fkey(full_name,email), meeting:meetings(title), journey_step:advice_journey_steps(id,name,step_order,journey:advice_journeys(id,title))'
 
   const fetchAllOpen = filter === 'team' || profile?.role !== 'staff'
 
