@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { X, Route, Check } from 'lucide-react'
 import { journeyApi } from '@/lib/journey-api'
 
+type StepDef = { name: string; task_template_id: string | null }
+
 type Template = {
   id: string
   name: string
   category: string
   description: string | null
-  steps: string[]
+  steps: (string | StepDef)[]
   is_active: boolean
 }
 
@@ -110,7 +112,7 @@ export default function StartJourneyModal({
                 <div className="flex flex-wrap gap-1">
                   {selectedTemplate.steps.map((s, i) => (
                     <span key={i} className="text-xs bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-600">
-                      {i + 1}. {s}
+                      {i + 1}. {typeof s === 'string' ? s : s.name}
                     </span>
                   ))}
                 </div>
