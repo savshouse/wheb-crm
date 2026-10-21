@@ -6,7 +6,7 @@ import { format, parseISO, differenceInDays, isPast } from 'date-fns'
 import {
   User, Calendar, CheckCircle2, Circle, Clock,
   Plus, X, Check, AlertCircle, Ban, ExternalLink,
-  RotateCcw, Trash2, AlertTriangle, ListTree,
+  RotateCcw, Trash2, AlertTriangle,
 } from 'lucide-react'
 import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
@@ -23,7 +23,7 @@ type StepTask = {
   due_date: string | null
   assigned_to: string | null
   assignee: Profile | null
-  sub_tasks?: { id: string; status: string }[]
+  sub_tasks?: { id: string; title: string; status: string; priority: string; due_date: string | null; assigned_to: string | null }[]
 }
 
 type Step = {
@@ -383,49 +383,81 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                   {step.tasks.map(task => {
                     const isTaskDone = task.status === 'completed' || task.status === 'cancelled'
                     const isOverdue  = task.due_date && !isTaskDone && isPast(parseISO(task.due_date))
+                    const subs       = task.sub_tasks ?? []
 
                     return (
-                      <div key={task.id} className={`flex items-center gap-3 py-1 group ${isTaskDone ? 'opacity-50' : ''}`}>
-                        <button
-                          onClick={() => !isTaskDone && handleCompleteTask(task, step)}
-                          disabled={isPending || isTaskDone}
-                          className="shrink-0 text-slate-400 hover:text-green-500 disabled:cursor-default transition-colors"
-                        >
-                          {isTaskDone
-                            ? <CheckCircle2 size={16} className="text-green-400" />
-                            : <Circle size={16} />
-                          }
-                        </button>
-                        {/* Clickable task title → opens TaskModal */}
-                        <button
-                          onClick={() => openTask(task)}
-                          className={`flex-1 text-sm text-left hover:text-blue-600 transition-colors ${isTaskDone ? 'line-through text-slate-400' : 'text-slate-700'}`}
-                        >
-                          {task.title}
-                        </button>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {task.sub_tasks && task.sub_tasks.length > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-slate-400" title="Sub-tasks">
-                              <ListTree size={11} />
-                              {task.sub_tasks.filter(st => st.status === 'completed').length}/{task.sub_tasks.length}
-                            </span>
-                          )}
-                          {task.priority && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${priorityBadge[task.priority] ?? ''}`}>
-                              {task.priority}
-                            </span>
-                          )}
-                          {task.due_date && (
-                            <span className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
-                              {format(parseISO(task.due_date), 'd MMM')}
-                            </span>
-                          )}
-                          {task.assignee && (
-                            <span className="text-xs text-slate-400">
-                              {task.assignee.full_name?.split(' ')[0] ?? task.assignee.email}
-                            </span>
-                          )}
+                      <div key={task.id} className={isTaskDone ? 'opacity-50' : ''}>
+                        {/* Parent task row */}
+                        <div className="flex items-center gap-3 py-1 group">
+                          <button
+                            onClick={() => !isTaskDone && handleCompleteTask(task, step)}
+                            disabled={isPending || isTaskDone}
+                            className="shrink-0 text-slate-400 hover:text-green-500 disabled:cursor-default transition-colors"
+                          >
+                            {isTaskDone
+                              ? <CheckCircle2 size={16} className="text-green-400" />
+                              : <Circle size={16} />
+                            }
+                          </button>
+                          <button
+                            onClick={() => openTask(task)}
+                            className={`flex-1 text-sm text-left hover:text-blue-600 transition-colors ${isTaskDone ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}
+                          >
+                            {task.title}
+                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {task.priority && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full ${priorityBadge[task.priority] ?? ''}`}>
+                                {task.priority}
+                              </span>
+                            )}
+                            {task.due_date && (
+                              <span className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+                                {format(parseISO(task.due_date), 'd MMM')}
+                              </span>
+                            )}
+                            {task.assignee && (
+                              <span className="text-xs text-slate-400">
+                                {task.assignee.full_name?.split(' ')[0] ?? task.assignee.email}
+                              </span>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Sub-tasks */}
+                        {subs.length > 0 && (
+                          <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l-2 border-slate-100 pl-3">
+                            {subs.map(sub => {
+                              const isSubDone = sub.status === 'completed' || sub.status === 'cancelled'
+                              const isSubOverdue = sub.due_date && !isSubDone && isPast(parseISO(sub.due_date))
+                              return (
+                                <div key={sub.id} className={`flex items-center gap-2 py-0.5 ${isSubDone ? 'opacity-50' : ''}`}>
+                                  <div className="shrink-0">
+                                    {isSubDone
+                                      ? <CheckCircle2 size={13} className="text-green-400" />
+                                      : <Circle size={13} className="text-slate-300" />
+                                    }
+                                  </div>
+                                  <span className={`flex-1 text-xs ${isSubDone ? 'line-through text-slate-400' : 'text-slate-600'}`}>
+                                    {sub.title}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {sub.priority && (
+                                      <span className={`text-xs px-1 py-0.5 rounded-full ${priorityBadge[sub.priority] ?? ''}`}>
+                                        {sub.priority}
+                                      </span>
+                                    )}
+                                    {sub.due_date && (
+                                      <span className={`text-xs ${isSubOverdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+                                        {format(parseISO(sub.due_date), 'd MMM')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
