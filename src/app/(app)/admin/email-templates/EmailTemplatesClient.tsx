@@ -14,9 +14,10 @@ async function emailApi(body: Record<string, unknown>): Promise<{ error: string 
     return { error: e?.message ?? String(e) }
   }
 }
-import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Eye, AlertTriangle, Loader2, Upload } from 'lucide-react'
 import type { EditorRef } from 'react-email-editor'
 import { UNLAYER_MERGE_TAGS } from '@/lib/merge-tags'
+import EmailImportModal from '@/components/EmailImportModal'
 
 // Load Unlayer editor client-side only (it uses browser APIs)
 const EmailEditor = dynamic(() => import('react-email-editor'), { ssr: false, loading: () => (
@@ -48,6 +49,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
   const [isPending, startTransition] = useTransition()
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   const blank = { name: '', category: '', subject: '' }
   const [form, setForm] = useState(blank)
@@ -127,6 +129,7 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
 
   return (
     <div className="space-y-3">
+      {importOpen && <EmailImportModal onClose={() => setImportOpen(false)} />}
       {templates.map(t => (
         <div key={t.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4">
@@ -216,13 +219,22 @@ export default function EmailTemplatesClient({ initialTemplates }: Props) {
           />
         </div>
       ) : (
-        <button
-          onClick={startNew}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
-        >
-          <Plus size={16} />
-          Add template
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={startNew}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+          >
+            <Plus size={16} />
+            Add template
+          </button>
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+          >
+            <Upload size={16} />
+            Import from email
+          </button>
+        </div>
       )}
     </div>
   )
