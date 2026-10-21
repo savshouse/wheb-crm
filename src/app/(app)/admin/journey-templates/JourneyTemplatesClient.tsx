@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { saveJourneyTemplate } from '@/app/journey-actions'
+import { journeyApi } from '@/lib/journey-api'
 import { Plus, Pencil, GripVertical, X, Check, ToggleLeft, ToggleRight, ChevronDown, ChevronRight, Link2 } from 'lucide-react'
 
 type StepDef = { name: string; task_template_id: string | null }
@@ -100,10 +100,11 @@ export default function JourneyTemplatesClient({ initialTemplates, taskTemplates
     if (steps.length === 0) { setSaveError('At least one step is required'); return }
 
     startTransition(async () => {
-      const { error } = await saveJourneyTemplate(
-        editingId === 'new' ? null : editingId,
-        { name: form.name.trim(), category: form.category.trim(), description: form.description.trim(), steps, is_active: form.is_active }
-      )
+      const { error } = await journeyApi({
+        op: 'saveJourneyTemplate',
+        id: editingId === 'new' ? null : editingId,
+        payload: { name: form.name.trim(), category: form.category.trim(), description: form.description.trim(), steps, is_active: form.is_active },
+      })
       if (error) { setSaveError(error); return }
 
       if (editingId === 'new') {
@@ -120,9 +121,10 @@ export default function JourneyTemplatesClient({ initialTemplates, taskTemplates
 
   function toggleActive(t: Template) {
     startTransition(async () => {
-      const { error } = await saveJourneyTemplate(t.id, {
-        name: t.name, category: t.category, description: t.description ?? '',
-        steps: t.steps, is_active: !t.is_active,
+      const { error } = await journeyApi({
+        op: 'saveJourneyTemplate',
+        id: t.id,
+        payload: { name: t.name, category: t.category, description: t.description ?? '', steps: t.steps, is_active: !t.is_active },
       })
       if (!error) setTemplates(ts => ts.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x))
     })

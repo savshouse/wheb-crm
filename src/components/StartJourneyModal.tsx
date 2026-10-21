@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Route, Check } from 'lucide-react'
-import { createJourney } from '@/app/journey-actions'
+import { journeyApi } from '@/lib/journey-api'
 
 type Template = {
   id: string
@@ -58,7 +58,8 @@ export default function StartJourneyModal({
     const tpl = activeTemplates.find(t => t.id === templateId)
 
     startTransition(async () => {
-      const { journeyId, error } = await createJourney({
+      const { journeyId, error } = await journeyApi({
+        op: 'createJourney',
         clientId,
         templateId,
         title: title.trim(),

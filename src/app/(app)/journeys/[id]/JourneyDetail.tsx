@@ -8,7 +8,7 @@ import {
   Plus, X, Check, AlertCircle, Ban, ExternalLink,
   RotateCcw, Trash2, AlertTriangle,
 } from 'lucide-react'
-import { completeJourneyStep, addTaskToStep, completeStepTask, updateJourneyStatus, reopenJourneyStep, deleteJourney } from '@/app/journey-actions'
+import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import TaskModal from '@/app/(app)/tasks/TaskModal'
@@ -96,7 +96,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleCompleteStep(step: Step) {
     startTransition(async () => {
-      const { error } = await completeJourneyStep(step.id, journey.id)
+      const { error } = await journeyApi({ op: 'completeJourneyStep', stepId: step.id, journeyId: journey.id })
       if (error) setError(error)
       else router.refresh()
     })
@@ -104,7 +104,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleReopenStep(step: Step) {
     startTransition(async () => {
-      const { error } = await reopenJourneyStep(step.id, journey.id)
+      const { error } = await journeyApi({ op: 'reopenJourneyStep', stepId: step.id, journeyId: journey.id })
       if (error) setError(error)
       else router.refresh()
     })
@@ -112,7 +112,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleCompleteTask(task: StepTask, step: Step) {
     startTransition(async () => {
-      const { error } = await completeStepTask(task.id, step.id, journey.id, journey.client?.id ?? '')
+      const { error } = await journeyApi({ op: 'completeStepTask', taskId: task.id, stepId: step.id, journeyId: journey.id, clientId: journey.client?.id ?? '' })
       if (error) setError(error)
       else router.refresh()
     })
@@ -121,7 +121,8 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   function handleAddTask(step: Step) {
     if (!newTaskTitle.trim()) return
     startTransition(async () => {
-      const { error } = await addTaskToStep({
+      const { error } = await journeyApi({
+        op:         'addTaskToStep',
         stepId:     step.id,
         journeyId:  journey.id,
         clientId:   journey.client?.id ?? '',
@@ -139,7 +140,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleStatusChange(status: 'complete' | 'cancelled' | 'active') {
     startTransition(async () => {
-      const { error } = await updateJourneyStatus(journey.id, status)
+      const { error } = await journeyApi({ op: 'updateJourneyStatus', journeyId: journey.id, status })
       if (error) setError(error)
       else router.refresh()
     })
@@ -147,7 +148,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleDelete() {
     startTransition(async () => {
-      const { error } = await deleteJourney(journey.id)
+      const { error } = await journeyApi({ op: 'deleteJourney', journeyId: journey.id })
       if (error) { setError(error); return }
       router.push('/journeys')
     })

@@ -1,4 +1,6 @@
-'use server'
+// Server-side utility module — NOT a 'use server' file.
+// Client components must call /api/journeys instead.
+// checkJourneyStepAdvance is imported by actions.ts (server → server).
 
 import { createActionClient } from '@/lib/supabase/server'
 
