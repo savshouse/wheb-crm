@@ -69,6 +69,7 @@ export async function updateClient(
     updates.ni_number     = (formData.get('ni_number') as string) || null
     const salaryRaw = formData.get('salary') as string
     updates.salary = salaryRaw ? parseFloat(salaryRaw) : null
+    updates.payroll_id = (formData.get('payroll_id') as string) || null
   }
 
   const { error } = await supabase.from('clients').update(updates).eq('id', clientId)
@@ -79,7 +80,7 @@ export async function updateClient(
     name: 'Name', status: 'Status', phone: 'Phone', address: 'Address',
     notes: 'Notes', industry: 'Industry', website: 'Website',
     email: 'Email', date_of_birth: 'Date of birth', ni_number: 'NI number',
-    papercloud_id: 'Papercloud ID', vnext_id: 'vNext ID', salary: 'Salary',
+    papercloud_id: 'Papercloud ID', vnext_id: 'vNext ID', salary: 'Salary', payroll_id: 'Payroll ID',
   }
   const activityRows: any[] = []
 

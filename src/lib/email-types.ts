@@ -4,6 +4,7 @@ export type Recipient = {
   full_name:       string | null
   employer:        string | null
   account_manager: string | null
+  payroll_id?:     string | null
 }
 
 export type EmailAttachment = {

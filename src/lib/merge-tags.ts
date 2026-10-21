@@ -18,6 +18,7 @@ export const MERGE_TAG_DEFS: MergeTagDef[] = [
   { key: 'email',           label: 'Email Address'     },
   { key: 'employer',        label: 'Employer'          },
   { key: 'account_manager', label: 'Account Manager'   },
+  { key: 'payroll_id',      label: 'Payroll ID'        },
 ]
 
 // Unlayer-format merge tags config (used by EmailTemplatesClient)

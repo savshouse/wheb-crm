@@ -115,7 +115,7 @@ export default function PeoplePage() {
     Promise.all([
       supabase
         .from('clients')
-        .select('id, name, status, email, phone, date_of_birth, ni_number, employer_id, account_manager:profiles!clients_account_manager_id_fkey(full_name, email)')
+        .select('id, name, status, email, phone, date_of_birth, ni_number, payroll_id, employer_id, account_manager:profiles!clients_account_manager_id_fkey(full_name, email)')
         .eq('type', 'individual')
         .order('name'),
       supabase.from('clients').select('id, name').eq('type', 'corporate'),
@@ -155,6 +155,7 @@ export default function PeoplePage() {
       full_name:       p.name,
       employer:        p.employer?.name ?? null,
       account_manager: p.account_manager?.full_name ?? p.account_manager?.email ?? null,
+      payroll_id:      (p as any).payroll_id ?? null,
     }))
 
   return (

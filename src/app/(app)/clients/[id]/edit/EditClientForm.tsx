@@ -27,6 +27,7 @@ type Props = {
     papercloud_id: string | null
     vnext_id: string | null
     salary: number | null
+    payroll_id: string | null
   }
   corporates: Corporate[]
 }
@@ -158,11 +159,18 @@ export default function EditClientForm({ client, corporates }: Props) {
           </div>
 
           {isIndividual && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Annual salary (£)</label>
-              <input name="salary" type="number" min="0" step="0.01" defaultValue={client.salary ?? ''} className={inputClass} placeholder="e.g. 45000" />
-              <p className="text-xs text-slate-400 mt-1">Used to calculate benefit contributions</p>
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Annual salary (£)</label>
+                <input name="salary" type="number" min="0" step="0.01" defaultValue={client.salary ?? ''} className={inputClass} placeholder="e.g. 45000" />
+                <p className="text-xs text-slate-400 mt-1">Used to calculate benefit contributions</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Payroll / Employee ID</label>
+                <input name="payroll_id" defaultValue={client.payroll_id ?? ''} className={inputClass} placeholder="e.g. EMP001" />
+                <p className="text-xs text-slate-400 mt-1">Used as merge field in email templates</p>
+              </div>
+            </>
           )}
 
           <div className="col-span-2">

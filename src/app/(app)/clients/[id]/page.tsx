@@ -263,6 +263,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                 full_name:       client.name,
                 employer:        null,
                 account_manager: (client.account_manager as any)?.full_name ?? (client.account_manager as any)?.email ?? null,
+                payroll_id:      (client as any).payroll_id ?? null,
               }} />
             )}
             <Link

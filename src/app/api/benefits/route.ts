@@ -120,6 +120,36 @@ export async function POST(request: NextRequest) {
         }).eq('id', membershipId)
         return NextResponse.json({ error: null })
       }
+      case 'updateClientSalary': {
+        const { clientId, salary } = body as { clientId: string; salary: number | null }
+        const { error: clientErr } = await supabase
+          .from('clients')
+          .update({ salary })
+          .eq('id', clientId)
+        if (clientErr) return NextResponse.json({ error: clientErr.message })
+
+        // Sync salary_at_calculation on all active memberships, recalculating GBP from PCT
+        const { data: mems } = await supabase
+          .from('benefit_memberships')
+          .select('id, employee_contribution_pct, employer_contribution_pct')
+          .eq('client_id', clientId)
+          .is('ended_date', null)
+
+        for (const m of mems ?? []) {
+          const updates: Record<string, unknown> = {
+            salary_at_calculation: salary,
+            updated_at: new Date().toISOString(),
+          }
+          if (salary != null) {
+            if (m.employee_contribution_pct != null)
+              updates.employee_contribution_gbp = Math.round(salary * m.employee_contribution_pct / 100 * 100) / 100
+            if (m.employer_contribution_pct != null)
+              updates.employer_contribution_gbp = Math.round(salary * m.employer_contribution_pct / 100 * 100) / 100
+          }
+          await supabase.from('benefit_memberships').update(updates).eq('id', m.id)
+        }
+        return NextResponse.json({ error: null })
+      }
       default:
         return NextResponse.json({ error: `Unknown operation: ${op}` }, { status: 400 })
     }

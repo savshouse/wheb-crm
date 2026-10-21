@@ -213,7 +213,7 @@ function buildPayload(form: FormState, salary: number | null): MembershipPayload
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function PersonBenefits({
-  clientId, salary, employerId,
+  clientId, salary: initialSalary, employerId,
 }: {
   clientId: string
   salary: number | null
@@ -230,6 +230,11 @@ export default function PersonBenefits({
   const [showFormer, setShowFormer]             = useState(false)
   const [isSaving, setIsSaving]                 = useState(false)
   const [error, setError]                       = useState<string | null>(null)
+  const [salary, setSalary]                     = useState<number | null>(initialSalary)
+  const [salaryInput, setSalaryInput]           = useState(initialSalary != null ? String(initialSalary) : '')
+  const [salaryDirty, setSalaryDirty]           = useState(false)
+  const [salaryError, setSalaryError]           = useState<string | null>(null)
+  const [salarySaving, setSalarySaving]         = useState(false)
 
   async function fetchData() {
     const supabase = createClient()
@@ -326,6 +331,22 @@ export default function PersonBenefits({
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
+  async function saveSalary() {
+    const parsed = salaryInput.trim() === '' ? null : parseFloat(salaryInput)
+    if (salaryInput.trim() !== '' && isNaN(parsed!)) { setSalaryError('Invalid amount'); return }
+    setSalaryError(null)
+    setSalarySaving(true)
+    try {
+      const res = await benefitApi({ op: 'updateClientSalary', clientId, salary: parsed })
+      if (res.error) { setSalaryError(res.error); return }
+      setSalary(parsed)
+      setSalaryDirty(false)
+      await fetchData()
+    } finally {
+      setSalarySaving(false)
+    }
+  }
+
   const setF = (k: keyof FormState, v: any) => setForm(p => ({ ...p, [k]: v }))
 
   function pickScheme(schemeId: string) {
@@ -339,13 +360,33 @@ export default function PersonBenefits({
 
   return (
     <div className="mb-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
           <Shield size={13} />Benefits ({activeMemberships.length})
         </h2>
         <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
           <Plus size={12} />Add benefit
         </button>
+      </div>
+      {/* Annual salary row */}
+      <div className="flex items-center gap-2 mb-3">
+        <label className="text-xs text-slate-500 shrink-0">Annual salary (£)</label>
+        <input
+          type="number" min="0" step="0.01"
+          value={salaryInput}
+          onChange={e => { setSalaryInput(e.target.value); setSalaryDirty(true); setSalaryError(null) }}
+          onKeyDown={e => { if (e.key === 'Enter') saveSalary() }}
+          placeholder="e.g. 45000"
+          className="w-36 px-2 py-1 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        {salaryDirty && (
+          <button onClick={saveSalary} disabled={salarySaving}
+            className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {salarySaving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        {salaryError && <span className="text-xs text-red-600">{salaryError}</span>}
+        {!salaryDirty && salary != null && <span className="text-xs text-slate-400">Synced to all active benefits</span>}
       </div>
 
       {activeMemberships.length === 0 && formerMemberships.length === 0 ? (
