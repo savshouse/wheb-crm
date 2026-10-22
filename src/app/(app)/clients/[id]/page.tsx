@@ -291,73 +291,91 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto p-6">
 
-          {/* Related parties / employer / linked people */}
-          <RelatedParties
-            clientId={id}
-            clientType={client.type}
-            clientName={client.name}
-            employer={employer as { id: string; name: string } | null}
-            relationships={(relationships ?? []) as any[]}
-            linkedIndividuals={(linkedIndividuals ?? []) as any[]}
-            allIndividuals={(allIndividuals ?? []) as any[]}
-            allCorporates={(allCorporates ?? []) as any[]}
-          />
+          {isIndividual ? (
+            <>
+              {/* Individual: Employer / Related parties */}
+              <RelatedParties
+                clientId={id}
+                clientType={client.type}
+                clientName={client.name}
+                employer={employer as { id: string; name: string } | null}
+                relationships={(relationships ?? []) as any[]}
+                linkedIndividuals={(linkedIndividuals ?? []) as any[]}
+                allIndividuals={(allIndividuals ?? []) as any[]}
+                allCorporates={(allCorporates ?? []) as any[]}
+              />
 
-          {/* Key personnel — corporates only */}
-          {!isIndividual && (
-            <KeyPersonnel
-              clientId={id}
-              initialContacts={(contacts ?? []) as any[]}
-            />
-          )}
+              {/* Profile change audit log */}
+              <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
 
-          {/* Profile change audit log */}
-          <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
+              {/* Advice journeys */}
+              <ClientJourneys
+                clientId={id}
+                clientName={client.name}
+                journeys={(journeys ?? []) as any[]}
+                templates={(journeyTemplates ?? []) as any[]}
+                profiles={(profiles ?? []) as any[]}
+                meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+                currentUserId={user.id}
+              />
 
-          {/* Advice journeys */}
-          <ClientJourneys
-            clientId={id}
-            clientName={client.name}
-            journeys={(journeys ?? []) as any[]}
-            templates={(journeyTemplates ?? []) as any[]}
-            profiles={(profiles ?? []) as any[]}
-            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
-            currentUserId={user.id}
-          />
+              {/* Advice log */}
+              <AdviceLog
+                clientId={id}
+                entries={(adviceLog ?? []) as any[]}
+                meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+                tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
+              />
 
-          {/* Advice log */}
-          <AdviceLog
-            clientId={id}
-            entries={(adviceLog ?? []) as any[]}
-            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
-            tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
-          />
-
-          {/* Contacts strip — individuals only; corporates use KeyPersonnel above */}
-          {isIndividual && contacts && contacts.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Contacts</h2>
-              <div className="flex flex-wrap gap-2">
-                {contacts.map((contact: Contact) => (
-                  <div key={contact.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                      {contact.first_name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-slate-900">
-                        {contact.first_name} {contact.last_name}
-                        {contact.is_primary && <span className="ml-1 text-blue-600">·</span>}
+              {/* Contacts strip */}
+              {contacts && contacts.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Contacts</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {contacts.map((contact: Contact) => (
+                      <div key={contact.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
+                          {contact.first_name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-slate-900">
+                            {contact.first_name} {contact.last_name}
+                            {contact.is_primary && <span className="ml-1 text-blue-600">·</span>}
+                          </div>
+                          {contact.job_title && <div className="text-xs text-slate-500">{contact.job_title}</div>}
+                        </div>
                       </div>
-                      {contact.job_title && <div className="text-xs text-slate-500">{contact.job_title}</div>}
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                </div>
+              )}
 
-          {/* Email history */}
-          <ClientEmailHistory clientId={id} />
+              {/* Email history */}
+              <ClientEmailHistory clientId={id} />
+            </>
+          ) : (
+            <>
+              {/* Corporate: Advice Journey → Advice Log → (timeline below) → Key Personnel → People → Benefits */}
+              {/* Advice journeys */}
+              <ClientJourneys
+                clientId={id}
+                clientName={client.name}
+                journeys={(journeys ?? []) as any[]}
+                templates={(journeyTemplates ?? []) as any[]}
+                profiles={(profiles ?? []) as any[]}
+                meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+                currentUserId={user.id}
+              />
+
+              {/* Advice log */}
+              <AdviceLog
+                clientId={id}
+                entries={(adviceLog ?? []) as any[]}
+                meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+                tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
+              />
+            </>
+          )}
 
           {/* Activity timelines — meetings (left) and completed tasks (right) */}
           <div className="grid grid-cols-2 gap-4 mb-6">
@@ -444,7 +462,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </CollapsibleTimeline>
           </div>
 
-          {/* Benefits — collapsed by default, last card */}
+          {/* Benefits (individual) / corporate cards after timeline */}
           {isIndividual ? (
             <PersonBenefits
               clientId={id}
@@ -452,10 +470,31 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
               employerId={client.employer_id ?? null}
             />
           ) : (
-            <EmployerBenefits
-              employerId={id}
-              linkedIndividuals={(linkedIndividuals ?? []).map((p: any) => ({ id: p.id, name: p.name }))}
-            />
+            <>
+              {/* Key Personnel */}
+              <KeyPersonnel
+                clientId={id}
+                initialContacts={(contacts ?? []) as any[]}
+              />
+
+              {/* People (linked individuals) */}
+              <RelatedParties
+                clientId={id}
+                clientType={client.type}
+                clientName={client.name}
+                employer={employer as { id: string; name: string } | null}
+                relationships={(relationships ?? []) as any[]}
+                linkedIndividuals={(linkedIndividuals ?? []) as any[]}
+                allIndividuals={(allIndividuals ?? []) as any[]}
+                allCorporates={(allCorporates ?? []) as any[]}
+              />
+
+              {/* Benefits Schemes */}
+              <EmployerBenefits
+                employerId={id}
+                linkedIndividuals={(linkedIndividuals ?? []).map((p: any) => ({ id: p.id, name: p.name }))}
+              />
+            </>
           )}
         </div>
 
