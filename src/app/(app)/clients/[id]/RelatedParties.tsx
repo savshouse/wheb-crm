@@ -104,167 +104,168 @@ export default function RelatedParties({
   if (clientType === 'individual') {
     return (
       <>
-      <div className="mb-5 space-y-3">
-        {/* Employer */}
-        <div className="space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Employer:</span>
-          {employer ? (
-            <>
-              <div>
-                <Link
-                  href={`/clients/${employer.id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-sm font-medium text-slate-700 hover:text-blue-700 transition-all"
-                >
-                  <Building2 size={13} />
-                  {employer.name}
-                  <ArrowRight size={11} className="opacity-50" />
-                </Link>
-              </div>
-              <div className="flex items-center gap-3 pl-1">
+      <div className="mb-5">
+        <div className="grid grid-cols-2 gap-6">
+          {/* Left column: Employer */}
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Employer:</span>
+            {employer ? (
+              <>
+                <div>
+                  <Link
+                    href={`/clients/${employer.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-sm font-medium text-slate-700 hover:text-blue-700 transition-all"
+                  >
+                    <Building2 size={13} />
+                    {employer.name}
+                    <ArrowRight size={11} className="opacity-50" />
+                  </Link>
+                </div>
+                <div className="flex items-center gap-3 pl-1">
+                  <button
+                    onClick={() => setShowChangeEmployer(!showChangeEmployer)}
+                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                  >
+                    Change
+                  </button>
+                  <button
+                    onClick={handleRemoveEmployer}
+                    disabled={isPending}
+                    className="text-xs text-red-500 hover:text-red-700 underline disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-400 italic">None</span>
                 <button
                   onClick={() => setShowChangeEmployer(!showChangeEmployer)}
                   className="text-xs text-blue-600 hover:text-blue-700 underline"
                 >
-                  Change
-                </button>
-                <button
-                  onClick={handleRemoveEmployer}
-                  disabled={isPending}
-                  className="text-xs text-red-500 hover:text-red-700 underline disabled:opacity-50"
-                >
-                  Remove
+                  Set employer
                 </button>
               </div>
-            </>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-400 italic">None</span>
-              <button
-                onClick={() => setShowChangeEmployer(!showChangeEmployer)}
-                className="text-xs text-blue-600 hover:text-blue-700 underline"
-              >
-                Set employer
-              </button>
-            </div>
-          )}
-        </div>
-
-        {showChangeEmployer && (
-          <div className="flex items-center gap-2 pl-2 flex-wrap">
-            <SearchableSelect
-              options={allCorporates.map(c => ({ id: c.id, label: c.name }))}
-              value={employerId}
-              onChange={setEmployerId}
-              placeholder="Search companies…"
-              emptyOption="— No employer —"
-              className="w-64"
-            />
-            <button
-              onClick={handleChangeEmployer}
-              disabled={isPending}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setShowChangeEmployer(false)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {/* Family / related parties */}
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
-            {relationships.length > 0 ? (
-              <button
-                onClick={() => setShowRelated(v => !v)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-full text-sm font-medium text-purple-700 transition-colors"
-              >
-                <User size={12} />
-                {relationships.length} {relationships.length === 1 ? 'person' : 'people'}
-                {showRelated ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-            ) : (
-              <span className="text-sm text-slate-400 italic">None</span>
             )}
-            {!showAddRel && (
-              <button
-                onClick={() => setShowAddRel(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
-              >
-                <Plus size={12} />
-                Add
-              </button>
+            {showChangeEmployer && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <SearchableSelect
+                  options={allCorporates.map(c => ({ id: c.id, label: c.name }))}
+                  value={employerId}
+                  onChange={setEmployerId}
+                  placeholder="Search companies…"
+                  emptyOption="— No employer —"
+                  className="w-56"
+                />
+                <button
+                  onClick={handleChangeEmployer}
+                  disabled={isPending}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setShowChangeEmployer(false)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
             )}
           </div>
 
-          {showRelated && relationships.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              {relationships.map(rel => {
-                const party = getOtherParty(rel)
-                if (!party) return null
-                return (
-                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
-                    <Link
-                      href={`/clients/${party.id}`}
-                      className="flex-1 flex items-center gap-2 text-sm hover:text-blue-700 min-w-0"
-                    >
-                      <User size={13} className="text-purple-500 shrink-0" />
-                      <span className="font-medium text-slate-800 truncate">{party.name}</span>
-                      <span className="text-slate-400 text-xs shrink-0">· {rel.relationship_type}</span>
-                      <ArrowRight size={11} className="text-blue-400 opacity-50 shrink-0" />
-                    </Link>
-                    <button
-                      onClick={() => setConfirmRemoveRel({ id: rel.id, name: party.name, type: rel.relationship_type })}
-                      disabled={isPending}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                      title="Remove relationship"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {showAddRel && (
+          {/* Right column: Related parties */}
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <SearchableSelect
-                options={available.map(p => ({ id: p.id, label: p.name }))}
-                value={relatedId}
-                onChange={setRelatedId}
-                placeholder="Search people…"
-                className="w-56"
-              />
-              <select
-                value={relType}
-                onChange={e => setRelType(e.target.value)}
-                className="text-sm rounded-lg border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {RELATIONSHIP_TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddRelationship}
-                disabled={isPending || !relatedId}
-                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                Add
-              </button>
-              <button
-                onClick={() => { setShowAddRel(false); setRelatedId('') }}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
+              {relationships.length > 0 ? (
+                <button
+                  onClick={() => setShowRelated(v => !v)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-full text-sm font-medium text-purple-700 transition-colors"
+                >
+                  <User size={12} />
+                  {relationships.length} {relationships.length === 1 ? 'person' : 'people'}
+                  {showRelated ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              ) : (
+                <span className="text-sm text-slate-400 italic">None</span>
+              )}
+              {!showAddRel && (
+                <button
+                  onClick={() => setShowAddRel(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  <Plus size={12} />
+                  Add
+                </button>
+              )}
             </div>
-          )}
+
+            {showRelated && relationships.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                {relationships.map(rel => {
+                  const party = getOtherParty(rel)
+                  if (!party) return null
+                  return (
+                    <div key={rel.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                      <Link
+                        href={`/clients/${party.id}`}
+                        className="flex-1 flex items-center gap-2 text-sm hover:text-blue-700 min-w-0"
+                      >
+                        <User size={13} className="text-purple-500 shrink-0" />
+                        <span className="font-medium text-slate-800 truncate">{party.name}</span>
+                        <span className="text-slate-400 text-xs shrink-0">· {rel.relationship_type}</span>
+                        <ArrowRight size={11} className="text-blue-400 opacity-50 shrink-0" />
+                      </Link>
+                      <button
+                        onClick={() => setConfirmRemoveRel({ id: rel.id, name: party.name, type: rel.relationship_type })}
+                        disabled={isPending}
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                        title="Remove relationship"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {showAddRel && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <SearchableSelect
+                  options={available.map(p => ({ id: p.id, label: p.name }))}
+                  value={relatedId}
+                  onChange={setRelatedId}
+                  placeholder="Search people…"
+                  className="w-44"
+                />
+                <select
+                  value={relType}
+                  onChange={e => setRelType(e.target.value)}
+                  className="text-sm rounded-lg border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {RELATIONSHIP_TYPES.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddRelationship}
+                  disabled={isPending || !relatedId}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setShowAddRel(false); setRelatedId('') }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
