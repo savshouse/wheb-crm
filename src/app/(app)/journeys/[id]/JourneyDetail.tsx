@@ -82,6 +82,9 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   // Delete journey confirmation
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteTasks, setDeleteTasks]     = useState(true)
+
+  const linkedTaskCount = journey.steps.reduce((n, s) => n + (s.tasks?.length ?? 0), 0)
 
   const sortedSteps = [...journey.steps].sort((a, b) => a.step_order - b.step_order)
   const daysOpen    = differenceInDays(new Date(), parseISO(journey.created_at))
@@ -161,7 +164,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   function handleDelete() {
     startTransition(async () => {
-      const { error } = await journeyApi({ op: 'deleteJourney', journeyId: journey.id })
+      const { error } = await journeyApi({ op: 'deleteJourney', journeyId: journey.id, deleteTasks })
       if (error) { setError(error); return }
       router.push('/journeys')
     })
@@ -191,6 +194,54 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
           onSaved={() => { setSelectedTask(null); router.refresh() }}
           onDeleted={() => { setSelectedTask(null); router.refresh() }}
         />
+      )}
+
+      {/* Delete journey modal */}
+      {confirmDelete && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmDelete(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <AlertTriangle size={18} className="text-red-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Delete journey?</h3>
+              <p className="text-sm text-slate-600 mt-1.5">
+                <span className="font-medium">{journey.title}</span> will be permanently deleted. This cannot be undone.
+              </p>
+
+              {linkedTaskCount > 0 && (
+                <label className="flex items-start gap-3 mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deleteTasks}
+                    onChange={e => setDeleteTasks(e.target.checked)}
+                    className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-xs text-amber-800">
+                    Also delete the <span className="font-semibold">{linkedTaskCount} linked task{linkedTaskCount !== 1 ? 's' : ''}</span> associated with this journey's steps
+                  </span>
+                </label>
+              )}
+
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Journey header card */}
@@ -270,22 +321,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                 Reopen
               </button>
             )}
-            {userRole === 'admin' && !confirmDelete && (
+            {userRole === 'admin' && (
               <button
-                onClick={() => setConfirmDelete(true)}
+                onClick={() => { setConfirmDelete(true); setDeleteTasks(true) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
               >
                 <Trash2 size={13} />
                 Delete
               </button>
-            )}
-            {userRole === 'admin' && confirmDelete && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
-                <AlertTriangle size={13} className="text-red-600" />
-                <span className="text-xs text-red-700">Delete permanently?</span>
-                <button onClick={handleDelete} disabled={isPending} className="text-xs font-semibold text-red-700 hover:text-red-900 disabled:opacity-50">Yes</button>
-                <button onClick={() => setConfirmDelete(false)} className="text-xs text-slate-500 hover:text-slate-700">No</button>
-              </div>
             )}
           </div>
         </div>

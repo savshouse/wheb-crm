@@ -269,7 +269,7 @@ export async function reopenJourneyStep(
   return { error: null }
 }
 
-export async function deleteJourney(journeyId: string): Promise<{ error: string | null }> {
+export async function deleteJourney(journeyId: string, deleteTasks = false): Promise<{ error: string | null }> {
   const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
@@ -282,11 +282,16 @@ export async function deleteJourney(journeyId: string): Promise<{ error: string 
 
   if (profile?.role !== 'admin') return { error: 'Only admins can delete journeys' }
 
-  const { data: journey } = await supabase
-    .from('advice_journeys')
-    .select('client_id')
-    .eq('id', journeyId)
-    .single()
+  if (deleteTasks) {
+    const { data: steps } = await supabase
+      .from('advice_journey_steps')
+      .select('id')
+      .eq('journey_id', journeyId)
+    const stepIds = (steps ?? []).map((s: any) => s.id)
+    if (stepIds.length > 0) {
+      await supabase.from('tasks').delete().in('journey_step_id', stepIds)
+    }
+  }
 
   const { error } = await supabase.from('advice_journeys').delete().eq('id', journeyId)
   if (error) return { error: error.message }

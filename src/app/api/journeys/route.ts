@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result)
     }
     case 'deleteJourney': {
-      const result = await deleteJourney(body.journeyId)
+      const result = await deleteJourney(body.journeyId, body.deleteTasks === true)
       return NextResponse.json(result)
     }
     case 'addTaskToStep': {
