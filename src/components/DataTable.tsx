@@ -48,6 +48,7 @@ export default function DataTable<T>({
   const [filters, setFilters]       = useState<FilterState>({})
   const [openFilter, setOpenFilter] = useState<string | null>(null)
   const [filterPos, setFilterPos]   = useState<DropdownPos>({ top: 0, left: 0 })
+  const [filterSearch, setFilterSearch] = useState('')
   const [showColPicker, setShowColPicker] = useState(false)
   const [colPickerPos, setColPickerPos]   = useState<DropdownPos>({ top: 0, left: 0 })
   const [dragOver, setDragOver]     = useState<string | null>(null)
@@ -79,7 +80,7 @@ export default function DataTable<T>({
   }, [storageKey, colOrder, hiddenCols, colWidths])
 
   // ── Close popovers on outside click / scroll ────────────────────────────
-  const closeFilter    = useCallback(() => setOpenFilter(null), [])
+  const closeFilter    = useCallback(() => { setOpenFilter(null); setFilterSearch('') }, [])
   const closeColPicker = useCallback(() => setShowColPicker(false), [])
 
   useEffect(() => {
@@ -166,9 +167,10 @@ export default function DataTable<T>({
   function openFilterDropdown(key: string, btn: HTMLButtonElement) {
     if (openFilter === key) { setOpenFilter(null); return }
     const r = btn.getBoundingClientRect()
-    const W = 192
+    const W = 220
     const left = r.left + W > window.innerWidth - 8 ? r.right - W : r.left
     setFilterPos({ top: r.bottom + 4, left })
+    setFilterSearch('')
     setOpenFilter(key)
   }
 
@@ -342,27 +344,44 @@ export default function DataTable<T>({
       {mounted && openFilter && (() => {
         const col = columns.find(c => c.key === openFilter)
         if (!col) return null
-        const options = col.filterable ? getOptions(col) : []
+        const allOptions = col.filterable ? getOptions(col) : []
+        const q = filterSearch.trim().toLowerCase()
+        const options = q ? allOptions.filter(o => o.toLowerCase().includes(q)) : allOptions
+        const showSearch = allOptions.length > 6
         return createPortal(
           <div
             ref={filterPanelRef}
             style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 9999 }}
-            className="bg-white border border-slate-200 rounded-xl shadow-2xl p-1.5 w-48 max-h-64 overflow-y-auto"
+            className="bg-white border border-slate-200 rounded-xl shadow-2xl w-56"
           >
-            <div className="px-2 py-1 mb-1 border-b border-slate-100">
-              <p className="text-xs font-semibold text-slate-500">Filter: {col.label}</p>
-            </div>
-            {options.map(opt => (
-              <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+            <div className="px-3 py-2 border-b border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 mb-1.5">Filter: {col.label}</p>
+              {showSearch && (
                 <input
-                  type="checkbox"
-                  checked={(filters[openFilter] ?? []).includes(opt)}
-                  onChange={() => toggleFilterVal(openFilter, opt)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                  autoFocus
+                  type="text"
+                  value={filterSearch}
+                  onChange={e => setFilterSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-slate-50"
                 />
-                <span className="text-xs text-slate-700 capitalize">{opt || '(empty)'}</span>
-              </label>
-            ))}
+              )}
+            </div>
+            <div className="p-1.5 max-h-52 overflow-y-auto">
+              {options.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-slate-400 text-center">No matches</p>
+              ) : options.map(opt => (
+                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={(filters[openFilter] ?? []).includes(opt)}
+                    onChange={() => toggleFilterVal(openFilter, opt)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className="text-xs text-slate-700">{opt || '(empty)'}</span>
+                </label>
+              ))}
+            </div>
           </div>,
           document.body
         )
