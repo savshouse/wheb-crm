@@ -177,8 +177,8 @@ export default function RelatedParties({
 
           {/* Right column: Related parties */}
           <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
               {relationships.length > 0 ? (
                 <button
                   onClick={() => setShowRelated(v => !v)}
