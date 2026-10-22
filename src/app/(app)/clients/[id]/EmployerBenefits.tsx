@@ -88,7 +88,9 @@ const emptyForm = (): FormState => ({
   policy_wording_url: '', notes: '',
 })
 
-export default function EmployerBenefits({ employerId }: { employerId: string }) {
+type LinkedPerson = { id: string; name: string }
+
+export default function EmployerBenefits({ employerId, linkedIndividuals = [] }: { employerId: string; linkedIndividuals?: LinkedPerson[] }) {
   const [schemes, setSchemes]       = useState<Scheme[]>([])
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
   const [showModal, setShowModal]   = useState(false)
@@ -98,7 +100,11 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   const [removeModal, setRemoveModal]   = useState<{ memberId: string; clientId: string; name: string } | null>(null)
   const [isSaving, setIsSaving]         = useState(false)
   const [error, setError]               = useState<string | null>(null)
-  const [cardOpen, setCardOpen]         = useState(false)
+  const [cardOpen, setCardOpen]         = useState(true)
+  const [enrollModal, setEnrollModal]   = useState<Scheme | null>(null)
+  const [enrollPersonId, setEnrollPersonId] = useState('')
+  const [enrollDate, setEnrollDate]     = useState('')
+  const [enrollType, setEnrollType]     = useState('auto_enrolment')
 
   async function fetchSchemes() {
     const { data } = await createClient()
@@ -197,6 +203,34 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
     })
   }
 
+  async function handleEnroll() {
+    if (!enrollModal || !enrollPersonId) return
+    setIsSaving(true)
+    try {
+      await benefitApi({
+        op: 'createMembership',
+        clientId: enrollPersonId,
+        data: {
+          scheme_id: enrollModal.id,
+          scheme_type: enrollModal.scheme_type,
+          scheme_name: enrollModal.scheme_name,
+          provider: enrollModal.provider ?? null,
+          enrolment_type: enrollType,
+          enrolled_date: enrollDate || null,
+          membership_start_date: enrollDate || null,
+        },
+      })
+      setEnrollModal(null)
+      setEnrollPersonId('')
+      setEnrollDate('')
+      await fetchSchemes()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const f = (k: keyof FormState, v: string) => setForm(p => ({ ...p, [k]: v }))
 
   if (!schemes.length) return (
@@ -278,6 +312,15 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                     <Users size={11} />
                     {active.length} active{former.length > 0 ? ` · ${former.length} former` : ''}
                   </span>
+                  {linkedIndividuals.length > 0 && (
+                    <button
+                      onClick={() => { setEnrollModal(s); setEnrollPersonId(''); setEnrollDate(''); setEnrollType('auto_enrolment') }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-medium transition-colors"
+                      title="Enroll a member"
+                    >
+                      <Plus size={11} />Enroll
+                    </button>
+                  )}
                   <button onClick={() => openEdit(s)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit scheme">
                     <Pencil size={13} />
                   </button>
@@ -418,6 +461,76 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
                   Yes, delete
                 </button>
                 <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Enroll member modal */}
+      {enrollModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setEnrollModal(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900">Enroll member</h2>
+                <button onClick={() => setEnrollModal(null)} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>
+              </div>
+              <div className="px-6 py-5 space-y-4">
+                <p className="text-xs text-slate-500">
+                  Enrolling into: <span className="font-medium text-slate-700">{enrollModal.scheme_name}</span>
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Person *</label>
+                  <select
+                    value={enrollPersonId}
+                    onChange={e => setEnrollPersonId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">— Select person —</option>
+                    {linkedIndividuals
+                      .filter(p => !enrollModal.memberships.some(m => m.client_id === p.id && !m.ended_date))
+                      .map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Enrolment type</label>
+                  <select
+                    value={enrollType}
+                    onChange={e => setEnrollType(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="auto_enrolment">Auto enrolment</option>
+                    <option value="opt_in">Opt in</option>
+                    <option value="contractual">Contractual</option>
+                    <option value="voluntary">Voluntary</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Enrolled date</label>
+                  <input
+                    type="date"
+                    value={enrollDate}
+                    onChange={e => setEnrollDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
+                <button
+                  onClick={handleEnroll}
+                  disabled={isSaving || !enrollPersonId}
+                  className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {isSaving ? 'Enrolling…' : 'Enroll'}
+                </button>
+                <button onClick={() => setEnrollModal(null)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
                   Cancel
                 </button>
               </div>

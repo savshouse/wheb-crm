@@ -51,11 +51,12 @@ export type Contact = {
   id: string
   client_id: string
   first_name: string
-  last_name: string
+  last_name: string | null
   email: string | null
   phone: string | null
   job_title: string | null
   is_primary: boolean
+  is_cc_contact: boolean
   notes: string | null
   created_at: string
 }

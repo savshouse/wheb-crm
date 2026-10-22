@@ -122,13 +122,14 @@ export default function BulkEmailModal({ recipients: initialRecipients, onClose 
         if (!scheme?.employer_id) return
         supabase
           .from('contacts')
-          .select('first_name, last_name, email, job_title')
+          .select('first_name, last_name, email, job_title, is_cc_contact')
           .eq('client_id', scheme.employer_id)
           .not('email', 'is', null)
+          .order('is_cc_contact', { ascending: false })
           .then(({ data: contacts }) => {
             if (contacts) setEmployerContacts(contacts.map(c => ({
               email: c.email as string,
-              label: [c.first_name, c.last_name].filter(Boolean).join(' ') + (c.job_title ? ` (${c.job_title})` : ''),
+              label: [c.first_name, c.last_name].filter(Boolean).join(' ') + (c.job_title ? ` (${c.job_title})` : '') + ((c as any).is_cc_contact ? ' ★' : ''),
             })))
           })
       })

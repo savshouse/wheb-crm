@@ -17,6 +17,7 @@ import EmployerBenefits from './EmployerBenefits'
 import CollapsibleTimeline from './CollapsibleTimeline'
 import AdviceLog from './AdviceLog'
 import ClientJourneys from './ClientJourneys'
+import KeyPersonnel from './KeyPersonnel'
 import RemindersBell from '@/components/RemindersBell'
 import EmailButton from './EmailButton'
 import ClientEmailHistory from './ClientEmailHistory'
@@ -56,7 +57,7 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
       .single(),
     supabase
       .from('contacts')
-      .select('*')
+      .select('id, client_id, first_name, last_name, email, phone, job_title, is_primary, is_cc_contact, notes, created_at')
       .eq('client_id', id)
       .order('is_primary', { ascending: false }),
     supabase
@@ -302,6 +303,14 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             allCorporates={(allCorporates ?? []) as any[]}
           />
 
+          {/* Key personnel — corporates only */}
+          {!isIndividual && (
+            <KeyPersonnel
+              clientId={id}
+              initialContacts={(contacts ?? []) as any[]}
+            />
+          )}
+
           {/* Profile change audit log */}
           <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
 
@@ -324,8 +333,8 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
           />
 
-          {/* Contacts strip */}
-          {contacts && contacts.length > 0 && (
+          {/* Contacts strip — individuals only; corporates use KeyPersonnel above */}
+          {isIndividual && contacts && contacts.length > 0 && (
             <div className="mb-6">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Contacts</h2>
               <div className="flex flex-wrap gap-2">
@@ -443,7 +452,10 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
               employerId={client.employer_id ?? null}
             />
           ) : (
-            <EmployerBenefits employerId={id} />
+            <EmployerBenefits
+              employerId={id}
+              linkedIndividuals={(linkedIndividuals ?? []).map((p: any) => ({ id: p.id, name: p.name }))}
+            />
           )}
         </div>
 
