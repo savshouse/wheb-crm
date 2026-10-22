@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { createActionClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
@@ -147,6 +148,9 @@ export async function addRelationship(
 
   if (error) return { error: error.message }
 
+  revalidatePath(`/clients/${individualId}`)
+  revalidatePath(`/clients/${relatedId}`)
+
   // Audit: fetch both names then log for each party
   const [{ data: indiv }, { data: related }] = await Promise.all([
     supabase.from('clients').select('name').eq('id', individualId).single(),
@@ -191,6 +195,12 @@ export async function removeRelationship(
 
   if (error) return { error: error.message }
 
+  revalidatePath(`/clients/${clientId}`)
+  if (rel) {
+    revalidatePath(`/clients/${rel.individual_id}`)
+    revalidatePath(`/clients/${rel.related_id}`)
+  }
+
   if (rel) {
     const indivName  = (rel.individual as any)?.name ?? rel.individual_id
     const relatedName = (rel.related as any)?.name ?? rel.related_id
@@ -227,6 +237,8 @@ export async function updateEmployer(
     .eq('id', clientId)
 
   if (error) return { error: error.message }
+
+  revalidatePath(`/clients/${clientId}`)
 
   if (oldEmpId !== employerId) {
     const [{ data: oldEmp }, { data: newEmp }] = await Promise.all([
