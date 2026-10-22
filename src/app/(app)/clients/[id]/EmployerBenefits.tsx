@@ -7,6 +7,7 @@ import BenefitRemovalModal from '@/components/BenefitRemovalModal'
 import { Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Users, ExternalLink, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
+import DataTable, { ColumnDef } from '@/components/DataTable'
 
 async function benefitApi(body: Record<string, unknown>): Promise<{ error: string | null; id?: string }> {
   try {
@@ -51,6 +52,8 @@ type Scheme = {
   is_active: boolean
   memberships: Member[]
 }
+
+type MemberRow = Member & { _status: 'Active' | 'Opted out' | 'Former' }
 
 const SCHEME_LABEL: Record<string, string> = Object.fromEntries(SCHEME_TYPES.map(t => [t.value, t.label]))
 
@@ -334,91 +337,111 @@ export default function EmployerBenefits({ employerId, linkedIndividuals = [] }:
               </div>
 
               {/* Members panel */}
-              {isOpen && (
-                <div className="border-t border-slate-100">
-                  {current.length === 0 && former.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-slate-400 text-center">No members enrolled</p>
-                  ) : (
-                    <>
-                      {/* Current members */}
-                      {current.length > 0 && (
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50 border-b border-slate-100">
-                            <tr>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Member</th>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolment</th>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Enrolled</th>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employer %/£</th>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Employee %/£</th>
-                              <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Status</th>
-                              <th className="px-4 py-2" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {current.map(m => (
-                              <tr key={m.id} className={m.opted_out ? 'opacity-50' : ''}>
-                                <td className="px-4 py-2.5">
-                                  {m.client
-                                    ? <Link href={`/clients/${m.client.id}`} className="text-blue-600 hover:underline font-medium">{m.client.name}</Link>
-                                    : <span className="text-slate-400">Unknown</span>}
-                                </td>
-                                <td className="px-4 py-2.5 text-slate-600 capitalize">{m.enrolment_type.replace('_', ' ')}</td>
-                                <td className="px-4 py-2.5 text-slate-500 text-xs">
-                                  {m.enrolled_date ? format(parseISO(m.enrolled_date), 'd MMM yyyy') : '—'}
-                                </td>
-                                <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</td>
-                                <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</td>
-                                <td className="px-4 py-2.5">
-                                  {m.opted_out
-                                    ? <span className="flex items-center gap-1 text-xs text-red-500"><X size={10} />Opted out</span>
-                                    : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle size={10} />Active</span>}
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <button
-                                    onClick={() => setRemoveModal({ memberId: m.id, clientId: m.client_id, name: m.client?.name ?? 'this member' })}
-                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                    title="Remove from scheme"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-
-                      {/* Former members */}
-                      {former.length > 0 && (
-                        <div className={current.length > 0 ? 'border-t border-slate-100' : ''}>
-                          <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-100">
-                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Former members</span>
-                          </div>
-                          <table className="w-full text-sm">
-                            <tbody className="divide-y divide-slate-100">
-                              {former.map(m => (
-                                <tr key={m.id} className="opacity-60">
-                                  <td className="px-4 py-2.5 w-48">
-                                    {m.client
-                                      ? <Link href={`/clients/${m.client.id}`} className="text-blue-600 hover:underline font-medium">{m.client.name}</Link>
-                                      : <span className="text-slate-400">Unknown</span>}
-                                  </td>
-                                  <td className="px-4 py-2.5 text-slate-500 text-xs">
-                                    {m.end_reason ? (REMOVAL_REASON_LABELS[m.end_reason] ?? m.end_reason) : '—'}
-                                  </td>
-                                  <td className="px-4 py-2.5 text-slate-400 text-xs">
-                                    {m.ended_date ? format(parseISO(m.ended_date), 'd MMM yyyy') : '—'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+              {isOpen && (() => {
+                const allMembers: MemberRow[] = [
+                  ...current.map(m => ({ ...m, _status: (m.opted_out ? 'Opted out' : 'Active') as MemberRow['_status'] })),
+                  ...former.map(m => ({ ...m, _status: 'Former' as MemberRow['_status'] })),
+                ]
+                const memberCols: ColumnDef<MemberRow>[] = [
+                  {
+                    key: 'member',
+                    label: 'Member',
+                    render: m => m.client
+                      ? <Link href={`/clients/${m.client.id}`} onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline font-medium text-sm">{m.client.name}</Link>
+                      : <span className="text-slate-400 text-sm">Unknown</span>,
+                    sortable: true,
+                    sortValue: m => m.client?.name ?? '',
+                    filterable: true,
+                    filterValue: m => m.client?.name ?? null,
+                  },
+                  {
+                    key: 'enrolment',
+                    label: 'Enrolment',
+                    render: m => <span className="text-slate-600 text-xs capitalize">{m.enrolment_type.replace(/_/g, ' ')}</span>,
+                    sortable: true,
+                    sortValue: m => m.enrolment_type,
+                    filterable: true,
+                    filterValue: m => m.enrolment_type.replace(/_/g, ' '),
+                  },
+                  {
+                    key: 'enrolled',
+                    label: 'Enrolled',
+                    render: m => <span className="text-slate-500 text-xs">{m.enrolled_date ? format(parseISO(m.enrolled_date), 'd MMM yyyy') : '—'}</span>,
+                    sortable: true,
+                    sortValue: m => m.enrolled_date ?? '',
+                  },
+                  {
+                    key: 'employer_contrib',
+                    label: 'Employer %/£',
+                    render: m => <span className="text-slate-700 font-mono text-xs">{fmtContrib(m.employer_contribution_pct, m.employer_contribution_gbp)}</span>,
+                    sortable: true,
+                    sortValue: m => m.employer_contribution_pct ?? m.employer_contribution_gbp ?? 0,
+                  },
+                  {
+                    key: 'employee_contrib',
+                    label: 'Employee %/£',
+                    render: m => <span className="text-slate-700 font-mono text-xs">{fmtContrib(m.employee_contribution_pct, m.employee_contribution_gbp)}</span>,
+                    sortable: true,
+                    sortValue: m => m.employee_contribution_pct ?? m.employee_contribution_gbp ?? 0,
+                  },
+                  {
+                    key: 'status',
+                    label: 'Status',
+                    render: m => m._status === 'Active'
+                      ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle size={10} />Active</span>
+                      : m._status === 'Opted out'
+                        ? <span className="flex items-center gap-1 text-xs text-red-500"><X size={10} />Opted out</span>
+                        : <span className="text-xs text-slate-400">Former</span>,
+                    sortable: true,
+                    sortValue: m => m._status,
+                    filterable: true,
+                    filterValue: m => m._status,
+                  },
+                  {
+                    key: 'end_date',
+                    label: 'End date',
+                    render: m => <span className="text-slate-400 text-xs">{m.ended_date ? format(parseISO(m.ended_date), 'd MMM yyyy') : '—'}</span>,
+                    sortable: true,
+                    sortValue: m => m.ended_date ?? '',
+                  },
+                  {
+                    key: 'end_reason',
+                    label: 'End reason',
+                    render: m => <span className="text-slate-500 text-xs">{m.end_reason ? (REMOVAL_REASON_LABELS[m.end_reason] ?? m.end_reason) : '—'}</span>,
+                    sortable: true,
+                    sortValue: m => m.end_reason ?? '',
+                    filterable: true,
+                    filterValue: m => m.end_reason ? (REMOVAL_REASON_LABELS[m.end_reason] ?? m.end_reason) : null,
+                  },
+                  {
+                    key: 'actions',
+                    label: '',
+                    render: m => m._status !== 'Former' ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); setRemoveModal({ memberId: m.id, clientId: m.client_id, name: m.client?.name ?? 'this member' }) }}
+                        className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Remove from scheme"
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null,
+                  },
+                ]
+                return (
+                  <div className="border-t border-slate-100 p-4">
+                    {allMembers.length === 0
+                      ? <p className="text-sm text-slate-400 text-center py-2">No members enrolled</p>
+                      : <DataTable
+                          columns={memberCols}
+                          data={allMembers}
+                          rowKey={m => m.id}
+                          storageKey={`scheme-members-${s.id}`}
+                          emptyText="No members match the current filters"
+                        />
+                    }
+                  </div>
+                )
+              })()}
             </div>
           )
         })}
