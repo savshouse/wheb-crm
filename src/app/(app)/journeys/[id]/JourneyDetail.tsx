@@ -86,6 +86,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
 
   const linkedTaskCount = journey.steps.reduce((n, s) => n + (s.tasks?.length ?? 0), 0)
 
+  // Complete journey confirmation
+  const [confirmComplete, setConfirmComplete] = useState(false)
+  const [autoCompleteTasks, setAutoCompleteTasks] = useState(true)
+
+  const openTaskIds = journey.steps.flatMap(s =>
+    s.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').map(t => t.id)
+  )
+
   const sortedSteps = [...journey.steps].sort((a, b) => a.step_order - b.step_order)
   const daysOpen    = differenceInDays(new Date(), parseISO(journey.created_at))
   const clientHref  = journey.client ? `/clients/${journey.client.id}` : '#'
@@ -162,6 +170,30 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
     })
   }
 
+  function handleCompleteClick() {
+    if (openTaskIds.length > 0) {
+      setConfirmComplete(true)
+      setAutoCompleteTasks(true)
+    } else {
+      handleStatusChange('complete')
+    }
+  }
+
+  function handleConfirmedComplete() {
+    startTransition(async () => {
+      if (autoCompleteTasks && openTaskIds.length > 0) {
+        await supabase
+          .from('tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .in('id', openTaskIds)
+      }
+      const { error } = await journeyApi({ op: 'updateJourneyStatus', journeyId: journey.id, status: 'complete' })
+      if (error) { setError(error); return }
+      setConfirmComplete(false)
+      router.refresh()
+    })
+  }
+
   function handleDelete() {
     startTransition(async () => {
       const { error } = await journeyApi({ op: 'deleteJourney', journeyId: journey.id, deleteTasks })
@@ -194,6 +226,52 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
           onSaved={() => { setSelectedTask(null); router.refresh() }}
           onDeleted={() => { setSelectedTask(null); router.refresh() }}
         />
+      )}
+
+      {/* Complete journey with open tasks modal */}
+      {confirmComplete && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmComplete(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                <AlertTriangle size={18} className="text-amber-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Complete journey?</h3>
+              <p className="text-sm text-slate-600 mt-1.5">
+                There {openTaskIds.length === 1 ? 'is' : 'are'} still{' '}
+                <span className="font-semibold">{openTaskIds.length} open task{openTaskIds.length !== 1 ? 's' : ''}</span>{' '}
+                on this journey.
+              </p>
+              <label className="flex items-start gap-3 mt-4 p-3 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoCompleteTasks}
+                  onChange={e => setAutoCompleteTasks(e.target.checked)}
+                  className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-xs text-blue-800">
+                  Mark all <span className="font-semibold">{openTaskIds.length} open task{openTaskIds.length !== 1 ? 's' : ''}</span> as complete
+                </span>
+              </label>
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={handleConfirmedComplete}
+                  disabled={isPending}
+                  className="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? 'Completing…' : 'Yes, complete'}
+                </button>
+                <button
+                  onClick={() => setConfirmComplete(false)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Delete journey modal */}
@@ -294,7 +372,7 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
             {journey.status === 'active' && (
               <>
                 <button
-                  onClick={() => handleStatusChange('complete')}
+                  onClick={handleCompleteClick}
                   disabled={isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
                 >
