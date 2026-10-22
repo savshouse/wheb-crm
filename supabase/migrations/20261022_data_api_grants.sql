@@ -13,7 +13,6 @@ grant select, insert, update, delete on public.task_templates        to authenti
 grant select, insert, update, delete on public.task_template_items   to authenticated;
 grant select, insert, update, delete on public.meetings              to authenticated;
 grant select, insert, update, delete on public.relationships         to authenticated;
-grant select, insert, update, delete on public.reminders             to authenticated;
 
 -- Migration-created tables
 grant select, insert, update, delete on public.task_comments                 to authenticated;

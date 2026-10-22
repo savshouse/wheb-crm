@@ -235,6 +235,7 @@ export default function PersonBenefits({
   const [salaryDirty, setSalaryDirty]           = useState(false)
   const [salaryError, setSalaryError]           = useState<string | null>(null)
   const [salarySaving, setSalarySaving]         = useState(false)
+  const [cardOpen, setCardOpen]                 = useState(false)
 
   async function fetchData() {
     const supabase = createClient()
@@ -360,14 +361,22 @@ export default function PersonBenefits({
 
   return (
     <div className="mb-5">
-      <div className="flex items-center justify-between mb-2">
+      <button
+        onClick={() => setCardOpen(v => !v)}
+        className="w-full flex items-center justify-between mb-2 group"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
           <Shield size={13} />Benefits ({activeMemberships.length})
         </h2>
-        <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-          <Plus size={12} />Add benefit
-        </button>
-      </div>
+        <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+          {cardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
+      </button>
+      {cardOpen && (
+      <>
+        <div className="flex justify-end mb-2">
+          <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"><Plus size={12} />Add benefit</button>
+        </div>
       {/* Annual salary row */}
       <div className="flex items-center gap-2 mb-3">
         <label className="text-xs text-slate-500 shrink-0">Annual salary (£)</label>
@@ -479,6 +488,8 @@ export default function PersonBenefits({
           onClose={() => setRemoveModal(null)}
           isPending={isSaving}
         />
+      )}
+      </>
       )}
     </div>
   )

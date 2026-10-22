@@ -98,6 +98,7 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
   const [removeModal, setRemoveModal]   = useState<{ memberId: string; clientId: string; name: string } | null>(null)
   const [isSaving, setIsSaving]         = useState(false)
   const [error, setError]               = useState<string | null>(null)
+  const [cardOpen, setCardOpen]         = useState(false)
 
   async function fetchSchemes() {
     const { data } = await createClient()
@@ -200,27 +201,49 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
 
   if (!schemes.length) return (
     <div className="mb-5">
-      <div className="flex items-center justify-between mb-2">
+      <button
+        onClick={() => setCardOpen(v => !v)}
+        className="w-full flex items-center justify-between mb-2 group"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><Shield size={13} />Benefits schemes</h2>
-        <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"><Plus size={12} />Add scheme</button>
-      </div>
-      <div className="bg-white border border-dashed border-slate-300 rounded-xl px-4 py-6 text-center">
-        <p className="text-sm text-slate-400">No benefit schemes set up yet</p>
-      </div>
-      {showModal && <SchemeModal form={form} onChange={f} onSave={handleSave} onClose={() => setShowModal(false)} isEdit={false} isPending={isSaving} error={error} />}
+        <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+          {cardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
+      </button>
+      {cardOpen && (
+        <>
+          <div className="flex justify-end mb-2">
+            <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"><Plus size={12} />Add scheme</button>
+          </div>
+          <div className="bg-white border border-dashed border-slate-300 rounded-xl px-4 py-6 text-center">
+            <p className="text-sm text-slate-400">No benefit schemes set up yet</p>
+          </div>
+          {showModal && <SchemeModal form={form} onChange={f} onSave={handleSave} onClose={() => setShowModal(false)} isEdit={false} isPending={isSaving} error={error} />}
+        </>
+      )}
     </div>
   )
 
   return (
     <div className="mb-5">
-      <div className="flex items-center justify-between mb-3">
+      <button
+        onClick={() => setCardOpen(v => !v)}
+        className="w-full flex items-center justify-between mb-3 group"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
           <Shield size={13} />Benefits schemes ({schemes.length})
         </h2>
-        <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-          <Plus size={12} />Add scheme
-        </button>
-      </div>
+        <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+          {cardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
+      </button>
+      {cardOpen && (
+        <>
+          <div className="flex justify-end mb-2">
+            <button onClick={openAdd} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+              <Plus size={12} />Add scheme
+            </button>
+          </div>
 
       <div className="space-y-2">
         {schemes.map(s => {
@@ -400,6 +423,8 @@ export default function EmployerBenefits({ employerId }: { employerId: string })
               </div>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>

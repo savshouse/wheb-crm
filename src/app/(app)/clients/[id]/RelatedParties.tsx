@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Building2, User, Plus, X, ArrowRight, Trash2 } from 'lucide-react'
+import { Building2, User, Plus, X, ArrowRight, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { addRelationship, removeRelationship, updateEmployer } from '@/app/actions'
 import SearchableSelect from '@/components/SearchableSelect'
 
@@ -60,6 +60,7 @@ export default function RelatedParties({
   const [relType, setRelType] = useState(RELATIONSHIP_TYPES[0])
   const [employerId, setEmployerId] = useState(employer?.id ?? '')
   const [confirmRemoveRel, setConfirmRemoveRel] = useState<{ id: string; name: string; type: string } | null>(null)
+  const [showRelated, setShowRelated] = useState(false)
 
   function getOtherParty(rel: Relationship): RelatedParty | null {
     if (rel.individual_id === clientId) return rel.related
@@ -105,34 +106,38 @@ export default function RelatedParties({
       <>
       <div className="mb-5 space-y-3">
         {/* Employer */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="space-y-1">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Employer:</span>
           {employer ? (
             <>
-              <Link
-                href={`/clients/${employer.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-sm font-medium text-slate-700 hover:text-blue-700 transition-all"
-              >
-                <Building2 size={13} />
-                {employer.name}
-                <ArrowRight size={11} className="opacity-50" />
-              </Link>
-              <button
-                onClick={() => setShowChangeEmployer(!showChangeEmployer)}
-                className="text-xs text-blue-600 hover:text-blue-700 underline"
-              >
-                Change
-              </button>
-              <button
-                onClick={handleRemoveEmployer}
-                disabled={isPending}
-                className="text-xs text-red-500 hover:text-red-700 underline disabled:opacity-50"
-              >
-                Remove
-              </button>
+              <div>
+                <Link
+                  href={`/clients/${employer.id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-sm font-medium text-slate-700 hover:text-blue-700 transition-all"
+                >
+                  <Building2 size={13} />
+                  {employer.name}
+                  <ArrowRight size={11} className="opacity-50" />
+                </Link>
+              </div>
+              <div className="flex items-center gap-3 pl-1">
+                <button
+                  onClick={() => setShowChangeEmployer(!showChangeEmployer)}
+                  className="text-xs text-blue-600 hover:text-blue-700 underline"
+                >
+                  Change
+                </button>
+                <button
+                  onClick={handleRemoveEmployer}
+                  disabled={isPending}
+                  className="text-xs text-red-500 hover:text-red-700 underline disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              </div>
             </>
           ) : (
-            <>
+            <div className="flex items-center gap-2">
               <span className="text-sm text-slate-400 italic">None</span>
               <button
                 onClick={() => setShowChangeEmployer(!showChangeEmployer)}
@@ -140,7 +145,7 @@ export default function RelatedParties({
               >
                 Set employer
               </button>
-            </>
+            </div>
           )}
         </div>
 
@@ -171,43 +176,63 @@ export default function RelatedParties({
         )}
 
         {/* Family / related parties */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
-          {relationships.map(rel => {
-            const party = getOtherParty(rel)
-            if (!party) return null
-            return (
-              <div key={rel.id} className="inline-flex items-center gap-1.5 pl-3 pr-1 py-1 bg-purple-50 border border-purple-200 rounded-full text-sm">
-                <Link
-                  href={`/clients/${party.id}`}
-                  className="flex items-center gap-1 text-purple-700 hover:text-purple-900 font-medium"
-                >
-                  <User size={12} />
-                  {party.name}
-                  <span className="text-purple-400 font-normal">· {rel.relationship_type}</span>
-                  <ArrowRight size={11} className="opacity-40" />
-                </Link>
-                <button
-                  onClick={() => setConfirmRemoveRel({ id: rel.id, name: party.name, type: rel.relationship_type })}
-                  disabled={isPending}
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-purple-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  title="Remove relationship"
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            )
-          })}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Related:</span>
+            {relationships.length > 0 ? (
+              <button
+                onClick={() => setShowRelated(v => !v)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 border border-purple-200 hover:bg-purple-100 rounded-full text-sm font-medium text-purple-700 transition-colors"
+              >
+                <User size={12} />
+                {relationships.length} {relationships.length === 1 ? 'person' : 'people'}
+                {showRelated ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+            ) : (
+              <span className="text-sm text-slate-400 italic">None</span>
+            )}
+            {!showAddRel && (
+              <button
+                onClick={() => setShowAddRel(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+              >
+                <Plus size={12} />
+                Add
+              </button>
+            )}
+          </div>
 
-          {!showAddRel ? (
-            <button
-              onClick={() => setShowAddRel(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
-            >
-              <Plus size={12} />
-              Add
-            </button>
-          ) : (
+          {showRelated && relationships.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              {relationships.map(rel => {
+                const party = getOtherParty(rel)
+                if (!party) return null
+                return (
+                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                    <Link
+                      href={`/clients/${party.id}`}
+                      className="flex-1 flex items-center gap-2 text-sm hover:text-blue-700 min-w-0"
+                    >
+                      <User size={13} className="text-purple-500 shrink-0" />
+                      <span className="font-medium text-slate-800 truncate">{party.name}</span>
+                      <span className="text-slate-400 text-xs shrink-0">· {rel.relationship_type}</span>
+                      <ArrowRight size={11} className="text-blue-400 opacity-50 shrink-0" />
+                    </Link>
+                    <button
+                      onClick={() => setConfirmRemoveRel({ id: rel.id, name: party.name, type: rel.relationship_type })}
+                      disabled={isPending}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                      title="Remove relationship"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {showAddRel && (
             <div className="flex items-center gap-2 flex-wrap">
               <SearchableSelect
                 options={available.map(p => ({ id: p.id, label: p.name }))}

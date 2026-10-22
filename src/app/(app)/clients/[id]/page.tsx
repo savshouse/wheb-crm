@@ -305,16 +305,24 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
           {/* Profile change audit log */}
           <ClientActivityLog entries={(clientActivity ?? []) as any[]} />
 
-          {/* Benefits */}
-          {isIndividual ? (
-            <PersonBenefits
-              clientId={id}
-              salary={client.salary ?? null}
-              employerId={client.employer_id ?? null}
-            />
-          ) : (
-            <EmployerBenefits employerId={id} />
-          )}
+          {/* Advice journeys */}
+          <ClientJourneys
+            clientId={id}
+            clientName={client.name}
+            journeys={(journeys ?? []) as any[]}
+            templates={(journeyTemplates ?? []) as any[]}
+            profiles={(profiles ?? []) as any[]}
+            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+            currentUserId={user.id}
+          />
+
+          {/* Advice log */}
+          <AdviceLog
+            clientId={id}
+            entries={(adviceLog ?? []) as any[]}
+            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
+            tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
+          />
 
           {/* Contacts strip */}
           {contacts && contacts.length > 0 && (
@@ -339,30 +347,11 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </div>
           )}
 
-          {/* Advice journeys */}
-          <ClientJourneys
-            clientId={id}
-            clientName={client.name}
-            journeys={(journeys ?? []) as any[]}
-            templates={(journeyTemplates ?? []) as any[]}
-            profiles={(profiles ?? []) as any[]}
-            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
-            currentUserId={user.id}
-          />
-
-          {/* Advice log */}
-          <AdviceLog
-            clientId={id}
-            entries={(adviceLog ?? []) as any[]}
-            meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
-            tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
-          />
-
           {/* Email history */}
           <ClientEmailHistory clientId={id} />
 
           {/* Activity timelines — meetings (left) and completed tasks (right) */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-6">
             {/* Meetings timeline */}
             <CollapsibleTimeline
               title="Meetings"
@@ -445,6 +434,17 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
               </div>
             </CollapsibleTimeline>
           </div>
+
+          {/* Benefits — collapsed by default, last card */}
+          {isIndividual ? (
+            <PersonBenefits
+              clientId={id}
+              salary={client.salary ?? null}
+              employerId={client.employer_id ?? null}
+            />
+          ) : (
+            <EmployerBenefits employerId={id} />
+          )}
         </div>
 
         {/* Task panel */}
