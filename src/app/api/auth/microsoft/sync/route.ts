@@ -154,22 +154,32 @@ async function runSync() {
   // Uses syncedTodoIds (built during the loop above) so newly-created tasks are
   // correctly included even though activeparents was fetched before the loop ran.
   let deletedOrphans = 0
+  let orphanErrors = 0
+  const orphanDetails: string[] = []
+  let activeTodoCount = 0
+  let orphanCleanupError: string | null = null
   try {
     const activeTodoTasks = await getActiveTasks(token, listId)
+    activeTodoCount = activeTodoTasks.length
+    console.log(`[Sync] Orphan check: ${activeTodoTasks.length} active To Do tasks, ${syncedTodoIds.size} synced`)
     for (const todoTask of activeTodoTasks) {
       if (!syncedTodoIds.has(todoTask.id)) {
         try {
           await deleteTodoTask(token, listId, todoTask.id)
           deletedOrphans++
-          console.log(`[Sync] Deleted orphan To Do task: ${todoTask.id} "${todoTask.title}"`)
-        } catch (e) {
-          console.error(`[Sync] Failed to delete orphan To Do task ${todoTask.id}:`, e)
+          console.log(`[Sync] Deleted orphan: "${todoTask.title}" (${todoTask.id})`)
+        } catch (e: any) {
+          orphanErrors++
+          const msg = e?.message ?? String(e)
+          orphanDetails.push(`"${todoTask.title}": ${msg}`)
+          console.error(`[Sync] Failed to delete orphan "${todoTask.title}":`, msg)
         }
       }
     }
-  } catch (e) {
-    console.error('[Sync] Orphan cleanup failed (non-fatal):', e)
+  } catch (e: any) {
+    orphanCleanupError = e?.message ?? String(e)
+    console.error('[Sync] Orphan cleanup failed:', orphanCleanupError)
   }
 
-  return NextResponse.json({ ok: true, created, updated, completedInCrm, deletedOrphans })
+  return NextResponse.json({ ok: true, created, updated, completedInCrm, deletedOrphans, orphanErrors, orphanDetails, activeTodoCount, orphanCleanupError, listId })
 }

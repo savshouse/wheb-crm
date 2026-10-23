@@ -220,9 +220,14 @@ export async function deleteTodoSubscription(token: string, subscriptionId: stri
   try { await graph(token, 'DELETE', `/subscriptions/${subscriptionId}`) } catch {}
 }
 
-// Deletes a To Do task (safe to call on already-deleted tasks).
+// Deletes a To Do task. Silently ignores 404 (already deleted). Throws on other errors.
 export async function deleteTodoTask(token: string, listId: string, taskId: string): Promise<void> {
-  try { await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${taskId}`) } catch {}
+  try {
+    await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${taskId}`)
+  } catch (e: any) {
+    if (e?.message?.includes('404')) return  // already deleted — fine
+    throw e
+  }
 }
 
 // Fetches checklistItems (Steps) for a To Do task.
