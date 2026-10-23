@@ -390,6 +390,8 @@ export async function createSubTask(data: {
   })
 
   syncTaskOnSave(task.id).catch(console.error)
+  revalidatePath('/tasks')
+  if (data.clientId) revalidatePath(`/clients/${data.clientId}`)
   return { error: null }
 }
 
@@ -522,6 +524,8 @@ export async function updateTask(
 
   if (error) return { error: error.message }
   syncTaskOnSave(taskId).catch(console.error)
+  revalidatePath('/tasks')
+  if (clientId) revalidatePath(`/clients/${clientId}`)
   return { error: null }
 }
 
@@ -647,6 +651,8 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
   syncTaskOnSave(taskId).catch(console.error)
   checkJourneyStepAdvance(taskId, status).catch(console.error)
   if (status === 'completed') spawnNextRecurrence(taskId, user.id).catch(console.error)
+  revalidatePath('/tasks')
+  if (clientId) revalidatePath(`/clients/${clientId}`)
 }
 
 export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, cascadeToChildren = false, note?: string) {
@@ -977,7 +983,7 @@ export async function deleteTask(taskId: string): Promise<{ error: string | null
   if (profile?.role !== 'admin') return { error: 'Admin access required' }
 
   // Delete from Microsoft To Do before removing from CRM (non-fatal)
-  const { data: taskRow } = await supabase.from('tasks').select('ms_todo_task_id').eq('id', taskId).single()
+  const { data: taskRow } = await supabase.from('tasks').select('ms_todo_task_id, client_id').eq('id', taskId).single()
   if (taskRow?.ms_todo_task_id && profile?.ms_todo_list_id) {
     try {
       const token = await getValidAccessToken(user.id)
@@ -1004,6 +1010,8 @@ export async function deleteTask(taskId: string): Promise<{ error: string | null
   const { error } = await supabase.from('tasks').delete().eq('id', taskId)
   if (error) return { error: error.message }
 
+  revalidatePath('/tasks')
+  if (taskRow?.client_id) revalidatePath(`/clients/${taskRow.client_id}`)
   return { error: null }
 }
 
