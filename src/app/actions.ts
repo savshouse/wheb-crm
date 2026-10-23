@@ -870,6 +870,20 @@ export async function removeTemplateItem(itemId: string): Promise<{ error: strin
   return { error: null }
 }
 
+export async function reorderTemplateItems(
+  items: { id: string; order_index: number }[]
+): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const updates = items.map(({ id, order_index }) =>
+    supabase.from('task_template_items').update({ order_index }).eq('id', id)
+  )
+  await Promise.all(updates)
+  return { error: null }
+}
+
 // ─── Profile ─────────────────────────────────────────────────
 
 export async function updateProfile(data: {

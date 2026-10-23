@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useTransition, Fragment, useRef } from 'react'
-import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem, importTemplate } from '@/app/actions'
-import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info, Download, Upload } from 'lucide-react'
+import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem, importTemplate, reorderTemplateItems } from '@/app/actions'
+import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info, Download, Upload, GripVertical } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
 import { createClient } from '@/lib/supabase/client'
 
@@ -59,6 +59,10 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const [addItemTitle, setAddItemTitle]       = useState('')
   const [addItemPriority, setAddItemPriority] = useState('medium')
   const [addItemDays, setAddItemDays]         = useState('')
+
+  // Drag-to-reorder state
+  const [draggingId, setDraggingId]   = useState<string | null>(null)
+  const [dragOverId, setDragOverId]   = useState<string | null>(null)
 
   // Import state
   const [showImport, setShowImport]         = useState(false)
@@ -194,6 +198,42 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
         setTemplates(prev => prev.map(t => ({ ...t, items: t.items.filter(item => item.id !== itemId) })))
       }
     })
+  }
+
+  function handleDrop(templateId: string, draggedId: string, overId: string) {
+    if (draggedId === overId) return
+    setDraggingId(null)
+    setDragOverId(null)
+
+    setTemplates(prev => prev.map(t => {
+      if (t.id !== templateId) return t
+      const dragged = t.items.find(i => i.id === draggedId)
+      const over    = t.items.find(i => i.id === overId)
+      if (!dragged || !over) return t
+      // Only allow reorder within the same group (parents ↔ parents, children ↔ same-parent siblings)
+      if (dragged.parent_item_id !== over.parent_item_id) return t
+
+      const group = t.items
+        .filter(i => i.parent_item_id === dragged.parent_item_id)
+        .sort((a, b) => a.order_index - b.order_index)
+
+      const fromIdx = group.findIndex(i => i.id === draggedId)
+      const toIdx   = group.findIndex(i => i.id === overId)
+      const reordered = [...group]
+      reordered.splice(fromIdx, 1)
+      reordered.splice(toIdx, 0, dragged)
+      const updated = reordered.map((item, idx) => ({ ...item, order_index: idx }))
+
+      // Persist only changed items
+      const changed = updated.filter((item, idx) => item.order_index !== group[idx]?.order_index)
+      if (changed.length) {
+        startTransition(async () => {
+          await reorderTemplateItems(changed.map(i => ({ id: i.id, order_index: i.order_index })))
+        })
+      }
+
+      return { ...t, items: t.items.map(i => updated.find(u => u.id === i.id) ?? i) }
+    }))
   }
 
   async function handleCreateTemplate(e: React.FormEvent) {
@@ -561,9 +601,20 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
                                   return (
                                     <Fragment key={item.id}>
                                       {/* Parent step */}
-                                      <div className="border-b border-slate-50 hover:bg-slate-50 group">
+                                      <div
+                                        className={`border-b border-slate-50 hover:bg-slate-50 group transition-colors ${dragOverId === item.id && draggingId !== item.id ? 'bg-blue-50 border-blue-200' : ''}`}
+                                        onDragOver={e => { e.preventDefault(); setDragOverId(item.id) }}
+                                        onDrop={() => draggingId && handleDrop(template.id, draggingId, item.id)}
+                                        onDragLeave={() => setDragOverId(null)}
+                                      >
                                         {editingItem === item.id ? editRow(item, `${pi + 1}.`, false) : (
-                                          <div className="flex items-center gap-3 px-5 py-2.5">
+                                          <div
+                                            className="flex items-center gap-3 px-5 py-2.5"
+                                            draggable
+                                            onDragStart={() => setDraggingId(item.id)}
+                                            onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
+                                          >
+                                            <GripVertical size={13} className="text-slate-200 group-hover:text-slate-400 cursor-grab shrink-0" />
                                             <span className="text-xs text-slate-400 shrink-0 w-5">{pi + 1}.</span>
                                             <p className="flex-1 text-sm font-medium text-slate-800">{item.title}</p>
                                             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[item.priority]}`}>{item.priority}</span>
@@ -578,9 +629,21 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
 
                                       {/* Sub-steps */}
                                       {children.map((child, ci) => (
-                                        <div key={child.id} className="border-b border-slate-50 hover:bg-slate-50/80 group bg-slate-50/40">
+                                        <div
+                                          key={child.id}
+                                          className={`border-b border-slate-50 hover:bg-slate-50/80 group bg-slate-50/40 transition-colors ${dragOverId === child.id && draggingId !== child.id ? 'bg-blue-50 border-blue-200' : ''}`}
+                                          onDragOver={e => { e.preventDefault(); setDragOverId(child.id) }}
+                                          onDrop={() => draggingId && handleDrop(template.id, draggingId, child.id)}
+                                          onDragLeave={() => setDragOverId(null)}
+                                        >
                                           {editingItem === child.id ? editRow(child, `${pi + 1}${alpha(ci)}.`, true) : (
-                                            <div className="flex items-center gap-3 pl-10 pr-5 py-2">
+                                            <div
+                                              className="flex items-center gap-3 pl-10 pr-5 py-2"
+                                              draggable
+                                              onDragStart={() => setDraggingId(child.id)}
+                                              onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
+                                            >
+                                              <GripVertical size={13} className="text-slate-200 group-hover:text-slate-400 cursor-grab shrink-0" />
                                               <span className="text-xs text-slate-400 shrink-0 w-7">{pi + 1}{alpha(ci)}.</span>
                                               <p className="flex-1 text-xs text-slate-700">{child.title}</p>
                                               <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityColour[child.priority]}`}>{child.priority}</span>
