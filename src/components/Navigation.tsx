@@ -30,9 +30,8 @@ const navItems = [
   { href: '/clients',  label: 'Companies', icon: Building2 },
   { href: '/people',   label: 'People',    icon: Users },
   { href: '/tasks',    label: 'Tasks',     icon: CheckSquare },
-  { href: '/emails',   label: 'Emails',    icon: Mail },
-  { href: '/reports',  label: 'Reports',   icon: BarChart2 },
   { href: '/journeys', label: 'Journeys',  icon: Route },
+  { href: '/emails',   label: 'Emails',    icon: Mail },
 ]
 
 const adminTemplateItems = [
@@ -161,6 +160,13 @@ export default function Navigation({ userEmail, userName, userRole }: Props) {
 
             {adminOpen && (
               <div className="mt-0.5 space-y-0.5">
+
+                {/* Reports */}
+                <Link href="/reports" className={linkClass('/reports')}>
+                  <BarChart2 size={18} className="shrink-0" />
+                  Reports
+                  {isActive('/reports') && <ChevronRight size={14} className="ml-auto opacity-60" />}
+                </Link>
 
                 {/* Users & Roles */}
                 <Link href="/admin/users" className={linkClass('/admin/users')}>
