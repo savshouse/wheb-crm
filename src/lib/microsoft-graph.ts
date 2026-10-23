@@ -135,8 +135,8 @@ export async function getCompletedTasks(token: string, listId: string): Promise<
 
 // Fetches all non-completed tasks in the WHEB CRM list (for orphan detection).
 export async function getActiveTasks(token: string, listId: string): Promise<{ id: string, title: string }[]> {
-  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,title,status&$top=500`)
-  return (result?.value ?? []).filter((t: any) => t.status !== 'completed')
+  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,status,completedDateTime&$top=500`)
+  return (result?.value ?? []).filter((t: any) => t.status !== 'completed' && !t.completedDateTime)
 }
 
 export type SubTaskEntry = {

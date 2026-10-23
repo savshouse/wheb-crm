@@ -167,12 +167,12 @@ async function runSync() {
         try {
           await deleteTodoTask(token, listId, todoTask.id)
           deletedOrphans++
-          console.log(`[Sync] Deleted orphan: "${todoTask.title}" (${todoTask.id})`)
+          console.log(`[Sync] Deleted orphan To Do task: ${todoTask.id}`)
         } catch (e: any) {
           orphanErrors++
           const msg = e?.message ?? String(e)
-          orphanDetails.push(`"${todoTask.title}": ${msg}`)
-          console.error(`[Sync] Failed to delete orphan "${todoTask.title}":`, msg)
+          orphanDetails.push(`${todoTask.id}: ${msg}`)
+          console.error(`[Sync] Failed to delete orphan ${todoTask.id}:`, msg)
         }
       }
     }
