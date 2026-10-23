@@ -154,7 +154,7 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
                         <div onClick={e => e.stopPropagation()}>
                           <TaskStatusButton taskId={sub.id} clientId={task.client?.id} currentStatus={sub.status} />
                         </div>
-                        <span className="flex-1 text-sm text-slate-700 min-w-0 truncate">{sub.title}</span>
+                        <span className={`flex-1 text-sm min-w-0 truncate ${sub.status === 'completed' || sub.status === 'cancelled' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</span>
                         {subDue && (
                           <span className={`text-xs flex items-center gap-0.5 shrink-0 ${subDue.cls}`}>
                             <Clock size={10} />

@@ -71,7 +71,6 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       .from('tasks')
       .select('id, title, status, priority, due_date, parent_task_id, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name,email)')
       .in('parent_task_id', allParentIds)
-      .not('status', 'in', '("completed","cancelled")')
       .order('created_at', { ascending: true })
     for (const st of (subTasks ?? [])) {
       if (!subTaskMap[st.parent_task_id]) subTaskMap[st.parent_task_id] = []
