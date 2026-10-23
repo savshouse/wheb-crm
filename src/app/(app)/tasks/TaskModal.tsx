@@ -86,6 +86,9 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [subSaving, setSubSaving]     = useState<string | null>(null)
   const [subChildren, setSubChildren] = useState<Record<string, any[]>>({})
 
+  // Cascade reassign confirmation
+  const [cascadePrompt, setCascadePrompt] = useState<{ count: number; newAssignee: string } | null>(null)
+
   // Audit history
   const [history, setHistory]         = useState<any[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -305,7 +308,17 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   }
 
   // ── Parent save ──────────────────────────────────────────────
-  async function handleSave() {
+  function handleSave() {
+    const assigneeChanged = assignedTo !== (task.assigned_to ?? '')
+    if (assigneeChanged && subTasks.length > 0) {
+      setCascadePrompt({ count: subTasks.length, newAssignee: assignedTo })
+      return
+    }
+    doSave(false)
+  }
+
+  async function doSave(cascade: boolean) {
+    setCascadePrompt(null)
     setSaving(true)
     const promises: Promise<any>[] = [
       updateTask(task.id, task.client?.id ?? null, {
@@ -321,11 +334,8 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     ]
     if (status !== task.status)
       promises.push(updateTaskStatus(task.id, status, task.client?.id ?? null))
-    if (assignedTo !== (task.assigned_to ?? '')) {
-      const cascade = subTasks.length > 0
-        && window.confirm(`Also reassign ${subTasks.length} sub-task${subTasks.length !== 1 ? 's' : ''}?`)
+    if (assignedTo !== (task.assigned_to ?? ''))
       promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null, cascade))
-    }
     await Promise.all(promises)
     await refreshSubTasks()
     setSaving(false)
@@ -1073,6 +1083,13 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
                   </button>
                 )}
               </div>
+              {cascadePrompt && (
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm mr-auto">
+                  <span className="text-blue-800">Also reassign {cascadePrompt.count} sub-task{cascadePrompt.count !== 1 ? 's' : ''}?</span>
+                  <button onClick={() => doSave(true)} className="px-3 py-1 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700">Yes</button>
+                  <button onClick={() => doSave(false)} className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">No</button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
                   {dirty ? 'Discard' : 'Close'}
