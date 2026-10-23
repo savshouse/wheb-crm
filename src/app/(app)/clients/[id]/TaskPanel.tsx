@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { updateTaskStatus, reassignTask, createSubTask, applyTemplateToTask, addTaskComment, updateTask } from '@/app/actions'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { CheckSquare, Clock, Plus, ChevronDown, ChevronRight, LayoutTemplate, History, MessageCircle, Send, GripVertical, Pencil, Check, X, CalendarDays } from 'lucide-react'
+import { CheckSquare, Clock, Plus, ChevronDown, ChevronRight, LayoutTemplate, History, MessageCircle, Send, GripVertical, Pencil, Check, X, CalendarDays, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -47,6 +47,7 @@ type SubTask = {
 type TaskWithSubs = {
   id: string; title: string; status: string; priority: 'low' | 'medium' | 'high'
   assigned_to: string | null; due_date: string | null; description: string | null
+  recurrence: string | null
   meeting: { id: string; title: string } | null
   assignee: BasicProfile | null; sub_tasks: SubTask[]
 }
@@ -516,7 +517,14 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
                       className="w-4 h-4 rounded border-2 border-slate-300 hover:border-green-500 hover:bg-green-50 transition-colors block" title="Mark complete" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 leading-tight">{task.title}</p>
+                    <p className="text-sm font-medium text-slate-900 leading-tight flex items-center gap-1.5">
+                      {task.title}
+                      {task.recurrence && (
+                        <span title={`Recurring: ${task.recurrence}`} className="inline-flex items-center gap-0.5 text-xs text-blue-500 font-normal shrink-0">
+                          <RefreshCw size={10} />{task.recurrence}
+                        </span>
+                      )}
+                    </p>
                     {task.meeting && (
                       <Link href={`/clients/${clientId}/meetings/${task.meeting.id}/edit`} className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 mt-0.5 truncate">
                         <CalendarDays size={10} />{task.meeting.title}

@@ -87,6 +87,8 @@ export type Task = {
   priority: 'low' | 'medium' | 'high'
   status: 'open' | 'in_progress' | 'completed' | 'cancelled'
   completed_at: string | null
+  recurrence: 'weekly' | 'fortnightly' | 'monthly' | 'quarterly' | 'biannual' | 'annual' | null
+  recurrence_end_date: string | null
   created_at: string
   updated_at: string
   assignee?: BasicProfile | null

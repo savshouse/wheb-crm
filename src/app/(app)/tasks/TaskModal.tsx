@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isToday, isPast } from 'date-fns'
-import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink, CalendarDays, Route } from 'lucide-react'
+import { X, Check, Building2, Clock, ChevronDown, ChevronRight, Plus, History, Trash2, AlertTriangle, ExternalLink, CalendarDays, Route, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -98,6 +98,10 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   // Meeting link
   const [meetingId, setMeetingId]       = useState(task.meeting_id ?? task.meeting?.id ?? '')
   const [clientMeetings, setClientMeetings] = useState<{ id: string; title: string; meeting_date: string }[]>([])
+
+  // Recurrence
+  const [recurrence, setRecurrence]             = useState(task.recurrence ?? '')
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(task.recurrence_end_date ?? '')
 
   // Admin delete
   const [isAdmin, setIsAdmin]           = useState(false)
@@ -238,7 +242,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     if (!isMountedRef.current) { isMountedRef.current = true; return }
     setDirty(true)
     dirtyRef.current = true
-  }, [title, priority, openedDate, dueDate, description, meetingId])
+  }, [title, priority, openedDate, dueDate, description, meetingId, recurrence, recurrenceEndDate])
 
   // Load comments when expanding a sub-task (only fetches once per sub-task per modal open)
   useEffect(() => {
@@ -308,6 +312,8 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         priority,
         description: description.trim() || null,
         meeting_id: meetingId || null,
+        recurrence: recurrence || null,
+        recurrence_end_date: recurrenceEndDate || null,
       }),
     ]
     if (status !== task.status)
@@ -598,6 +604,32 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               </div>
             )}
           </div>
+
+          {/* Recurrence — parent tasks only */}
+          {!task.parent_task_id && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="flex items-center gap-1 text-xs font-medium text-slate-500 mb-1">
+                  <RefreshCw size={11} />Recurrence
+                </label>
+                <select value={recurrence} onChange={e => setRecurrence(e.target.value)} className={selectCls}>
+                  <option value="">— No recurrence —</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Fortnightly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="biannual">Biannual</option>
+                  <option value="annual">Annual</option>
+                </select>
+              </div>
+              {recurrence && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Ends on (optional)</label>
+                  <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} className={inputCls} />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Description */}
           <div>

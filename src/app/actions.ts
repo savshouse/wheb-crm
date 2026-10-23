@@ -494,7 +494,16 @@ export async function applyTemplateToTask(
 export async function updateTask(
   taskId: string,
   clientId: string,
-  data: { title: string; due_date: string | null; priority: string; description?: string | null; opened_date?: string | null; meeting_id?: string | null }
+  data: {
+    title: string
+    due_date: string | null
+    priority: string
+    description?: string | null
+    opened_date?: string | null
+    meeting_id?: string | null
+    recurrence?: string | null
+    recurrence_end_date?: string | null
+  }
 ): Promise<{ error: string | null }> {
   const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -507,11 +516,108 @@ export async function updateTask(
     description: data.description ?? null,
     ...(data.opened_date !== undefined ? { opened_date: data.opened_date } : {}),
     ...(data.meeting_id !== undefined ? { meeting_id: data.meeting_id } : {}),
+    ...(data.recurrence !== undefined ? { recurrence: data.recurrence || null } : {}),
+    ...(data.recurrence_end_date !== undefined ? { recurrence_end_date: data.recurrence_end_date || null } : {}),
   }).eq('id', taskId)
 
   if (error) return { error: error.message }
   syncTaskOnSave(taskId).catch(console.error)
   return { error: null }
+}
+
+function computeNextDueDate(currentDue: string | null, recurrence: string): string {
+  const base = currentDue ? new Date(currentDue + 'T12:00:00') : new Date()
+  switch (recurrence) {
+    case 'weekly':      base.setDate(base.getDate() + 7); break
+    case 'fortnightly': base.setDate(base.getDate() + 14); break
+    case 'monthly':     base.setMonth(base.getMonth() + 1); break
+    case 'quarterly':   base.setMonth(base.getMonth() + 3); break
+    case 'biannual':    base.setMonth(base.getMonth() + 6); break
+    case 'annual':      base.setFullYear(base.getFullYear() + 1); break
+  }
+  return base.toISOString().split('T')[0]
+}
+
+async function spawnNextRecurrence(taskId: string, userId: string): Promise<void> {
+  const supabase = await createActionClient()
+
+  const { data: t } = await supabase
+    .from('tasks')
+    .select('recurrence, recurrence_end_date, title, priority, description, assigned_to, client_id, meeting_id, journey_step_id, due_date, opened_date, parent_task_id')
+    .eq('id', taskId)
+    .single()
+
+  if (!t?.recurrence || t.parent_task_id) return
+
+  const nextDue = computeNextDueDate(t.due_date, t.recurrence)
+  if (t.recurrence_end_date && nextDue > t.recurrence_end_date) return
+
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: newTask } = await supabase
+    .from('tasks')
+    .insert({
+      title:               t.title,
+      priority:            t.priority,
+      description:         t.description,
+      assigned_to:         t.assigned_to,
+      client_id:           t.client_id,
+      meeting_id:          t.meeting_id,
+      journey_step_id:     t.journey_step_id,
+      due_date:            nextDue,
+      opened_date:         today,
+      status:              'open',
+      recurrence:          t.recurrence,
+      recurrence_end_date: t.recurrence_end_date,
+      created_by:          userId,
+    })
+    .select('id')
+    .single()
+
+  if (!newTask) return
+
+  const { data: subTasks } = await supabase
+    .from('tasks')
+    .select('id, title, priority, description, assigned_to')
+    .eq('parent_task_id', taskId)
+    .order('created_at')
+
+  for (const sub of subTasks ?? []) {
+    const { data: newSub } = await supabase
+      .from('tasks')
+      .insert({
+        title:          sub.title,
+        priority:       sub.priority,
+        description:    sub.description,
+        assigned_to:    sub.assigned_to,
+        client_id:      t.client_id,
+        parent_task_id: newTask.id,
+        status:         'open',
+        created_by:     userId,
+      })
+      .select('id')
+      .single()
+
+    if (!newSub) continue
+
+    const { data: grandchildren } = await supabase
+      .from('tasks')
+      .select('title, priority, description')
+      .eq('parent_task_id', sub.id)
+      .order('created_at')
+
+    for (const gc of grandchildren ?? []) {
+      await supabase.from('tasks').insert({
+        title:          gc.title,
+        priority:       gc.priority,
+        description:    gc.description,
+        client_id:      t.client_id,
+        parent_task_id: newSub.id,
+        status:         'open',
+        created_by:     userId,
+      })
+    }
+  }
 }
 
 export async function updateTaskStatus(taskId: string, status: string, clientId: string) {
@@ -540,6 +646,7 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
 
   syncTaskOnSave(taskId).catch(console.error)
   checkJourneyStepAdvance(taskId, status).catch(console.error)
+  if (status === 'completed') spawnNextRecurrence(taskId, user.id).catch(console.error)
 }
 
 export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, note?: string) {
