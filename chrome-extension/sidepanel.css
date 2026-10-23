@@ -352,6 +352,47 @@ body {
 .tl-open        { background: #f1f5f9; color: #475569; }
 .tl-in_progress { background: #dbeafe; color: #1e40af; }
 
+/* Stats row */
+.tl-stats-row {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.tl-stat {
+  flex: 1;
+  padding: 12px 0;
+  text-align: center;
+  border-right: 1px solid #e2e8f0;
+}
+.tl-stat:last-child { border-right: none; }
+.tl-stat-num { font-size: 22px; font-weight: 800; line-height: 1; }
+.tl-stat-label { font-size: 10px; color: #94a3b8; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tl-stat-red .tl-stat-num    { color: #dc2626; }
+.tl-stat-amber .tl-stat-num  { color: #d97706; }
+.tl-stat-blue .tl-stat-num   { color: #2563eb; }
+
+/* Quick links */
+.tl-quick-links {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+.tl-quick-link {
+  font-size: 11px;
+  color: #2563eb;
+  text-decoration: none;
+  padding: 3px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 99px;
+  background: #eff6ff;
+}
+.tl-quick-link:hover { background: #dbeafe; }
+
+/* Lock icon for not-logged-in state */
+.empty-icon { font-size: 28px; }
+
 /* Outline button */
 .btn-outline {
   border: 1px solid #cbd5e1;

@@ -302,8 +302,10 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
     startTransition(async () => { await updateTaskStatus(taskId, status, clientId) })
   }
 
-  async function handleReassign(taskId: string, assigneeId: string) {
-    startTransition(async () => { await reassignTask(taskId, assigneeId, clientId) })
+  async function handleReassign(taskId: string, assigneeId: string, subCount = 0) {
+    const cascade = subCount > 0
+      && window.confirm(`Also reassign ${subCount} sub-task${subCount !== 1 ? 's' : ''}?`)
+    startTransition(async () => { await reassignTask(taskId, assigneeId, clientId, undefined, cascade) })
   }
 
   async function handleAddTask(e: React.FormEvent) {
@@ -564,7 +566,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
 
                 {/* Assignee */}
                 <div className="pl-6">
-                  <select value={task.assigned_to ?? ''} onChange={e => handleReassign(task.id, e.target.value)}
+                  <select value={task.assigned_to ?? ''} onChange={e => handleReassign(task.id, e.target.value, task.sub_tasks?.length ?? 0)}
                     className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
                     <option value="">Unassigned</option>
                     {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.email}{p.id === task.assigned_to ? ' ✓' : ''}</option>)}

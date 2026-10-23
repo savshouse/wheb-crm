@@ -8,13 +8,13 @@
 <body>
   <!-- Header -->
   <div class="header">
-    <button id="btn-back" class="back-btn" title="Back to tasks">← Back</button>
+    <button id="btn-back" class="back-btn hidden" title="Back to tasks">← Back</button>
     <span class="header-title">WHEB CRM</span>
-    <a id="open-crm" href="#" target="_blank" class="open-link" title="Open in CRM">Open ↗</a>
+    <a id="open-crm" href="https://wheb-crm.vercel.app" target="_blank" class="open-link" title="Open in CRM">Open ↗</a>
   </div>
 
   <!-- Loading -->
-  <div id="loading" class="center-state">
+  <div id="loading" class="center-state hidden">
     <div class="spinner"></div>
   </div>
 
@@ -39,7 +39,6 @@
         <span class="label-sm">Meeting</span>
         <a id="meeting-link" href="#" target="_blank" class="client-name"></a>
       </div>
-      <!-- Status actions -->
       <div id="actions" class="actions"></div>
     </div>
 
@@ -76,24 +75,69 @@
     </div>
   </div>
 
-  <!-- Task list (home screen) -->
-  <div id="task-list-view" class="hidden">
+  <!-- Home screen (task list) -->
+  <div id="task-list-view">
+
+    <!-- Not logged in -->
+    <div id="tl-not-logged-in" class="center-state hidden">
+      <div class="empty-icon">🔒</div>
+      <p class="hint">Log in to WHEB CRM to see your tasks</p>
+      <a href="https://wheb-crm.vercel.app/auth/login" target="_blank" class="btn-outline">Log in ↗</a>
+      <button id="tl-retry" class="btn-outline" style="margin-top:6px">Retry</button>
+    </div>
+
+    <!-- Loading -->
     <div id="task-list-loading" class="center-state">
       <div class="spinner"></div>
     </div>
+
+    <!-- Error -->
     <div id="task-list-error" class="center-state hidden">
-      <p class="hint">Could not load tasks. Are you logged in?</p>
+      <p class="hint">Could not load tasks.</p>
       <a href="https://wheb-crm.vercel.app/auth/login" target="_blank" class="btn-outline">Log in ↗</a>
+      <button id="tl-retry-err" class="btn-outline" style="margin-top:6px">Retry</button>
     </div>
+
+    <!-- Content -->
     <div id="task-list-content" class="hidden">
+
+      <!-- User name + open CRM -->
       <div class="tl-header">
-        <span class="tl-title">Your open tasks</span>
-        <a id="tl-open-crm" href="https://wheb-crm.vercel.app/tasks" target="_blank" class="open-link">Open ↗</a>
+        <span id="tl-user-name" class="tl-title"></span>
+        <a href="https://wheb-crm.vercel.app/tasks" target="_blank" class="open-link">Open ↗</a>
       </div>
+
+      <!-- Stats -->
+      <div class="tl-stats-row" id="tl-stats">
+        <div class="tl-stat tl-stat-red">
+          <div class="tl-stat-num" id="tl-stat-overdue">0</div>
+          <div class="tl-stat-label">Overdue</div>
+        </div>
+        <div class="tl-stat tl-stat-amber">
+          <div class="tl-stat-num" id="tl-stat-today">0</div>
+          <div class="tl-stat-label">Due today</div>
+        </div>
+        <div class="tl-stat tl-stat-blue">
+          <div class="tl-stat-num" id="tl-stat-open">0</div>
+          <div class="tl-stat-label">Open</div>
+        </div>
+      </div>
+
+      <!-- Quick links -->
+      <div class="tl-quick-links">
+        <a href="https://wheb-crm.vercel.app/clients" target="_blank" class="tl-quick-link">Clients</a>
+        <a href="https://wheb-crm.vercel.app/meetings" target="_blank" class="tl-quick-link">Meetings</a>
+        <a href="https://wheb-crm.vercel.app/reports" target="_blank" class="tl-quick-link">Reports</a>
+      </div>
+
+      <!-- Task list -->
+      <div class="section-label" style="padding: 10px 16px 4px;">Your tasks</div>
       <div id="tl-items"></div>
+
       <div id="tl-empty" class="center-state hidden">
         <p class="hint">No open tasks assigned to you.</p>
       </div>
+
     </div>
   </div>
 

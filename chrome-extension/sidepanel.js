@@ -6,9 +6,8 @@ const SUMMARY_API  = `${CRM_URL}/api/extension/summary`
 const $ = id => document.getElementById(id)
 
 let currentTaskId = null
-let parentTaskId  = null  // set when drilling into a sub-task
+let parentTaskId  = null
 
-// ─── Lookup tables ───────────────────────────────────────────────
 const PRIO_LABEL   = { high: 'High', medium: 'Medium', low: 'Low' }
 const STATUS_LABEL = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }
 const STATUS_NEXT  = { open: 'in_progress', in_progress: 'completed', completed: 'open', cancelled: 'open' }
@@ -25,7 +24,7 @@ function formatDue(dateStr) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const diff = Math.round((d - today) / 86400000)
   if (diff < 0)   return { label: `${Math.abs(diff)}d overdue`, cls: 'overdue' }
-  if (diff === 0) return { label: 'Due today',   cls: 'today' }
+  if (diff === 0) return { label: 'Due today',    cls: 'today' }
   if (diff === 1) return { label: 'Due tomorrow', cls: '' }
   return {
     label: 'Due ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: diff > 300 ? 'numeric' : undefined }),
@@ -59,6 +58,11 @@ function showFeedback(container, msg, isError) {
   fb.textContent = msg
   container.appendChild(fb)
   setTimeout(() => fb.remove(), isError ? 3000 : 2000)
+}
+
+// ─── Navigation state ────────────────────────────────────────────
+function setBackBtn(visible) {
+  $('btn-back').classList.toggle('hidden', !visible)
 }
 
 // ─── Parent task status buttons ──────────────────────────────────
@@ -110,7 +114,7 @@ function renderActions(status) {
   btns.forEach(b => container.appendChild(b))
 }
 
-// ─── Task list (home screen) ─────────────────────────────────────
+// ─── Home screen (task list) ─────────────────────────────────────
 async function showTaskList() {
   $('detail').classList.add('hidden')
   $('loading').classList.add('hidden')
@@ -118,22 +122,50 @@ async function showTaskList() {
   $('task-list-loading').classList.remove('hidden')
   $('task-list-content').classList.add('hidden')
   $('task-list-error').classList.add('hidden')
+  $('tl-not-logged-in').classList.add('hidden')
+  setBackBtn(false)
+
+  $('open-crm').href = `${CRM_URL}/tasks`
 
   try {
     const res = await fetch(SUMMARY_API, { credentials: 'include' })
-    if (!res.ok) throw new Error()
-    const { tasks } = await res.json()
 
     $('task-list-loading').classList.add('hidden')
 
-    if (!tasks?.length) {
+    if (res.status === 401) {
+      $('tl-not-logged-in').classList.remove('hidden')
+      return
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const data = await res.json()
+    const tasks = data.tasks ?? []
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    // User name
+    $('tl-user-name').textContent = data.user?.full_name ?? data.user?.email ?? 'My tasks'
+
+    // Stats
+    const overdue  = tasks.filter(t => t.due_date && t.due_date < todayStr).length
+    const dueToday = tasks.filter(t => t.due_date === todayStr).length
+    $('tl-stat-overdue').textContent = overdue
+    $('tl-stat-today').textContent   = dueToday
+    $('tl-stat-open').textContent    = tasks.length
+
+    // Badge
+    chrome.action.setBadgeBackgroundColor({ color: '#dc2626' })
+    chrome.action.setBadgeText({ text: (overdue + dueToday) > 0 ? String(overdue + dueToday) : '' })
+
+    const items = $('tl-items')
+    items.innerHTML = ''
+
+    if (!tasks.length) {
       $('task-list-content').classList.remove('hidden')
       $('tl-empty').classList.remove('hidden')
       return
     }
 
-    const items = $('tl-items')
-    items.innerHTML = ''
     tasks.forEach(task => {
       const btn = document.createElement('button')
       btn.className = 'tl-item'
@@ -238,7 +270,6 @@ function renderSubTasks(subTasks) {
     const dot = document.createElement('div')
     dot.className = `subtask-dot dot-${sub.priority}`
 
-    // Clickable title → drills into that sub-task
     const titleBtn = document.createElement('button')
     titleBtn.className = `subtask-title-btn${sub.status === 'completed' ? ' done' : ''}`
     titleBtn.textContent = sub.title
@@ -294,26 +325,34 @@ function initNotesEdit(taskId, initialDescription) {
   const saveBtn   = $('notes-save')
   const cancelBtn = $('notes-cancel')
 
+  // Remove old listeners by cloning
+  const newEditBtn   = editBtn.cloneNode(true)
+  const newSaveBtn   = saveBtn.cloneNode(true)
+  const newCancelBtn = cancelBtn.cloneNode(true)
+  editBtn.parentNode.replaceChild(newEditBtn, editBtn)
+  saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn)
+  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn)
+
   const enterEdit = () => {
     textarea.value = descEl.dataset.value ?? ''
     descEl.classList.add('hidden')
     editDiv.classList.remove('hidden')
-    editBtn.classList.add('hidden')
+    newEditBtn.classList.add('hidden')
     textarea.focus()
   }
 
   const exitEdit = () => {
     editDiv.classList.add('hidden')
     descEl.classList.remove('hidden')
-    editBtn.classList.remove('hidden')
+    newEditBtn.classList.remove('hidden')
   }
 
-  editBtn.addEventListener('click', enterEdit)
-  cancelBtn.addEventListener('click', exitEdit)
+  newEditBtn.addEventListener('click', enterEdit)
+  newCancelBtn.addEventListener('click', exitEdit)
 
-  saveBtn.addEventListener('click', async () => {
+  newSaveBtn.addEventListener('click', async () => {
     const content = textarea.value.trim()
-    saveBtn.disabled = true
+    newSaveBtn.disabled = true
     try {
       const res = await fetch(`${TASK_API}?id=${taskId}`, {
         method: 'PATCH',
@@ -334,10 +373,9 @@ function initNotesEdit(taskId, initialDescription) {
     } catch {
       showFeedback(editDiv, 'Failed to save', true)
     }
-    saveBtn.disabled = false
+    newSaveBtn.disabled = false
   })
 
-  // Set initial state
   if (initialDescription) {
     descEl.textContent = initialDescription
     descEl.dataset.value = initialDescription
@@ -379,7 +417,10 @@ async function initComments(taskId) {
   const input  = $('comment-input')
   const submit = $('comment-submit')
 
-  // Load existing
+  // Clone to remove old listeners
+  const newSubmit = submit.cloneNode(true)
+  submit.parentNode.replaceChild(newSubmit, submit)
+
   try {
     const res = await fetch(`${COMMENTS_API}?taskId=${taskId}`, { credentials: 'include' })
     if (res.ok) {
@@ -388,11 +429,10 @@ async function initComments(taskId) {
     }
   } catch {}
 
-  // Submit handler
   const doSubmit = async () => {
     const content = input.value.trim()
     if (!content) return
-    submit.disabled = true
+    newSubmit.disabled = true
     try {
       const res = await fetch(`${COMMENTS_API}?taskId=${taskId}`, {
         method: 'POST',
@@ -403,11 +443,9 @@ async function initComments(taskId) {
       if (!res.ok) throw new Error()
       const { comment } = await res.json()
       input.value = ''
-
       const list = $('comment-list')
       const noComments = list.querySelector('.no-comments')
       if (noComments) noComments.remove()
-
       const el = buildCommentEl(comment)
       el.classList.add('comment-item--new')
       list.insertBefore(el, list.firstChild)
@@ -415,10 +453,10 @@ async function initComments(taskId) {
     } catch {
       showFeedback($('comments-section'), 'Failed to post — try again', true)
     }
-    submit.disabled = false
+    newSubmit.disabled = false
   }
 
-  submit.onclick = doSubmit
+  newSubmit.onclick = doSubmit
   input.onkeydown = e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doSubmit()
   }
@@ -429,6 +467,7 @@ function renderTask(task, subTasks) {
   currentTaskId = task.id
 
   $('open-crm').href = `${CRM_URL}/tasks?task=${task.id}`
+  setBackBtn(true)
 
   const pBadge = $('priority-badge')
   pBadge.textContent = PRIO_LABEL[task.priority] ?? task.priority
@@ -475,7 +514,7 @@ function renderTask(task, subTasks) {
   $('detail').classList.remove('hidden')
 }
 
-// ─── Fetch and init ──────────────────────────────────────────────
+// ─── Fetch and show task ─────────────────────────────────────────
 async function loadTask(taskId) {
   try {
     const res = await fetch(`${TASK_API}?id=${taskId}`, { credentials: 'include' })
@@ -485,11 +524,13 @@ async function loadTask(taskId) {
   } catch (err) {
     console.error('Side panel fetch error:', err)
     $('loading').classList.add('hidden')
-    $('task-list-view').classList.remove('hidden')
+    showTaskList()
   }
 }
 
+// ─── Init ────────────────────────────────────────────────────────
 async function init() {
+  // Back button
   $('btn-back').addEventListener('click', () => {
     if (parentTaskId) {
       const pid = parentTaskId
@@ -499,19 +540,17 @@ async function init() {
       resetDetail()
       loadTask(pid)
     } else {
+      parentTaskId = null
       showTaskList()
     }
   })
 
-  const result = await chrome.storage.session.get('selectedTask')
-  const stored = result?.selectedTask
+  // Retry buttons
+  $('tl-retry').addEventListener('click', showTaskList)
+  $('tl-retry-err').addEventListener('click', showTaskList)
 
-  if (stored) {
-    chrome.storage.session.remove('selectedTask')
-    loadTask(stored.id)
-  } else {
-    showTaskList()
-  }
+  // Always start at the task list
+  showTaskList()
 }
 
 init()

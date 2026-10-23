@@ -318,8 +318,11 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     ]
     if (status !== task.status)
       promises.push(updateTaskStatus(task.id, status, task.client?.id ?? null))
-    if (assignedTo !== (task.assigned_to ?? ''))
-      promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null))
+    if (assignedTo !== (task.assigned_to ?? '')) {
+      const cascade = subTasks.length > 0
+        && window.confirm(`Also reassign ${subTasks.length} sub-task${subTasks.length !== 1 ? 's' : ''}?`)
+      promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null, undefined, cascade))
+    }
     await Promise.all(promises)
     setSaving(false)
     setDirty(false)

@@ -649,7 +649,7 @@ export async function updateTaskStatus(taskId: string, status: string, clientId:
   if (status === 'completed') spawnNextRecurrence(taskId, user.id).catch(console.error)
 }
 
-export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, note?: string) {
+export async function reassignTask(taskId: string, newAssigneeId: string, clientId: string, note?: string, cascadeToChildren = false) {
   const supabase = await createActionClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
@@ -671,6 +671,15 @@ export async function reassignTask(taskId: string, newAssigneeId: string, client
     note:         note || null,
   })
 
+  if (cascadeToChildren) {
+    const { data: children } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('parent_task_id', taskId)
+    for (const child of children ?? []) {
+      await supabase.from('tasks').update({ assigned_to: newAssigneeId || null }).eq('id', child.id)
+    }
+  }
 }
 
 // ─── Templates ───────────────────────────────────────────────

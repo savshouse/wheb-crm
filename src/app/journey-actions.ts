@@ -14,7 +14,8 @@ async function createTasksFromTemplate(
   stepId: string,
   clientId: string,
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  assignedTo: string | null = null
 ) {
   const { data: items } = await supabase
     .from('task_template_items')
@@ -41,6 +42,7 @@ async function createTasksFromTemplate(
         due_date:        dueDate,
         created_by:      userId,
         status:          'open',
+        assigned_to:     assignedTo,
       })
       .select('id')
       .single()
@@ -71,7 +73,8 @@ async function activateStep(
   taskTemplateId: string | null,
   clientId: string,
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  assignedTo: string | null = null
 ) {
   await supabase
     .from('advice_journey_steps')
@@ -79,7 +82,7 @@ async function activateStep(
     .eq('id', stepId)
 
   if (taskTemplateId) {
-    await createTasksFromTemplate(taskTemplateId, stepId, clientId, userId, supabase)
+    await createTasksFromTemplate(taskTemplateId, stepId, clientId, userId, supabase, assignedTo)
   }
 }
 
@@ -150,7 +153,7 @@ export async function createJourney(payload: {
     // Activate first step (create template tasks if linked)
     const firstStep = (createdSteps ?? []).find((s: any) => s.step_order === 0)
     if (firstStep) {
-      await activateStep(firstStep.id, firstStep.task_template_id, payload.clientId, user.id, supabase)
+      await activateStep(firstStep.id, firstStep.task_template_id, payload.clientId, user.id, supabase, payload.assignedTo)
     }
   }
 
@@ -206,11 +209,12 @@ export async function completeJourneyStep(
 
   const { data: journey } = await supabase
     .from('advice_journeys')
-    .select('client_id')
+    .select('client_id, assigned_to')
     .eq('id', journeyId)
     .single()
 
-  const clientId = journey?.client_id ?? ''
+  const clientId  = journey?.client_id ?? ''
+  const assignedTo = journey?.assigned_to ?? null
 
   const nextStep = (allSteps ?? []).find(s => s.id !== stepId && s.status === 'pending')
   const allDone  = (allSteps ?? []).every(s => s.id === stepId || s.status === 'complete')
@@ -221,7 +225,7 @@ export async function completeJourneyStep(
       .update({ status: 'complete', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', journeyId)
   } else if (nextStep) {
-    await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase)
+    await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase, assignedTo)
     await supabase
       .from('advice_journeys')
       .update({ current_step_order: nextStep.step_order, updated_at: new Date().toISOString() })

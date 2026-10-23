@@ -16,6 +16,15 @@ async function updateBadge() {
   }
 }
 
+// Open the side panel directly when the toolbar icon is clicked
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    await chrome.sidePanel.open({ windowId: tab.windowId })
+  } catch (e) {
+    console.error('WHEB CRM: could not open side panel', e)
+  }
+})
+
 chrome.runtime.onInstalled.addListener(updateBadge)
 chrome.alarms.create('badge-refresh', { periodInMinutes: 30 })
 chrome.alarms.onAlarm.addListener(alarm => {
