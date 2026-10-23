@@ -321,7 +321,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
     if (assignedTo !== (task.assigned_to ?? '')) {
       const cascade = subTasks.length > 0
         && window.confirm(`Also reassign ${subTasks.length} sub-task${subTasks.length !== 1 ? 's' : ''}?`)
-      promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null, undefined, cascade))
+      promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null, cascade))
     }
     await Promise.all(promises)
     setSaving(false)

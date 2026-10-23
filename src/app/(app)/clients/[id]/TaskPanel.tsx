@@ -305,7 +305,7 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
   async function handleReassign(taskId: string, assigneeId: string, subCount = 0) {
     const cascade = subCount > 0
       && window.confirm(`Also reassign ${subCount} sub-task${subCount !== 1 ? 's' : ''}?`)
-    startTransition(async () => { await reassignTask(taskId, assigneeId, clientId, undefined, cascade) })
+    startTransition(async () => { await reassignTask(taskId, assigneeId, clientId, cascade) })
   }
 
   async function handleAddTask(e: React.FormEvent) {
