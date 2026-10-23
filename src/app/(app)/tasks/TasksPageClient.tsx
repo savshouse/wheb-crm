@@ -81,17 +81,17 @@ export default function TasksPageClient({
   // without waiting for the Supabase subscription to fire.
   function updateTaskInLists(task: any) {
     const isActive = task.status === 'open' || task.status === 'in_progress'
+    const isMine = task.assigned_to === currentUserId
+
     setMyTasks(prev => {
+      if (!isActive || !isMine) return prev.filter((t: any) => t.id !== task.id)
       const had = prev.some((t: any) => t.id === task.id)
-      if (had) return isActive ? prev.map((t: any) => t.id === task.id ? task : t) : prev.filter((t: any) => t.id !== task.id)
-      if (isActive && task.assigned_to === currentUserId) return [task, ...prev]
-      return prev
+      return had ? prev.map((t: any) => t.id === task.id ? task : t) : [task, ...prev]
     })
     setTeamTasks(prev => {
+      if (!isActive || isMine) return prev.filter((t: any) => t.id !== task.id)
       const had = prev.some((t: any) => t.id === task.id)
-      if (had) return isActive ? prev.map((t: any) => t.id === task.id ? task : t) : prev.filter((t: any) => t.id !== task.id)
-      if (isActive && task.assigned_to !== currentUserId) return [task, ...prev]
-      return prev
+      return had ? prev.map((t: any) => t.id === task.id ? task : t) : [task, ...prev]
     })
     setCompletedTasks(prev => {
       if (task.status === 'completed' || task.status === 'cancelled') {
@@ -129,18 +129,17 @@ export default function TasksPageClient({
           if (!task) return
 
           const isActive = task.status === 'open' || task.status === 'in_progress'
+          const isMine = task.assigned_to === currentUserId
 
           setMyTasks(prev => {
+            if (!isActive || !isMine) return prev.filter((t: any) => t.id !== task.id)
             const had = prev.some((t: any) => t.id === task.id)
-            if (!had) return prev
-            if (!isActive) return prev.filter((t: any) => t.id !== task.id)
-            return prev.map((t: any) => t.id === task.id ? task : t)
+            return had ? prev.map((t: any) => t.id === task.id ? task : t) : [task, ...prev]
           })
           setTeamTasks(prev => {
+            if (!isActive || isMine) return prev.filter((t: any) => t.id !== task.id)
             const had = prev.some((t: any) => t.id === task.id)
-            if (!had) return prev
-            if (!isActive) return prev.filter((t: any) => t.id !== task.id)
-            return prev.map((t: any) => t.id === task.id ? task : t)
+            return had ? prev.map((t: any) => t.id === task.id ? task : t) : [task, ...prev]
           })
           setCompletedTasks(prev => {
             if (task.status === 'completed' || task.status === 'cancelled') {
