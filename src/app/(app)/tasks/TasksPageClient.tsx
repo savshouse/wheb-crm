@@ -24,6 +24,7 @@ type Props = {
   filter?: string
   showMine: boolean
   showTeam: boolean
+  subTaskMap?: Record<string, any[]>
 }
 
 const VIEWS = [
@@ -46,6 +47,7 @@ export default function TasksPageClient({
   filter,
   showMine,
   showTeam,
+  subTaskMap = {},
 }: Props) {
   const router = useRouter()
   const [view, setView] = useState<View>('list')
@@ -284,6 +286,7 @@ export default function TasksPageClient({
                     highlightOverdue={highlightOverdue}
                     onTaskSaved={updateTaskInLists}
                     onTaskDeleted={deleteTaskFromLists}
+                    subTaskMap={subTaskMap}
                   />
                 )}
               </section>
@@ -309,6 +312,7 @@ export default function TasksPageClient({
                     currentUserId={currentUserId}
                     onTaskSaved={updateTaskInLists}
                     onTaskDeleted={deleteTaskFromLists}
+                    subTaskMap={subTaskMap}
                   />
                 )}
               </section>

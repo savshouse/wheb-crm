@@ -325,6 +325,10 @@ export default function TaskPanel({ clientId, openTasks, profiles, currentUserId
       const { error: tmplErr } = await applyTemplateToTask(task.id, newTaskTemplate, clientId)
       if (tmplErr) { setTemplateError(tmplErr); setAddingTask(false); router.refresh(); return }
     }
+    if (task) {
+      // Fire-and-forget: sync the new task to Microsoft To Do
+      fetch('/api/auth/microsoft/sync', { method: 'POST' }).catch(() => {})
+    }
     setNewTaskTitle(''); setNewTaskDue(''); setNewTaskPriority('medium')
     setNewTaskOpenedDate(new Date().toISOString().split('T')[0])
     setNewTaskAssignee(currentUserId); setNewTaskTemplate(''); setNewTaskMeetingId('')

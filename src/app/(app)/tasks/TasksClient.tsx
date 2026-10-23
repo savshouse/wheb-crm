@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { format, parseISO, isToday, isPast, isTomorrow } from 'date-fns'
-import { Clock, Building2, User, Route } from 'lucide-react'
+import { Clock, Building2, User, Route, ChevronDown, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import TaskStatusButton from './TaskStatusButton'
 import TaskModal from './TaskModal'
@@ -29,16 +29,25 @@ type Props = {
   currentUserId: string
   highlightOverdue?: boolean
   onTaskSaved?: (task: any) => void
+  subTaskMap?: Record<string, any[]>
 }
 
-export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, onTaskSaved, onTaskDeleted }: Props) {
+export default function TasksClient({ tasks, profiles, currentUserId, highlightOverdue, onTaskSaved, onTaskDeleted, subTaskMap = {} }: Props) {
   const [taskStack, setTaskStack] = useState<any[]>([])
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const openTask = taskStack[taskStack.length - 1] ?? null
 
   function openRootTask(task: any) { setTaskStack([task]) }
   function openSubTask(sub: any) { setTaskStack(prev => [...prev, { ...sub, client: openTask?.client ?? null, meeting: null }]) }
   function closeModal() { setTaskStack([]) }
   function goBack() { setTaskStack(prev => prev.slice(0, -1)) }
+  function toggleExpand(taskId: string) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId)
+      return next
+    })
+  }
 
   return (
     <>
@@ -46,70 +55,125 @@ export default function TasksClient({ tasks, profiles, currentUserId, highlightO
         {tasks.map(task => {
           const due = dueDateLabel(task.due_date)
           const highlight = highlightOverdue || (due?.cls === 'text-red-600 font-medium')
+          const subTasks = subTaskMap[task.id] ?? []
+          const hasSubTasks = subTasks.length > 0
+          const isExpanded = expandedIds.has(task.id)
 
           return (
-            <div
-              key={task.id}
-              className={`bg-white rounded-xl border p-4 flex items-start gap-4 transition-all cursor-pointer ${
-                highlight ? 'border-red-200 hover:border-red-300 hover:shadow-sm' : 'border-slate-200 hover:border-blue-300 hover:shadow-sm'
-              }`}
-              onClick={() => openRootTask(task)}
-            >
-              {/* Status button — stop propagation so clicking it doesn't open modal */}
-              <div onClick={e => e.stopPropagation()}>
-                <TaskStatusButton taskId={task.id} clientId={task.client?.id} currentStatus={task.status} />
-              </div>
+            <div key={task.id} className={`bg-white rounded-xl border transition-all ${
+              highlight ? 'border-red-200' : 'border-slate-200'
+            }`}>
+              {/* Parent task row */}
+              <div
+                className={`p-4 flex items-start gap-4 cursor-pointer ${
+                  highlight ? 'hover:border-red-300' : 'hover:bg-slate-50'
+                } rounded-xl`}
+                onClick={() => openRootTask(task)}
+              >
+                {/* Status button — stop propagation so clicking it doesn't open modal */}
+                <div onClick={e => e.stopPropagation()}>
+                  <TaskStatusButton taskId={task.id} clientId={task.client?.id} currentStatus={task.status} />
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{task.title}</p>
-                    {task.description && (
-                      <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.description}</p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                      {task.client && (
-                        <Link
-                          href={`/clients/${task.client.id}`}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-                          onClick={e => e.stopPropagation()}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{task.title}</p>
+                      {task.description && (
+                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{task.description}</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                        {task.client && (
+                          <Link
+                            href={`/clients/${task.client.id}`}
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Building2 size={11} />
+                            {task.client.name}
+                          </Link>
+                        )}
+                        {task.assignee && (
+                          <span className="flex items-center gap-1 text-xs text-slate-500">
+                            <User size={11} />
+                            {task.assignee.full_name ?? task.assignee.email}
+                          </span>
+                        )}
+                        {due && (
+                          <span className={`flex items-center gap-1 text-xs ${due.cls}`}>
+                            <Clock size={11} />
+                            {due.label}
+                          </span>
+                        )}
+                        {task.meeting && (
+                          <span className="text-xs text-slate-400">From: {task.meeting.title}</span>
+                        )}
+                        {task.journey_step?.journey && (
+                          <Link
+                            href={`/journeys/${task.journey_step.journey.id}`}
+                            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Route size={11} />
+                            {task.journey_step.journey.title}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${priorityColour[task.priority as keyof typeof priorityColour]}`}>
+                        {task.priority}
+                      </span>
+                      {hasSubTasks && (
+                        <button
+                          onClick={e => { e.stopPropagation(); toggleExpand(task.id) }}
+                          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded hover:bg-slate-100"
+                          title={isExpanded ? 'Collapse sub-tasks' : 'Expand sub-tasks'}
                         >
-                          <Building2 size={11} />
-                          {task.client.name}
-                        </Link>
-                      )}
-                      {task.assignee && (
-                        <span className="flex items-center gap-1 text-xs text-slate-500">
-                          <User size={11} />
-                          {task.assignee.full_name ?? task.assignee.email}
-                        </span>
-                      )}
-                      {due && (
-                        <span className={`flex items-center gap-1 text-xs ${due.cls}`}>
-                          <Clock size={11} />
-                          {due.label}
-                        </span>
-                      )}
-                      {task.meeting && (
-                        <span className="text-xs text-slate-400">From: {task.meeting.title}</span>
-                      )}
-                      {task.journey_step?.journey && (
-                        <Link
-                          href={`/journeys/${task.journey_step.journey.id}`}
-                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <Route size={11} />
-                          {task.journey_step.journey.title}
-                        </Link>
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          <span>{subTasks.length}</span>
+                        </button>
                       )}
                     </div>
                   </div>
-                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${priorityColour[task.priority as keyof typeof priorityColour]}`}>
-                    {task.priority}
-                  </span>
                 </div>
               </div>
+
+              {/* Inline sub-tasks */}
+              {hasSubTasks && isExpanded && (
+                <div className="border-t border-slate-100 px-4 pb-3 pt-2 space-y-1">
+                  {subTasks.map(sub => {
+                    const subDue = dueDateLabel(sub.due_date)
+                    return (
+                      <div
+                        key={sub.id}
+                        className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-50 cursor-pointer group"
+                        onClick={() => setTaskStack([task, { ...sub, client: task.client ?? null, meeting: null }])}
+                      >
+                        <div className="w-4 shrink-0 border-l-2 border-slate-200 self-stretch" />
+                        <div onClick={e => e.stopPropagation()}>
+                          <TaskStatusButton taskId={sub.id} clientId={task.client?.id} currentStatus={sub.status} />
+                        </div>
+                        <span className="flex-1 text-sm text-slate-700 min-w-0 truncate">{sub.title}</span>
+                        {subDue && (
+                          <span className={`text-xs flex items-center gap-0.5 shrink-0 ${subDue.cls}`}>
+                            <Clock size={10} />
+                            {subDue.label}
+                          </span>
+                        )}
+                        {sub.assignee && (
+                          <span className="text-xs text-slate-400 shrink-0 hidden group-hover:inline">
+                            {sub.assignee.full_name ?? sub.assignee.email}
+                          </span>
+                        )}
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${priorityColour[sub.priority as keyof typeof priorityColour]}`}>
+                          {sub.priority}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
         })}

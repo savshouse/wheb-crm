@@ -60,6 +60,25 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     ? (teamTasks ?? [])
     : (teamTasks ?? []).filter((t: any) => !myIds.has(t.id))
 
+  // Fetch sub-tasks for all visible parent tasks
+  const allParentIds = [
+    ...(myTasks ?? []).map((t: any) => t.id),
+    ...(teamTasks ?? []).map((t: any) => t.id),
+  ]
+  const subTaskMap: Record<string, any[]> = {}
+  if (allParentIds.length > 0) {
+    const { data: subTasks } = await supabase
+      .from('tasks')
+      .select('id, title, status, priority, due_date, parent_task_id, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name,email)')
+      .in('parent_task_id', allParentIds)
+      .not('status', 'in', '("completed","cancelled")')
+      .order('created_at', { ascending: true })
+    for (const st of (subTasks ?? [])) {
+      if (!subTaskMap[st.parent_task_id]) subTaskMap[st.parent_task_id] = []
+      subTaskMap[st.parent_task_id].push(st)
+    }
+  }
+
   const overdueTasks = (myTasks ?? []).filter((t: any) => {
     if (!t.due_date) return false
     const d = parseISO(t.due_date)
@@ -107,6 +126,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         filter={filter}
         showMine={showMine}
         showTeam={showTeam}
+        subTaskMap={subTaskMap}
       />
     </div>
   )
