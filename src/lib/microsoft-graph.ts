@@ -52,6 +52,9 @@ export async function getValidAccessToken(userId: string): Promise<string | null
   return data.access_token as string
 }
 
+// Microsoft Graph IDs are base64-encoded and may contain = or / which break URL path segments.
+const e = encodeURIComponent
+
 async function graph(token: string, method: string, path: string, body?: unknown) {
   const resp = await fetch(`${GRAPH}${path}`, {
     method,
@@ -96,7 +99,7 @@ export async function createTodoTask(token: string, listId: string, t: TodoTaskI
     body.reminderDateTime = { dateTime: `${t.dueDate}T09:00:00`, timeZone: 'Europe/London' }
     body.isReminderOn = true
   }
-  const result = await graph(token, 'POST', `/me/todo/lists/${listId}/tasks`, body)
+  const result = await graph(token, 'POST', `/me/todo/lists/${e(listId)}/tasks`, body)
   return result.id as string
 }
 
@@ -115,17 +118,17 @@ export async function updateTodoTask(
     body.reminderDateTime = { dateTime: `${t.dueDate}T09:00:00`, timeZone: 'Europe/London' }
     body.isReminderOn = true
   }
-  await graph(token, 'PATCH', `/me/todo/lists/${listId}/tasks/${taskId}`, body)
+  await graph(token, 'PATCH', `/me/todo/lists/${e(listId)}/tasks/${e(taskId)}`, body)
 }
 
 export async function completeTodoTask(token: string, listId: string, taskId: string): Promise<void> {
-  await graph(token, 'PATCH', `/me/todo/lists/${listId}/tasks/${taskId}`, { status: 'completed' })
+  await graph(token, 'PATCH', `/me/todo/lists/${e(listId)}/tasks/${e(taskId)}`, { status: 'completed' })
 }
 
 // Fetches all completed tasks in the WHEB CRM list.
 // Checks both status and completedDateTime for belt-and-suspenders reliability.
 export async function getCompletedTasks(token: string, listId: string): Promise<{ id: string }[]> {
-  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,status,completedDateTime&$top=500`)
+  const result = await graph(token, 'GET', `/me/todo/lists/${e(listId)}/tasks?$select=id,status,completedDateTime&$top=500`)
   const all = result?.value ?? []
   const completed = all.filter((t: any) => t.status === 'completed' || t.completedDateTime != null)
   console.log(`[ToDo sync] getCompletedTasks: ${all.length} total tasks, ${completed.length} completed`)
@@ -134,7 +137,7 @@ export async function getCompletedTasks(token: string, listId: string): Promise<
 
 // Fetches all non-completed tasks in the WHEB CRM list (for orphan detection).
 export async function getActiveTasks(token: string, listId: string): Promise<{ id: string, title: string }[]> {
-  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks?$select=id,title,status&$top=500`)
+  const result = await graph(token, 'GET', `/me/todo/lists/${e(listId)}/tasks?$select=id,title,status&$top=500`)
   return (result?.value ?? []).filter((t: any) => t.status !== 'completed')
 }
 
@@ -188,7 +191,7 @@ export function crmStatusToTodo(s: string): 'notStarted' | 'inProgress' | 'compl
 }
 
 export async function getTodoTask(token: string, listId: string, taskId: string): Promise<any> {
-  return graph(token, 'GET', `/me/todo/lists/${listId}/tasks/${taskId}`)
+  return graph(token, 'GET', `/me/todo/lists/${e(listId)}/tasks/${e(taskId)}`)
 }
 
 // Subscription management — change notifications fire when tasks are updated in To Do.
@@ -203,7 +206,7 @@ export async function createTodoSubscription(
   const result = await graph(token, 'POST', '/subscriptions', {
     changeType: 'updated',
     notificationUrl,
-    resource: `/me/todo/lists/${listId}/tasks`,
+    resource: `/me/todo/lists/${e(listId)}/tasks`,
     expirationDateTime,
     clientState,
   })
@@ -223,10 +226,10 @@ export async function deleteTodoSubscription(token: string, subscriptionId: stri
 // Deletes a To Do task. Silently ignores 404 (already deleted). Throws on other errors.
 export async function deleteTodoTask(token: string, listId: string, taskId: string): Promise<void> {
   try {
-    await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${taskId}`)
-  } catch (e: any) {
-    if (e?.message?.includes('404')) return  // already deleted — fine
-    throw e
+    await graph(token, 'DELETE', `/me/todo/lists/${e(listId)}/tasks/${e(taskId)}`)
+  } catch (err: any) {
+    if (err?.message?.includes('404')) return  // already deleted — fine
+    throw err
   }
 }
 
@@ -234,7 +237,7 @@ export async function deleteTodoTask(token: string, listId: string, taskId: stri
 export async function getChecklistItems(
   token: string, listId: string, taskId: string
 ): Promise<{ id: string; displayName: string; isChecked: boolean }[]> {
-  const result = await graph(token, 'GET', `/me/todo/lists/${listId}/tasks/${taskId}/checklistItems`)
+  const result = await graph(token, 'GET', `/me/todo/lists/${e(listId)}/tasks/${e(taskId)}/checklistItems`)
   return result?.value ?? []
 }
 
@@ -340,7 +343,7 @@ export async function syncStepsFromSubItems(
   // the duplicate-step bug where stale reads cause the same items to be created twice.
   for (const item of existingItems) {
     try {
-      await graph(token, 'DELETE', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems/${item.id}`)
+      await graph(token, 'DELETE', `/me/todo/lists/${e(listId)}/tasks/${e(todoTaskId)}/checklistItems/${e(item.id)}`)
     } catch {}
   }
 
@@ -350,7 +353,7 @@ export async function syncStepsFromSubItems(
 
   // Create all desired steps fresh
   for (const step of desired) {
-    await graph(token, 'POST', `/me/todo/lists/${listId}/tasks/${todoTaskId}/checklistItems`, {
+    await graph(token, 'POST', `/me/todo/lists/${e(listId)}/tasks/${e(todoTaskId)}/checklistItems`, {
       displayName: step.displayName,
       isChecked: step.isChecked,
     })
