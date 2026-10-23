@@ -129,6 +129,30 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
   const [gcDueDate, setGcDueDate]     = useState('')
   const [gcSaving, setGcSaving]       = useState(false)
 
+  async function refreshSubTasks() {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('tasks')
+      .select('id, title, status, priority, due_date, description, assigned_to')
+      .eq('parent_task_id', task.id)
+      .order('created_at')
+    const subs = data ?? []
+    setSubTasks(subs)
+    if (subs.length > 0) {
+      const { data: grandchildren } = await supabase
+        .from('tasks')
+        .select('id, title, status, priority, due_date, parent_task_id')
+        .in('parent_task_id', subs.map(s => s.id))
+        .order('created_at')
+      const map: Record<string, any[]> = {}
+      for (const gc of grandchildren ?? []) {
+        if (!map[gc.parent_task_id]) map[gc.parent_task_id] = []
+        map[gc.parent_task_id].push(gc)
+      }
+      setSubChildren(map)
+    }
+  }
+
   useEffect(() => {
     const supabase = createClient()
 
@@ -142,28 +166,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
         .then(({ data }) => setClientMeetings(data ?? []))
     }
 
-    supabase
-      .from('tasks')
-      .select('id, title, status, priority, due_date, description, assigned_to')
-      .eq('parent_task_id', task.id)
-      .order('created_at')
-      .then(async ({ data }) => {
-        const subs = data ?? []
-        setSubTasks(subs)
-        if (subs.length > 0) {
-          const { data: grandchildren } = await supabase
-            .from('tasks')
-            .select('id, title, status, priority, due_date, parent_task_id')
-            .in('parent_task_id', subs.map(s => s.id))
-            .order('created_at')
-          const map: Record<string, any[]> = {}
-          for (const gc of grandchildren ?? []) {
-            if (!map[gc.parent_task_id]) map[gc.parent_task_id] = []
-            map[gc.parent_task_id].push(gc)
-          }
-          setSubChildren(map)
-        }
-      })
+    refreshSubTasks()
 
     supabase
       .from('task_history')
@@ -324,6 +327,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
       promises.push(reassignTask(task.id, assignedTo, task.client?.id ?? null, cascade))
     }
     await Promise.all(promises)
+    await refreshSubTasks()
     setSaving(false)
     setDirty(false)
     scheduleMsStepSync()
