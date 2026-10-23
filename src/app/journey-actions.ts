@@ -61,6 +61,7 @@ async function createTasksFromTemplate(
           due_date:       childDue,
           created_by:     userId,
           status:         'open',
+          assigned_to:    assignedTo,
         })
       }
     }
