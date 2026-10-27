@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-const SCOPES = 'openid offline_access User.Read Tasks.ReadWrite Calendars.ReadWrite Calendars.Read.Shared'
+const SCOPES = 'openid offline_access User.Read Tasks.ReadWrite Calendars.ReadWrite Calendars.Read.Shared Mail.Read'
 const APP_URL = 'https://wheb-crm.vercel.app'
 
 // GET /api/auth/microsoft

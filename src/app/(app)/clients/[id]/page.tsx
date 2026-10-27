@@ -21,6 +21,7 @@ import KeyPersonnel from './KeyPersonnel'
 import RemindersBell from '@/components/RemindersBell'
 import EmailButton from './EmailButton'
 import ClientEmailHistory from './ClientEmailHistory'
+import OutlookEmails from './OutlookEmails'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -35,6 +36,13 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
+
+  const { data: userProfile } = await supabase
+    .from('profiles')
+    .select('ms_refresh_token')
+    .eq('id', user.id)
+    .single()
+  const hasMsConnected = !!(userProfile?.ms_refresh_token)
 
   const [
     { data: client },
@@ -350,8 +358,11 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                 </div>
               )}
 
-              {/* Email history */}
+              {/* Email history (CRM-sent) */}
               <ClientEmailHistory clientId={id} />
+
+              {/* Outlook email history */}
+              <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
             </>
           ) : (
             <>
@@ -374,6 +385,9 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                 meetings={(meetings ?? []).map((m: any) => ({ id: m.id, title: m.title, meeting_date: m.meeting_date }))}
                 tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
               />
+
+              {/* Outlook email history */}
+              <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
             </>
           )}
 

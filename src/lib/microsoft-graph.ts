@@ -383,6 +383,43 @@ export type CalendarEvent = {
   webLink?: string
 }
 
+export type EmailMessage = {
+  id: string
+  subject: string
+  from: { emailAddress: { name: string; address: string } }
+  toRecipients: { emailAddress: { name: string; address: string } }[]
+  receivedDateTime: string
+  bodyPreview: string
+  webLink: string
+  hasAttachments: boolean
+}
+
+export async function searchClientEmails(
+  token: string,
+  clientEmail: string,
+  size = 50
+): Promise<EmailMessage[]> {
+  const query = `from:${clientEmail} OR to:${clientEmail}`
+  const result = await graph(token, 'POST', '/search/query', {
+    requests: [{
+      entityTypes: ['message'],
+      query: { queryString: query },
+      from: 0,
+      size,
+    }],
+  })
+  const hits: any[] = result?.value?.[0]?.hitsContainers?.[0]?.hits ?? []
+  return hits.map((h: any) => h.resource).filter(Boolean)
+}
+
+export async function getMessageBody(
+  token: string,
+  messageId: string
+): Promise<{ contentType: string; content: string } | null> {
+  const result = await graph(token, 'GET', `/me/messages/${encodeURIComponent(messageId)}?$select=body`)
+  return result?.body ?? null
+}
+
 export async function searchCalendarEvents(
   token: string,
   query: string
