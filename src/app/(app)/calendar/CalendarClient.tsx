@@ -156,9 +156,10 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     [profiles, currentUserId]
   )
 
-  // Debounced search across all CRM meetings
+  // Debounced search: CRM meetings (Supabase) + Outlook events loaded in current week
   useEffect(() => {
-    if (searchQuery.trim().length < 2) {
+    const q = searchQuery.trim()
+    if (q.length < 2) {
       setSearchResults([])
       setSearchOpen(false)
       return
@@ -166,9 +167,35 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     const timer = setTimeout(async () => {
       setSearchLoading(true)
       try {
-        const res = await fetch(`/api/calendar/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        const res = await fetch(`/api/calendar/search?q=${encodeURIComponent(q)}`)
         const data = await res.json()
-        setSearchResults(data.meetings ?? [])
+        const crmMeetings: SearchResult[] = data.meetings ?? []
+
+        // Also search Outlook events already loaded for the current week
+        const ql = q.toLowerCase()
+        const outlookMatches: SearchResult[] = ownEvents
+          .filter(ev => ev.subject.toLowerCase().includes(ql))
+          .map(ev => ({
+            id: ev.id,
+            title: ev.subject,
+            meeting_date: ev.start.dateTime.slice(0, 10),
+            start_time: ev.start.dateTime.slice(11, 16),
+            end_time: ev.end.dateTime.slice(11, 16),
+            calendar_event_id: ev.id,
+            teams_meeting_url: ev.onlineMeeting?.joinUrl ?? null,
+            client: null,
+          }))
+
+        // Merge: CRM results take priority; skip Outlook events already covered by a CRM record
+        const crmCalIds = new Set(crmMeetings.map(m => m.calendar_event_id).filter(Boolean))
+        const outlookOnly = outlookMatches.filter(ev => !crmCalIds.has(ev.id))
+
+        const today = new Date().toISOString().split('T')[0]
+        const all = [...crmMeetings, ...outlookOnly]
+        const upcoming = all.filter(m => m.meeting_date >= today).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date))
+        const past = all.filter(m => m.meeting_date < today).sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))
+
+        setSearchResults([...upcoming, ...past])
         setSearchOpen(true)
       } catch {
         setSearchResults([])
@@ -177,7 +204,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery])
+  }, [searchQuery, ownEvents])
 
   // Close search dropdown on click outside
   useEffect(() => {
