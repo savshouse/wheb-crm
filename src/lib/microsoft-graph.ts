@@ -387,14 +387,17 @@ export async function searchCalendarEvents(
   token: string,
   query: string
 ): Promise<CalendarEvent[]> {
-  // Note: $orderby cannot be combined with $search on Graph events — omit it
-  const params = new URLSearchParams({
-    '$search': `"${query}"`,
-    '$select': 'id,subject,start,end,onlineMeeting',
-    '$top': '50',
+  // /me/events does not support $search — use the Microsoft Search API instead
+  const result = await graph(token, 'POST', '/search/query', {
+    requests: [{
+      entityTypes: ['event'],
+      query: { queryString: query },
+      from: 0,
+      size: 50,
+    }],
   })
-  const result = await graph(token, 'GET', `/me/events?${params}`)
-  return result?.value ?? []
+  const hits: any[] = result?.value?.[0]?.hitsContainers?.[0]?.hits ?? []
+  return hits.map((h: any) => h.resource).filter(Boolean)
 }
 
 export async function getUserCalendarEvents(
