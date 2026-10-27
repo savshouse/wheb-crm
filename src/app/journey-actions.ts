@@ -405,6 +405,13 @@ export async function failJourneyStep(
     .update({ status: 'complete', completed_at: now, branch_outcome: 'failure', attempt_count: newAttemptCount })
     .eq('id', stepId)
 
+  // Cancel all open tasks on this step so nothing is left dangling
+  await supabase
+    .from('tasks')
+    .update({ status: 'cancelled' })
+    .eq('journey_step_id', stepId)
+    .not('status', 'in', '("completed","cancelled")')
+
   const { data: journey } = await supabase
     .from('advice_journeys')
     .select('client_id, assigned_to')
