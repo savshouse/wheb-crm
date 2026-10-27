@@ -6,8 +6,10 @@ import Link from 'next/link'
 import { ArrowLeft, Building2, User } from 'lucide-react'
 import { updateClient } from '@/app/actions'
 import SearchableSelect from '@/components/SearchableSelect'
+import ClientEmailsEditor from './ClientEmailsEditor'
 
 type Corporate = { id: string; name: string }
+type ClientEmail = { id: string; email: string; label: string; is_primary: boolean }
 
 type Props = {
   client: {
@@ -30,9 +32,10 @@ type Props = {
     payroll_id: string | null
   }
   corporates: Corporate[]
+  clientEmails: ClientEmail[]
 }
 
-export default function EditClientForm({ client, corporates }: Props) {
+export default function EditClientForm({ client, corporates, clientEmails }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -101,9 +104,13 @@ export default function EditClientForm({ client, corporates }: Props) {
 
           {isIndividual && (
             <>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-                <input name="email" type="email" defaultValue={client.email ?? ''} className={inputClass} placeholder="jane@example.com" />
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email addresses</label>
+                <ClientEmailsEditor
+                  clientId={client.id}
+                  initialEmails={clientEmails}
+                  onChanged={() => {}}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Employer</label>

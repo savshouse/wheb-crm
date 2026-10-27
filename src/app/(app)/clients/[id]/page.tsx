@@ -60,6 +60,7 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
     { data: templates },
     { data: journeys },
     { data: journeyTemplates },
+    { data: clientEmails },
   ] = await Promise.all([
     supabase
       .from('clients')
@@ -121,6 +122,11 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
       .select('id, name, category, description, steps, is_active')
       .eq('is_active', true)
       .order('name'),
+    supabase
+      .from('client_emails')
+      .select('id, email, label, is_primary')
+      .eq('client_id', id)
+      .order('is_primary', { ascending: false }),
   ])
 
   if (!client) notFound()
@@ -232,9 +238,11 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
                 {client.phone && (
                   <a href={`tel:${client.phone}`} className="flex items-center gap-1 hover:text-blue-600 transition-colors"><Phone size={11} />{client.phone}</a>
                 )}
-                {isIndividual && client.email && (
-                  <a href={`mailto:${client.email}`} className="flex items-center gap-1 hover:text-blue-600 transition-colors text-xs text-slate-500">✉ {client.email}</a>
-                )}
+                {isIndividual && (clientEmails ?? []).map((e: any) => (
+                  <a key={e.id} href={`mailto:${e.email}`} className="flex items-center gap-1 hover:text-blue-600 transition-colors text-xs text-slate-500">
+                    ✉ {e.email}{!e.is_primary && <span className="text-slate-400">({e.label})</span>}
+                  </a>
+                ))}
                 {client.website && (
                   <a href={client.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-blue-600">
                     <Globe size={11} />Website
@@ -268,16 +276,19 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isIndividual && client.email && (
-              <EmailButton recipient={{
-                id:              client.id,
-                email:           client.email,
-                full_name:       client.name,
-                employer:        (employer as any)?.name ?? null,
-                account_manager: (client.account_manager as any)?.full_name ?? (client.account_manager as any)?.email ?? null,
-                payroll_id:      (client as any).payroll_id ?? null,
-              }} />
-            )}
+            {isIndividual && (() => {
+              const primaryEmail = (clientEmails ?? []).find((e: any) => e.is_primary) ?? (clientEmails ?? [])[0]
+              return primaryEmail ? (
+                <EmailButton recipient={{
+                  id:              client.id,
+                  email:           primaryEmail.email,
+                  full_name:       client.name,
+                  employer:        (employer as any)?.name ?? null,
+                  account_manager: (client.account_manager as any)?.full_name ?? (client.account_manager as any)?.email ?? null,
+                  payroll_id:      (client as any).payroll_id ?? null,
+                }} />
+              ) : null
+            })()}
             <Link
               href={`/clients/${id}/edit`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Navigation from '@/components/Navigation'
 import MsTodoAutoSync from '@/components/MsTodoAutoSync'
+import FloatingRecentActivity from '@/components/FloatingRecentActivity'
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const supabase = await createClient()
@@ -30,6 +31,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
         {children}
       </main>
       {hasMicrosoft && <MsTodoAutoSync />}
+      <FloatingRecentActivity />
     </div>
   )
 }
