@@ -16,7 +16,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   let emailAddresses: string[] = (storedEmails ?? []).map((r: any) => r.email).filter(Boolean)
 
-  // Fallback: primary contact email if no client_emails rows exist
+  // Fallback 1: clients.email (catches any that pre-date the client_emails migration)
+  if (!emailAddresses.length) {
+    const { data: client } = await supabase
+      .from('clients')
+      .select('email')
+      .eq('id', id)
+      .single()
+    if (client?.email) emailAddresses = [client.email]
+  }
+
+  // Fallback 2: primary contact email
   if (!emailAddresses.length) {
     const { data: primary } = await supabase
       .from('contacts')
