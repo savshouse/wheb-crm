@@ -156,7 +156,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     [profiles, currentUserId]
   )
 
-  // Debounced search: CRM meetings (Supabase) + Outlook events loaded in current week
+  // Debounced search: CRM meetings (Supabase) + full Outlook history (Graph API)
   useEffect(() => {
     const q = searchQuery.trim()
     if (q.length < 2) {
@@ -167,33 +167,43 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     const timer = setTimeout(async () => {
       setSearchLoading(true)
       try {
-        const res = await fetch(`/api/calendar/search?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        const crmMeetings: SearchResult[] = data.meetings ?? []
+        // Run CRM search and Graph full-history search in parallel
+        const [crmRes, outlookRes] = await Promise.all([
+          fetch(`/api/calendar/search?q=${encodeURIComponent(q)}`),
+          hasMsConnected
+            ? fetch(`/api/calendar/outlook-search?q=${encodeURIComponent(q)}`)
+            : Promise.resolve(null),
+        ])
 
-        // Also search Outlook events already loaded for the current week
-        const ql = q.toLowerCase()
-        const outlookMatches: SearchResult[] = ownEvents
-          .filter(ev => ev.subject.toLowerCase().includes(ql))
-          .map(ev => ({
-            id: ev.id,
-            title: ev.subject,
-            meeting_date: ev.start.dateTime.slice(0, 10),
-            start_time: ev.start.dateTime.slice(11, 16),
-            end_time: ev.end.dateTime.slice(11, 16),
-            calendar_event_id: ev.id,
-            teams_meeting_url: ev.onlineMeeting?.joinUrl ?? null,
-            client: null,
-          }))
+        const crmMeetings: SearchResult[] = (await crmRes.json()).meetings ?? []
+        const outlookEvents: OwnCalendarEvent[] = outlookRes
+          ? ((await outlookRes.json()).events ?? [])
+          : []
 
-        // Merge: CRM results take priority; skip Outlook events already covered by a CRM record
+        // Convert Graph events to SearchResult shape
+        const outlookAsResults: SearchResult[] = outlookEvents.map(ev => ({
+          id: ev.id,
+          title: ev.subject,
+          meeting_date: ev.start.dateTime.slice(0, 10),
+          start_time: ev.start.dateTime.slice(11, 16),
+          end_time: ev.end.dateTime.slice(11, 16),
+          calendar_event_id: ev.id,
+          teams_meeting_url: ev.onlineMeeting?.joinUrl ?? null,
+          client: null,
+        }))
+
+        // CRM results take priority — drop Outlook duplicates already covered by a CRM record
         const crmCalIds = new Set(crmMeetings.map(m => m.calendar_event_id).filter(Boolean))
-        const outlookOnly = outlookMatches.filter(ev => !crmCalIds.has(ev.id))
+        const outlookOnly = outlookAsResults.filter(ev => !crmCalIds.has(ev.id))
 
         const today = new Date().toISOString().split('T')[0]
         const all = [...crmMeetings, ...outlookOnly]
-        const upcoming = all.filter(m => m.meeting_date >= today).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date))
-        const past = all.filter(m => m.meeting_date < today).sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))
+        const upcoming = all
+          .filter(m => m.meeting_date >= today)
+          .sort((a, b) => a.meeting_date.localeCompare(b.meeting_date))
+        const past = all
+          .filter(m => m.meeting_date < today)
+          .sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))
 
         setSearchResults([...upcoming, ...past])
         setSearchOpen(true)
@@ -204,7 +214,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, ownEvents])
+  }, [searchQuery, hasMsConnected])
 
   // Close search dropdown on click outside
   useEffect(() => {
