@@ -465,8 +465,10 @@ export async function getAttachmentContent(
   messageId: string,
   attachmentId: string
 ): Promise<{ name: string; contentType: string; contentBytes: string } | null> {
+  // No $select — contentBytes lives on the derived fileAttachment type, not the base attachment type,
+  // so $select validation against the base type returns a 400.
   const result = await graph(token, 'GET',
-    `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}?$select=name,contentType,contentBytes`)
+    `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`)
   if (!result?.contentBytes) return null
   return { name: result.name as string, contentType: result.contentType as string, contentBytes: result.contentBytes as string }
 }
