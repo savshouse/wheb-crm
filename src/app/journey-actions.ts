@@ -80,14 +80,18 @@ async function createTasksFromTemplate(
   }
 }
 
-/** Activate a step: set in_progress and auto-create template tasks if linked. */
+/** Activate a step: set in_progress and auto-create template tasks if linked.
+ *  If no task template is linked, creates a single task from stepName so the
+ *  step is always actionable (reminders, assignments, etc. work at task level).
+ */
 async function activateStep(
   stepId: string,
   taskTemplateId: string | null,
   clientId: string,
   userId: string,
   supabase: SupabaseClient,
-  assignedTo: string | null = null
+  assignedTo: string | null = null,
+  stepName?: string
 ) {
   await supabase
     .from('advice_journey_steps')
@@ -96,6 +100,18 @@ async function activateStep(
 
   if (taskTemplateId) {
     await createTasksFromTemplate(taskTemplateId, stepId, clientId, userId, supabase, assignedTo)
+  } else if (stepName) {
+    // No task template — create a single default task so the step has something
+    // actionable (due date, assignee, reminders all live at task level).
+    await supabase.from('tasks').insert({
+      title:           stepName,
+      client_id:       clientId,
+      journey_step_id: stepId,
+      assigned_to:     assignedTo,
+      priority:        'medium',
+      status:          'open',
+      created_by:      userId,
+    })
   }
 }
 
@@ -184,7 +200,7 @@ async function createAndActivateStep(
     .single()
 
   if (newStep) {
-    await activateStep(newStep.id, newStep.task_template_id, clientId, userId, supabase, assignedTo)
+    await activateStep(newStep.id, newStep.task_template_id, clientId, userId, supabase, assignedTo, node.name)
     await supabase
       .from('advice_journeys')
       .update({ current_step_order: order, updated_at: new Date().toISOString() })
@@ -257,7 +273,7 @@ export async function createJourney(payload: {
 
     if (stepError) return { journeyId: null, error: stepError.message }
     if (firstStep) {
-      await activateStep(firstStep.id, firstStep.task_template_id, payload.clientId, user.id, supabase, payload.assignedTo)
+      await activateStep(firstStep.id, firstStep.task_template_id, payload.clientId, user.id, supabase, payload.assignedTo, first.name)
     }
   }
 
@@ -329,7 +345,7 @@ export async function completeJourneyStep(
   // Legacy fallback: all steps were pre-created (journeys started before lazy creation)
   const { data: allSteps } = await supabase
     .from('advice_journey_steps')
-    .select('id, step_order, status, task_template_id')
+    .select('id, step_order, status, task_template_id, name')
     .eq('journey_id', journeyId)
     .order('step_order')
 
@@ -342,7 +358,7 @@ export async function completeJourneyStep(
       .update({ status: 'complete', completed_at: now, updated_at: now })
       .eq('id', journeyId)
   } else if (nextStep) {
-    await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase, assignedTo)
+    await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase, assignedTo, nextStep.name)
     await supabase
       .from('advice_journeys')
       .update({ current_step_order: nextStep.step_order, updated_at: now })
@@ -430,14 +446,16 @@ export async function reopenJourneyStep(
     .eq('id', stepId)
     .single()
 
-  // Remove any pending steps that were created after this one (lazy path clean-up)
+  // Remove any non-complete steps after this one (lazy path clean-up).
+  // Lazily-created steps are immediately activated (in_progress), not pending,
+  // so we must delete both pending and in_progress steps — but never complete ones.
   if (step?.step_order != null) {
     await supabase
       .from('advice_journey_steps')
       .delete()
       .eq('journey_id', journeyId)
       .gt('step_order', step.step_order)
-      .eq('status', 'pending')
+      .neq('status', 'complete')
   }
 
   await supabase
