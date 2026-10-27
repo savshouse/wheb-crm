@@ -94,8 +94,32 @@ function SingleEmailPane({
   attachments?: EmailAttachment[]
   attachmentLoading?: boolean
 }) {
+  const [downloading, setDownloading] = useState<string | null>(null)
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || '—'
   const senderAddr = email.from?.emailAddress?.address || ''
+
+  async function downloadAttachment(att: EmailAttachment) {
+    if (downloading) return
+    setDownloading(att.id)
+    try {
+      const url = `/api/emails/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(att.id)}?userId=${encodeURIComponent(email.ownerId)}`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`${res.status}`)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = att.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch (err) {
+      console.error('Attachment download failed', err)
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   return (
     <>
@@ -164,19 +188,25 @@ function SingleEmailPane({
                 <Paperclip size={11} className="inline mr-1" />
                 {attachments.length} attachment{attachments.length !== 1 ? 's' : ''}:
               </span>
-              {attachments.map(att => (
-                <a
-                  key={att.id}
-                  href={`/api/emails/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(att.id)}?userId=${encodeURIComponent(email.ownerId)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-700 transition-colors"
-                >
-                  <Paperclip size={10} className="text-slate-400 shrink-0" />
-                  <span className="max-w-[160px] truncate">{att.name}</span>
-                  <span className="text-slate-400 shrink-0">{formatFileSize(att.size)}</span>
-                </a>
-              ))}
+              {attachments.map(att => {
+                const isDownloading = downloading === att.id
+                return (
+                  <button
+                    key={att.id}
+                    type="button"
+                    onClick={() => downloadAttachment(att)}
+                    disabled={!!downloading}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-700 transition-colors disabled:opacity-60"
+                  >
+                    {isDownloading
+                      ? <RefreshCw size={10} className="text-slate-400 shrink-0 animate-spin" />
+                      : <Paperclip size={10} className="text-slate-400 shrink-0" />
+                    }
+                    <span className="max-w-[160px] truncate">{att.name}</span>
+                    <span className="text-slate-400 shrink-0">{formatFileSize(att.size)}</span>
+                  </button>
+                )
+              })}
             </div>
           ) : null}
         </div>
