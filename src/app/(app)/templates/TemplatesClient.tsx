@@ -2,7 +2,7 @@
 
 import { useState, useTransition, Fragment, useRef } from 'react'
 import { createTemplate, deleteTemplate, addTemplateItem, removeTemplateItem, updateTemplate, updateTemplateItem, importTemplate, reorderTemplateItems } from '@/app/actions'
-import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info, Download, Upload, GripVertical } from 'lucide-react'
+import { Plus, Trash2, LayoutTemplate, ChevronDown, ChevronRight, Pencil, Check, X, Info, Download, Upload, GripVertical, Mail, FileText } from 'lucide-react'
 import RemindersBell from '@/components/RemindersBell'
 import { createClient } from '@/lib/supabase/client'
 
@@ -22,6 +22,8 @@ type Template = {
   category: string | null
   items: Item[]
 }
+
+type DocTemplate = { id: string; name: string; type: 'email' | 'snippet'; category: string; subject: string | null }
 
 const priorityColour = {
   high:   'bg-red-100 text-red-700',
@@ -75,6 +77,12 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
   const [importing, setImporting]           = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Doc template linking
+  const [linkedDocs, setLinkedDocs]         = useState<Record<string, DocTemplate[]>>({})
+  const [allDocTemplates, setAllDocTemplates] = useState<DocTemplate[] | null>(null)
+  const [addingDocLinkTo, setAddingDocLinkTo] = useState<string | null>(null)
+  const [docLinkSearch, setDocLinkSearch]     = useState('')
+
   // Derive all categories
   const allCategories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[]
   const grouped = allCategories.length > 0
@@ -86,7 +94,61 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
     : [{ cat: '', list: templates }]
 
   function toggleExpand(id: string) {
-    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpanded(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) { n.delete(id) } else { n.add(id); loadLinkedDocs(id) }
+      return n
+    })
+  }
+
+  async function loadLinkedDocs(templateId: string) {
+    if (linkedDocs[templateId]) return
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('task_template_documents')
+      .select('sort_order, document_templates(id, name, type, category, subject)')
+      .eq('task_template_id', templateId)
+      .order('sort_order')
+    setLinkedDocs(prev => ({
+      ...prev,
+      [templateId]: (data ?? []).map((r: any) => r.document_templates).filter(Boolean),
+    }))
+  }
+
+  async function loadAllDocTemplates() {
+    if (allDocTemplates !== null) return
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('document_templates')
+      .select('id, name, type, category, subject')
+      .order('category').order('name')
+    setAllDocTemplates(data ?? [])
+  }
+
+  async function handleLinkDoc(taskTemplateId: string, docTemplateId: string) {
+    const supabase = createClient()
+    const existing = linkedDocs[taskTemplateId] ?? []
+    const { error } = await supabase
+      .from('task_template_documents')
+      .insert({ task_template_id: taskTemplateId, document_template_id: docTemplateId, sort_order: existing.length })
+    if (!error) {
+      const doc = allDocTemplates?.find(d => d.id === docTemplateId)
+      if (doc) setLinkedDocs(prev => ({ ...prev, [taskTemplateId]: [...(prev[taskTemplateId] ?? []), doc] }))
+      setAddingDocLinkTo(null)
+      setDocLinkSearch('')
+    }
+  }
+
+  async function handleUnlinkDoc(taskTemplateId: string, docTemplateId: string) {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('task_template_documents')
+      .delete()
+      .eq('task_template_id', taskTemplateId)
+      .eq('document_template_id', docTemplateId)
+    if (!error) {
+      setLinkedDocs(prev => ({ ...prev, [taskTemplateId]: (prev[taskTemplateId] ?? []).filter(d => d.id !== docTemplateId) }))
+    }
   }
 
   function startEditTemplate(t: Template) {
@@ -708,6 +770,108 @@ export default function TemplatesClient({ initialTemplates }: { initialTemplates
                               </>
                             )
                           })()}
+
+                          {/* Correspondence templates */}
+                          <div className="border-t border-slate-100 px-5 py-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <FileText size={13} className="text-blue-500" />
+                                <span className="text-xs font-semibold text-slate-700">Correspondence templates</span>
+                                {(linkedDocs[template.id] ?? []).length > 0 && (
+                                  <span className="text-xs text-slate-400">({(linkedDocs[template.id] ?? []).length})</span>
+                                )}
+                              </div>
+                              {addingDocLinkTo !== template.id && (
+                                <button
+                                  onClick={() => { setAddingDocLinkTo(template.id); setDocLinkSearch(''); loadAllDocTemplates() }}
+                                  className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                >
+                                  <Plus size={12} />Link template
+                                </button>
+                              )}
+                            </div>
+
+                            {(linkedDocs[template.id] ?? []).length > 0 && (
+                              <div className="space-y-1 mb-2">
+                                {(linkedDocs[template.id] ?? []).map(doc => (
+                                  <div key={doc.id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 group">
+                                    <div className={`shrink-0 ${doc.type === 'email' ? 'text-blue-500' : 'text-amber-500'}`}>
+                                      {doc.type === 'email' ? <Mail size={12} /> : <FileText size={12} />}
+                                    </div>
+                                    <span className="flex-1 text-xs text-slate-700">{doc.name}</span>
+                                    {doc.category && <span className="text-[10px] text-slate-400">{doc.category}</span>}
+                                    <button
+                                      onClick={() => handleUnlinkDoc(template.id, doc.id)}
+                                      className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Remove link"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {addingDocLinkTo === template.id && (
+                              <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                                {allDocTemplates === null ? (
+                                  <p className="text-xs text-slate-400">Loading…</p>
+                                ) : (
+                                  <>
+                                    <input
+                                      value={docLinkSearch}
+                                      onChange={e => setDocLinkSearch(e.target.value)}
+                                      placeholder="Search templates…"
+                                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      autoFocus
+                                    />
+                                    <div className="max-h-40 overflow-y-auto space-y-0.5">
+                                      {allDocTemplates
+                                        .filter(d => {
+                                          const q = docLinkSearch.toLowerCase()
+                                          if (!q) return true
+                                          return d.name.toLowerCase().includes(q) || (d.category ?? '').toLowerCase().includes(q)
+                                        })
+                                        .filter(d => !(linkedDocs[template.id] ?? []).some(l => l.id === d.id))
+                                        .map(doc => (
+                                          <button
+                                            key={doc.id}
+                                            onClick={() => handleLinkDoc(template.id, doc.id)}
+                                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-left transition-colors group"
+                                          >
+                                            <div className={`shrink-0 ${doc.type === 'email' ? 'text-blue-500' : 'text-amber-500'}`}>
+                                              {doc.type === 'email' ? <Mail size={12} /> : <FileText size={12} />}
+                                            </div>
+                                            <span className="flex-1 text-xs text-slate-700 group-hover:text-blue-700">{doc.name}</span>
+                                            {doc.category && <span className="text-[10px] text-slate-400">{doc.category}</span>}
+                                          </button>
+                                        ))}
+                                      {allDocTemplates
+                                        .filter(d => {
+                                          const q = docLinkSearch.toLowerCase()
+                                          if (!q) return true
+                                          return d.name.toLowerCase().includes(q) || (d.category ?? '').toLowerCase().includes(q)
+                                        })
+                                        .filter(d => !(linkedDocs[template.id] ?? []).some(l => l.id === d.id))
+                                        .length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-2">No templates to link</p>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => { setAddingDocLinkTo(null); setDocLinkSearch('') }}
+                                      className="text-xs text-slate-500 hover:text-slate-700"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {(linkedDocs[template.id] ?? []).length === 0 && addingDocLinkTo !== template.id && (
+                              <p className="text-xs text-slate-400">No templates linked. Link correspondence templates to suggest them when staff work on tasks of this type.</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

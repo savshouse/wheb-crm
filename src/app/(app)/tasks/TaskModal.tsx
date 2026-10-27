@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { updateTask, updateTaskStatus, reassignTask, createSubTask, deleteTask } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import AdviceLogLinked from '@/components/AdviceLogLinked'
+import TaskTemplatesSuggestions from '@/components/TaskTemplatesSuggestions'
 
 const priorityColour = {
   high: 'bg-red-100 text-red-700',
@@ -992,6 +993,13 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
               <p className="text-xs text-slate-400 italic">No comments yet</p>
             )}
           </div>
+
+          {/* ── Suggested correspondence templates ──────────────── */}
+          <TaskTemplatesSuggestions
+            taskTemplateId={null}
+            journeyStepId={task.journey_step_id ?? null}
+            clientId={task.client?.id ?? null}
+          />
 
           {/* ── Advice log ──────────────────────────────────────── */}
           {task.client?.id && (

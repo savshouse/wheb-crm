@@ -12,6 +12,7 @@ import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import TaskModal from '@/app/(app)/tasks/TaskModal'
+import TaskTemplatesSuggestions from '@/components/TaskTemplatesSuggestions'
 
 type Profile = { id: string; full_name: string | null; email: string }
 
@@ -790,6 +791,16 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
               )}
 
               {/* Tasks */}
+              {isActive && (
+                <div className="px-5 pb-3">
+                  <TaskTemplatesSuggestions
+                    taskTemplateId={null}
+                    journeyStepId={step.id}
+                    clientId={journey.client?.id ?? null}
+                  />
+                </div>
+              )}
+
               {(step.tasks.length > 0 || isActive) && (
                 <div className="px-5 pb-4 border-t border-slate-100 pt-3 space-y-1">
                   {step.tasks.map(task => {
