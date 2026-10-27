@@ -45,8 +45,9 @@ export default function BookMeetingModal({
   const [bookForUserId, setBookForUserId] = useState(currentUserId)
 
   const otherProfiles = profiles.filter(p => p.id !== currentUserId)
-  const bookableProfiles = profiles.filter(p => msConnectedProfileIds.includes(p.id))
-  const bookForHasMs = msConnectedProfileIds.includes(bookForUserId)
+  // RLS hides other users' ms_refresh_token, so we can only confirm our own.
+  // For others, optimistically show the Teams toggle; the server will skip it if they have no token.
+  const bookForHasMs = bookForUserId === currentUserId ? hasMsConnected : true
 
   const selectedClientName = clients.find(c => c.id === clientId)?.name ?? ''
   const filteredClients = clients.filter(c =>
@@ -166,7 +167,7 @@ export default function BookMeetingModal({
           </div>
 
           {/* Book for */}
-          {bookableProfiles.length > 1 && (
+          {profiles.length > 1 && (
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
                 <UserCheck size={12} />
@@ -181,7 +182,7 @@ export default function BookMeetingModal({
                 }}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {bookableProfiles.map(p => (
+                {profiles.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.full_name ?? p.email.split('@')[0]}{p.id === currentUserId ? ' (me)' : ''}
                   </option>
@@ -323,7 +324,7 @@ export default function BookMeetingModal({
               <p className="text-xs text-amber-700">
                 {bookForUserId === currentUserId
                   ? <><a href="/profile" className="font-medium underline">Connect Microsoft</a> to add a Teams link automatically.</>
-                  : `${profiles.find(p => p.id === bookForUserId)?.full_name ?? 'This person'} hasn't connected Microsoft — no Teams link will be added.`
+                  : <>If {profiles.find(p => p.id === bookForUserId)?.full_name ?? 'this person'} hasn't connected Microsoft, no Teams link will be added.</>
                 }
               </p>
             </div>
