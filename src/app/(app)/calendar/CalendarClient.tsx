@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, parseISO, isPast } from 'date-fns'
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, AlertCircle, Video, Search, X, Building2, Clock } from 'lucide-react'
 import BookMeetingModal from './BookMeetingModal'
@@ -607,12 +607,16 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
                     const clampedHeight = Math.min(height, GRID_HEIGHT - top)
                     const pal = PALETTE[ev.colorIdx]
                     const multiPerson = selectedPeople.size > 1 && !ev.isOwn
+                    const isHighlighted = highlightId !== null && (
+                      ev.id === highlightId ||
+                      ev.startDT.slice(0, 16) === highlightId.slice(0, 16)
+                    )
                     return (
                       <div
                         key={ev.id}
                         onClick={e => e.stopPropagation()}
                         style={{ top: `${top}px`, height: `${clampedHeight}px`, left: '3px', right: '3px' }}
-                        className={`absolute ${pal.bg} text-white rounded-md px-1.5 py-0.5 overflow-hidden z-10 cursor-default ${pal.hover} transition-colors ${!ev.isOwn ? 'opacity-80' : ''}`}
+                        className={`absolute ${pal.bg} text-white rounded-md px-1.5 py-0.5 overflow-hidden z-10 cursor-default ${pal.hover} transition-colors ${!ev.isOwn ? 'opacity-80' : ''} ${isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-1 z-20' : ''}`}
                         title={`${ev.subject}${multiPerson ? ` (${profiles.find(p => p.id === ev.personId)?.full_name ?? ''})` : ''}`}
                       >
                         <div className="flex items-center gap-1 min-w-0">
