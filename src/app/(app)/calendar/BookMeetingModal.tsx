@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Calendar, Users, Building2, Video, AlertCircle } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { X, Calendar, Users, Building2, Video, AlertCircle, Search } from 'lucide-react'
 
 type Profile = { id: string; full_name: string | null; email: string }
 type Client = { id: string; name: string }
@@ -33,12 +33,31 @@ export default function BookMeetingModal({
   const [endTime, setEndTime] = useState(() => addHour(defaultStart ?? '09:00'))
   const [selectedAttendees, setSelectedAttendees] = useState<string[]>([])
   const [clientId, setClientId] = useState('')
+  const [clientSearch, setClientSearch] = useState('')
+  const [clientDropOpen, setClientDropOpen] = useState(false)
+  const clientRef = useRef<HTMLDivElement>(null)
   const [notes, setNotes] = useState('')
   const [withTeams, setWithTeams] = useState(hasMsConnected)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const otherProfiles = profiles.filter(p => p.id !== currentUserId)
+
+  const selectedClientName = clients.find(c => c.id === clientId)?.name ?? ''
+  const filteredClients = clients.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase())
+  )
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (clientRef.current && !clientRef.current.contains(e.target as Node)) {
+        setClientDropOpen(false)
+        if (!clientId) setClientSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [clientId])
 
   function toggleAttendee(id: string) {
     setSelectedAttendees(prev =>
@@ -171,22 +190,66 @@ export default function BookMeetingModal({
             </div>
           )}
 
-          {/* Client */}
+          {/* Client combobox */}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
               <Building2 size={12} />
               Link to client <span className="text-slate-400 font-normal">(optional)</span>
             </label>
-            <select
-              value={clientId}
-              onChange={e => setClientId(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">— Internal meeting / no client —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <div ref={clientRef} className="relative">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={clientId ? selectedClientName : clientSearch}
+                  onChange={e => {
+                    setClientSearch(e.target.value)
+                    setClientId('')
+                    setClientDropOpen(true)
+                  }}
+                  onFocus={() => setClientDropOpen(true)}
+                  placeholder="Search clients…"
+                  className="w-full border border-slate-300 rounded-lg pl-8 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {(clientId || clientSearch) && (
+                  <button
+                    type="button"
+                    onClick={() => { setClientId(''); setClientSearch(''); setClientDropOpen(true) }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {clientDropOpen && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                  {/* No client option */}
+                  <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => { setClientId(''); setClientSearch(''); setClientDropOpen(false) }}
+                    className={`w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 ${!clientId ? 'bg-slate-50' : ''}`}
+                  >
+                    — No client / internal meeting —
+                  </button>
+                  {filteredClients.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-slate-400">No clients match "{clientSearch}"</div>
+                  )}
+                  {filteredClients.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setClientId(c.id); setClientSearch(''); setClientDropOpen(false) }}
+                      className={`w-full text-left px-3 py-2 text-sm text-slate-800 hover:bg-blue-50 hover:text-blue-700 ${clientId === c.id ? 'bg-blue-50 text-blue-700 font-medium' : ''}`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Notes */}
