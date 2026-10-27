@@ -128,8 +128,9 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
                 const isExpanded = expandedId === email.id
                 const isLoadingBody = bodyLoading === email.id
                 const body = bodyMap[email.id]
-                const isSent = email.from.emailAddress.address.toLowerCase() !== clientEmail?.toLowerCase()
-                const date = parseISO(email.receivedDateTime)
+                const fromAddress = email.from?.emailAddress?.address ?? ''
+                const isSent = fromAddress.toLowerCase() !== (clientEmail ?? '').toLowerCase()
+                const date = email.receivedDateTime ? parseISO(email.receivedDateTime) : new Date()
                 const dateLabel = format(date, 'd MMM yyyy')
                 const timeLabel = format(date, 'HH:mm')
 
@@ -157,8 +158,8 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className="text-xs font-medium text-slate-600 truncate">
                                 {isSent
-                                  ? `To: ${email.toRecipients[0]?.emailAddress.name || email.toRecipients[0]?.emailAddress.address || '—'}`
-                                  : `From: ${email.from.emailAddress.name || email.from.emailAddress.address}`
+                                  ? `To: ${email.toRecipients?.[0]?.emailAddress?.name || email.toRecipients?.[0]?.emailAddress?.address || '—'}`
+                                  : `From: ${email.from?.emailAddress?.name || email.from?.emailAddress?.address || '—'}`
                                 }
                               </span>
                               {isSent && (
