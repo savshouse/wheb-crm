@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const token = await getValidAccessToken(user.id, supabase)
+    const token = await getValidAccessToken(user.id)
+    if (!token) return NextResponse.json({ events: [], noCalendarAccess: true })
     const { searchParams } = new URL(req.url)
     const start = searchParams.get('start') ?? new Date().toISOString()
     const end = searchParams.get('end') ?? new Date(Date.now() + 7 * 86400000).toISOString()
@@ -56,7 +57,8 @@ export async function POST(req: NextRequest) {
 
   if (profile?.ms_refresh_token) {
     try {
-      const token = await getValidAccessToken(user.id, supabase)
+      const token = await getValidAccessToken(user.id)
+      if (!token) throw new Error('No token')
       const result = await createCalendarEvent(token, {
         subject: subject.trim(),
         start,

@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const token = await getValidAccessToken(user.id, supabase)
+    const token = await getValidAccessToken(user.id)
+    if (!token) return NextResponse.json({ schedule: [] })
     const schedule = await getTeamSchedule(token, emails, start, end)
     return NextResponse.json({ schedule })
   } catch (err: any) {
