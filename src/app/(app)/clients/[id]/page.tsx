@@ -22,6 +22,7 @@ import RemindersBell from '@/components/RemindersBell'
 import EmailButton from './EmailButton'
 import ClientEmailHistory from './ClientEmailHistory'
 import OutlookEmails from './OutlookEmails'
+import ClientTabNav from './ClientTabNav'
 import type { Task, Meeting, Contact, BasicProfile } from '@/lib/types'
 
 const statusBadge = {
@@ -30,8 +31,10 @@ const statusBadge = {
   inactive: 'bg-slate-100 text-slate-500',
 }
 
-export default async function ClientDetailPage({ params }: PageProps<'/clients/[id]'>) {
+export default async function ClientDetailPage({ params, searchParams }: PageProps<'/clients/[id]'>) {
   const { id } = await params
+  const { tab } = await searchParams
+  const activeTab = tab === 'emails' ? 'emails' : 'overview'
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -294,9 +297,21 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
         </div>
       </div>
 
+      {/* Tab navigation */}
+      <ClientTabNav clientId={id} />
+
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Timeline */}
+        {/* Emails tab */}
+        {activeTab === 'emails' && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <ClientEmailHistory clientId={id} />
+            <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
+          </div>
+        )}
+
+        {/* Overview tab */}
+        {activeTab === 'overview' && (
         <div className="flex-1 overflow-y-auto p-6">
 
           {isIndividual ? (
@@ -358,11 +373,6 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                 </div>
               )}
 
-              {/* Email history (CRM-sent) */}
-              <ClientEmailHistory clientId={id} />
-
-              {/* Outlook email history */}
-              <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
             </>
           ) : (
             <>
@@ -386,8 +396,6 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
                 tasks={(tasks ?? []).map((t: any) => ({ id: t.id, title: t.title }))}
               />
 
-              {/* Outlook email history */}
-              <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
             </>
           )}
 
@@ -511,16 +519,19 @@ export default async function ClientDetailPage({ params }: PageProps<'/clients/[
             </>
           )}
         </div>
+        )} {/* end overview tab */}
 
-        {/* Task panel */}
-        <TaskPanel
-          clientId={id}
-          openTasks={openTasksWithSubs as any[]}
-          profiles={(profiles ?? []) as BasicProfile[]}
-          currentUserId={user.id}
-          templates={(templates ?? []) as any[]}
-          historyByTask={historyByTask}
-        />
+        {/* Task panel — visible on overview only */}
+        {activeTab === 'overview' && (
+          <TaskPanel
+            clientId={id}
+            openTasks={openTasksWithSubs as any[]}
+            profiles={(profiles ?? []) as BasicProfile[]}
+            currentUserId={user.id}
+            templates={(templates ?? []) as any[]}
+            historyByTask={historyByTask}
+          />
+        )}
       </div>
     </div>
   )
