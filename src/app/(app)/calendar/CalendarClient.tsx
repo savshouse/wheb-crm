@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns'
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, AlertCircle, Video, Search, X } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, parseISO, isPast } from 'date-fns'
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, AlertCircle, Video, Search, X, Building2, Clock } from 'lucide-react'
 import BookMeetingModal from './BookMeetingModal'
 
 const START_HOUR = 7
@@ -42,6 +42,17 @@ type ScheduleEntry = {
   scheduleId: string
   availabilityView: string
   scheduleItems?: ScheduleItem[]
+}
+
+type SearchResult = {
+  id: string
+  title: string
+  meeting_date: string
+  start_time: string | null
+  end_time: string | null
+  calendar_event_id: string | null
+  teams_meeting_url: string | null
+  client: { id: string; name: string } | null
 }
 
 // Unified event type used for rendering on the grid
@@ -124,6 +135,13 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
   const [showBook, setShowBook] = useState(false)
   const [bookSlot, setBookSlot] = useState<{ date: string; time?: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [scrollToHour, setScrollToHour] = useState<number | null>(null)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
+  const gridScrollRef = useRef<HTMLDivElement>(null)
   const [selectedPeople, setSelectedPeople] = useState<Set<string>>(
     () => new Set([currentUserId])
   )
@@ -137,6 +155,59 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     () => profiles.filter(p => p.id !== currentUserId && p.email).map(p => p.email),
     [profiles, currentUserId]
   )
+
+  // Debounced search across all CRM meetings
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([])
+      setSearchOpen(false)
+      return
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/calendar/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        const data = await res.json()
+        setSearchResults(data.meetings ?? [])
+        setSearchOpen(true)
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [])
+
+  // Scroll the time grid to a given hour after navigation
+  useEffect(() => {
+    if (scrollToHour === null || !gridScrollRef.current) return
+    const top = Math.max(0, (scrollToHour - START_HOUR) * HOUR_HEIGHT - 80)
+    gridScrollRef.current.scrollTop = top
+    setScrollToHour(null)
+  }, [scrollToHour, weekStart])
+
+  function handleSelectSearchResult(m: SearchResult) {
+    const date = parseISO(m.meeting_date)
+    setWeekStart(startOfWeek(date, { weekStartsOn: 1 }))
+    setHighlightId(m.calendar_event_id ?? `${m.meeting_date}T${m.start_time ?? ''}`)
+    setScrollToHour(m.start_time ? parseInt(m.start_time.split(':')[0], 10) : 9)
+    setSearchQuery('')
+    setSearchOpen(false)
+    // Auto-clear highlight ring after 4 s
+    setTimeout(() => setHighlightId(null), 4000)
+  }
 
   // Stable colour index per profile
   const colorIndexMap = useMemo(() => {
@@ -194,9 +265,10 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     return () => { cancelled = true }
   }, [weekStart, hasMsConnected, teamEmails, refreshKey])
 
-  // Merge own events + team schedule items, filtered by selected people + search query
+  // Merge own events + team schedule items, filtered by selected people only
+  // (search no longer filters the grid — it drives the results dropdown instead)
   const allDisplayEvents = useMemo<DisplayEvent[]>(() => {
-    const q = searchQuery.trim().toLowerCase()
+    const q = ''  // grid no longer filtered by search
     const evs: DisplayEvent[] = []
 
     // Current user's own events
@@ -243,7 +315,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     }
 
     return evs
-  }, [ownEvents, schedule, selectedPeople, searchQuery, currentUserId, profiles, colorIndexMap])
+  }, [ownEvents, schedule, selectedPeople, currentUserId, profiles, colorIndexMap])
 
   function displayEventsForDay(day: Date): DisplayEvent[] {
     return allDisplayEvents.filter(e => isSameDay(new Date(e.startDT), day))
@@ -317,20 +389,101 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
 
       {/* Filter bar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        {/* Search */}
-        <div className="relative">
+        {/* Search — jump-to-meeting */}
+        <div ref={searchContainerRef} className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search meetings…"
-            className="pl-8 pr-8 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+            onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+            placeholder="Find a meeting…"
+            className="pl-8 pr-8 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <button
+              onClick={() => { setSearchQuery(''); setSearchResults([]); setSearchOpen(false) }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
               <X size={13} />
             </button>
+          )}
+          {searchLoading && (
+            <RefreshCw size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+          )}
+
+          {/* Search results dropdown */}
+          {searchOpen && searchResults.length > 0 && (
+            <div className="absolute top-full mt-1.5 left-0 z-50 bg-white rounded-xl border border-slate-200 shadow-2xl w-96 max-h-80 overflow-y-auto">
+              <div className="px-3 py-2 border-b border-slate-100">
+                <span className="text-xs text-slate-400">{searchResults.length} meeting{searchResults.length !== 1 ? 's' : ''} found</span>
+              </div>
+              {(() => {
+                const today = new Date().toISOString().split('T')[0]
+                let shownPastHeader = false
+                let shownUpcomingHeader = false
+                return searchResults.map(m => {
+                  const isUpcoming = m.meeting_date >= today
+                  let header: React.ReactNode = null
+                  if (isUpcoming && !shownUpcomingHeader) {
+                    shownUpcomingHeader = true
+                    header = <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Upcoming</div>
+                  } else if (!isUpcoming && !shownPastHeader) {
+                    shownPastHeader = true
+                    header = <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Past</div>
+                  }
+                  const dateObj = parseISO(m.meeting_date)
+                  const dateLabel = format(dateObj, 'EEE d MMM yyyy')
+                  const timeLabel = m.start_time
+                    ? `${m.start_time}${m.end_time ? `–${m.end_time}` : ''}`
+                    : null
+                  return (
+                    <div key={m.id}>
+                      {header}
+                      <button
+                        type="button"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => handleSelectSearchResult(m)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors group"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate group-hover:text-blue-700">{m.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="flex items-center gap-1 text-xs text-slate-500">
+                                <Clock size={10} />
+                                {dateLabel}{timeLabel ? ` · ${timeLabel}` : ''}
+                              </span>
+                              {m.client && (
+                                <span className="flex items-center gap-1 text-xs text-slate-400">
+                                  <Building2 size={10} />
+                                  {m.client.name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {isUpcoming && (
+                            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+                              Upcoming
+                            </span>
+                          )}
+                          {m.teams_meeting_url && (
+                            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              Teams
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          )}
+          {searchOpen && searchQuery.trim().length >= 2 && !searchLoading && searchResults.length === 0 && (
+            <div className="absolute top-full mt-1.5 left-0 z-50 bg-white rounded-xl border border-slate-200 shadow-xl w-72 px-4 py-3">
+              <p className="text-sm text-slate-500">No meetings found for "{searchQuery}"</p>
+            </div>
           )}
         </div>
 
@@ -347,9 +500,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
                 key={p.id}
                 onClick={() => togglePerson(p.id)}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  active
-                    ? pal.chip
-                    : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                  active ? pal.chip : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
                 }`}
               >
                 <div className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-white/70' : pal.dot}`} />
@@ -380,12 +531,6 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
             </>
           )}
         </div>
-
-        {searchQuery && (
-          <span className="text-xs text-slate-400 ml-1">
-            {allDisplayEvents.length} result{allDisplayEvents.length !== 1 ? 's' : ''}
-          </span>
-        )}
       </div>
 
       {/* Banners */}
@@ -426,7 +571,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         </div>
 
         {/* Scrollable time grid */}
-        <div className="overflow-y-auto flex-1">
+        <div ref={gridScrollRef} className="overflow-y-auto flex-1">
           <div className="flex" style={{ height: `${GRID_HEIGHT}px` }}>
             {/* Hour labels */}
             <div className="w-14 shrink-0 relative select-none">
