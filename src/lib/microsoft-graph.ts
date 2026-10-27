@@ -424,7 +424,9 @@ export async function searchClientEmails(
     : []
 
   const allHits = [...firstHits, ...extraHits.flat()]
-  return allHits.map((h: any) => h.resource).filter(Boolean)
+  return allHits
+    .map((h: any) => h.resource ? { ...h.resource, id: h.resource.id ?? h.hitId } : null)
+    .filter(Boolean)
 }
 
 export async function getMessageBody(
