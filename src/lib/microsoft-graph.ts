@@ -433,13 +433,10 @@ export async function getConversationMessages(
   token: string,
   conversationId: string
 ): Promise<EmailMessage[]> {
-  const params = new URLSearchParams({
-    '$filter': `conversationId eq '${conversationId}'`,
-    '$select': 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink,hasAttachments,conversationId',
-    '$orderby': 'receivedDateTime asc',
-    '$top': '50',
-  })
-  const result = await graph(token, 'GET', `/me/messages?${params}`)
+  // $orderby is not supported alongside $filter on /me/messages — sort in application code
+  const filter = encodeURIComponent(`conversationId eq '${conversationId}'`)
+  const select = 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink,hasAttachments'
+  const result = await graph(token, 'GET', `/me/messages?$filter=${filter}&$select=${select}&$top=50`)
   return (result?.value ?? []).map((m: any) => ({ ...m, id: m.id ?? m.internetMessageId }))
 }
 
