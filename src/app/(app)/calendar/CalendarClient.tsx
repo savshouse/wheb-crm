@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns'
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, AlertCircle, Video } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, AlertCircle, Video, Search, X } from 'lucide-react'
 import BookMeetingModal from './BookMeetingModal'
 
 const START_HOUR = 7
@@ -11,7 +11,19 @@ const HOURS = END_HOUR - START_HOUR
 const HOUR_HEIGHT = 56
 const GRID_HEIGHT = HOURS * HOUR_HEIGHT
 
-type CalendarEvent = {
+// Per-person colour palette (index 0 = current user = blue)
+const PALETTE = [
+  { bg: 'bg-blue-500',    hover: 'hover:bg-blue-600',    dot: 'bg-blue-500',    chip: 'bg-blue-600 text-white border-blue-600' },
+  { bg: 'bg-indigo-500',  hover: 'hover:bg-indigo-600',  dot: 'bg-indigo-500',  chip: 'bg-indigo-600 text-white border-indigo-600' },
+  { bg: 'bg-violet-500',  hover: 'hover:bg-violet-600',  dot: 'bg-violet-500',  chip: 'bg-violet-600 text-white border-violet-600' },
+  { bg: 'bg-fuchsia-500', hover: 'hover:bg-fuchsia-600', dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-600 text-white border-fuchsia-600' },
+  { bg: 'bg-rose-500',    hover: 'hover:bg-rose-600',    dot: 'bg-rose-500',    chip: 'bg-rose-600 text-white border-rose-600' },
+  { bg: 'bg-amber-500',   hover: 'hover:bg-amber-600',   dot: 'bg-amber-500',   chip: 'bg-amber-600 text-white border-amber-600' },
+  { bg: 'bg-teal-500',    hover: 'hover:bg-teal-600',    dot: 'bg-teal-500',    chip: 'bg-teal-600 text-white border-teal-600' },
+  { bg: 'bg-cyan-500',    hover: 'hover:bg-cyan-600',    dot: 'bg-cyan-500',    chip: 'bg-cyan-600 text-white border-cyan-600' },
+]
+
+type OwnCalendarEvent = {
   id: string
   subject: string
   start: { dateTime: string }
@@ -19,9 +31,30 @@ type CalendarEvent = {
   onlineMeeting?: { joinUrl: string }
 }
 
+type ScheduleItem = {
+  subject?: string
+  start: { dateTime: string; timeZone: string }
+  end: { dateTime: string; timeZone: string }
+  status: string
+}
+
 type ScheduleEntry = {
   scheduleId: string
   availabilityView: string
+  scheduleItems?: ScheduleItem[]
+}
+
+// Unified event type used for rendering on the grid
+type DisplayEvent = {
+  id: string
+  subject: string
+  startDT: string
+  endDT: string
+  joinUrl?: string
+  personId: string
+  personInitial: string
+  colorIdx: number
+  isOwn: boolean
 }
 
 type Profile = { id: string; full_name: string | null; email: string }
@@ -45,9 +78,6 @@ function eventHeightPx(startDT: string, endDT: string): number {
   return Math.max(22, (mins / 60) * HOUR_HEIGHT - 2)
 }
 
-// Summarise how busy a person is on a given day from their availabilityView.
-// availabilityView covers the whole week from Mon 00:00 in 30-min slots (48/day).
-// Business hours = slots 14-39 per day (7am–7:30pm), 26 slots total.
 function dayBusiness(view: string, dayIndex: number): 'free' | 'some' | 'busy' | 'very-busy' {
   if (!view || view.length < (dayIndex + 1) * 48) return 'free'
   const daySlots = view.slice(dayIndex * 48 + 14, dayIndex * 48 + 40)
@@ -57,13 +87,6 @@ function dayBusiness(view: string, dayIndex: number): 'free' | 'some' | 'busy' |
   if (busy >= 14) return 'very-busy'
   if (busy >= 6) return 'busy'
   return 'some'
-}
-
-const availLabel: Record<string, string> = {
-  free: 'Free',
-  some: 'Some',
-  busy: 'Busy',
-  'very-busy': 'Busy',
 }
 
 const availCls: Record<string, string> = {
@@ -80,17 +103,30 @@ function hourLabel(h: number) {
   return h < 12 ? `${h}am` : `${h - 12}pm`
 }
 
+function personInitial(p: Profile) {
+  return (p.full_name ?? p.email).charAt(0).toUpperCase()
+}
+
+function shortName(p: Profile) {
+  if (p.full_name) return p.full_name.split(' ')[0]
+  return p.email.split('@')[0]
+}
+
 export default function CalendarClient({ profiles, clients, currentUserId, hasMsConnected }: Props) {
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
   )
-  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [ownEvents, setOwnEvents] = useState<OwnCalendarEvent[]>([])
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [noAccess, setNoAccess] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showBook, setShowBook] = useState(false)
   const [bookSlot, setBookSlot] = useState<{ date: string; time?: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedPeople, setSelectedPeople] = useState<Set<string>>(
+    () => new Set([currentUserId])
+  )
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -102,6 +138,16 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     [profiles, currentUserId]
   )
 
+  // Stable colour index per profile
+  const colorIndexMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    map[currentUserId] = 0
+    profiles.filter(p => p.id !== currentUserId).forEach((p, i) => {
+      map[p.id] = (i % (PALETTE.length - 1)) + 1
+    })
+    return map
+  }, [profiles, currentUserId])
+
   useEffect(() => {
     if (!hasMsConnected) return
     let cancelled = false
@@ -112,7 +158,6 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         const weekEnd = addDays(weekStart, 7)
         const startISO = weekStart.toISOString()
         const endISO = weekEnd.toISOString()
-        // For schedule endpoint: local time strings (no Z) so Graph respects Europe/London tz
         const startLocal = format(weekStart, "yyyy-MM-dd'T'HH:mm:ss")
         const endLocal = format(weekEnd, "yyyy-MM-dd'T'HH:mm:ss")
 
@@ -129,14 +174,13 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
 
         const evData = await evRes.json()
         const scData = scRes ? await scRes.json() : { schedule: [] }
-
         if (cancelled) return
 
         if (evData.noCalendarAccess) {
           setNoAccess(true)
         } else {
           setNoAccess(false)
-          setEvents(evData.events ?? [])
+          setOwnEvents(evData.events ?? [])
         }
         setSchedule(scData.schedule ?? [])
       } catch (err) {
@@ -150,8 +194,59 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     return () => { cancelled = true }
   }, [weekStart, hasMsConnected, teamEmails, refreshKey])
 
-  function eventsForDay(day: Date): CalendarEvent[] {
-    return events.filter(e => isSameDay(new Date(e.start.dateTime), day))
+  // Merge own events + team schedule items, filtered by selected people + search query
+  const allDisplayEvents = useMemo<DisplayEvent[]>(() => {
+    const q = searchQuery.trim().toLowerCase()
+    const evs: DisplayEvent[] = []
+
+    // Current user's own events
+    if (selectedPeople.has(currentUserId)) {
+      const me = profiles.find(p => p.id === currentUserId)
+      for (const ev of ownEvents) {
+        if (q && !ev.subject.toLowerCase().includes(q)) continue
+        evs.push({
+          id: ev.id,
+          subject: ev.subject,
+          startDT: ev.start.dateTime,
+          endDT: ev.end.dateTime,
+          joinUrl: ev.onlineMeeting?.joinUrl,
+          personId: currentUserId,
+          personInitial: me ? personInitial(me) : 'M',
+          colorIdx: 0,
+          isOwn: true,
+        })
+      }
+    }
+
+    // Team members' schedule items
+    for (const entry of schedule) {
+      const profile = profiles.find(p => p.email?.toLowerCase() === entry.scheduleId?.toLowerCase())
+      if (!profile || !selectedPeople.has(profile.id)) continue
+      const colorIdx = colorIndexMap[profile.id] ?? 1
+
+      for (const item of (entry.scheduleItems ?? [])) {
+        if (!item.start?.dateTime || !item.end?.dateTime) continue
+        const subject = item.subject || 'Busy'
+        if (q && subject !== 'Busy' && !subject.toLowerCase().includes(q)) continue
+        if (q && subject === 'Busy') continue  // hide opaque busy blocks during search
+        evs.push({
+          id: `${entry.scheduleId}-${item.start.dateTime}`,
+          subject,
+          startDT: item.start.dateTime,
+          endDT: item.end.dateTime,
+          personId: profile.id,
+          personInitial: personInitial(profile),
+          colorIdx,
+          isOwn: false,
+        })
+      }
+    }
+
+    return evs
+  }, [ownEvents, schedule, selectedPeople, searchQuery, currentUserId, profiles, colorIndexMap])
+
+  function displayEventsForDay(day: Date): DisplayEvent[] {
+    return allDisplayEvents.filter(e => isSameDay(new Date(e.startDT), day))
   }
 
   function handleDayClick(day: Date, e: React.MouseEvent<HTMLDivElement>) {
@@ -162,14 +257,32 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
     const m = Math.round((totalMins % 60) / 15) * 15
     const safeH = Math.min(Math.max(h, START_HOUR), END_HOUR - 1)
     const safeM = m >= 60 ? 45 : m
-    const time = `${String(safeH).padStart(2, '0')}:${String(safeM).padStart(2, '0')}`
-    setBookSlot({ date: format(day, 'yyyy-MM-dd'), time })
+    setBookSlot({
+      date: format(day, 'yyyy-MM-dd'),
+      time: `${String(safeH).padStart(2, '0')}:${String(safeM).padStart(2, '0')}`,
+    })
   }
 
+  function togglePerson(id: string) {
+    setSelectedPeople(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const allSelected = selectedPeople.size === profiles.length
+  const onlyMe = selectedPeople.size === 1 && selectedPeople.has(currentUserId)
   const isToday = (day: Date) => isSameDay(day, new Date())
 
+  // Visible team availability strip = selected people who are NOT the current user
+  const visibleSchedule = schedule.filter(entry => {
+    const profile = profiles.find(p => p.email?.toLowerCase() === entry.scheduleId?.toLowerCase())
+    return profile && selectedPeople.has(profile.id)
+  })
+
   return (
-    <div className="flex flex-col h-full p-6 gap-4 min-h-0">
+    <div className="flex flex-col h-full p-6 gap-3 min-h-0">
       {/* Page header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -186,16 +299,10 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
           >
             Today
           </button>
-          <button
-            onClick={() => setWeekStart(w => subWeeks(w, 1))}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600"
-          >
+          <button onClick={() => setWeekStart(w => subWeeks(w, 1))} className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600">
             <ChevronLeft size={16} />
           </button>
-          <button
-            onClick={() => setWeekStart(w => addWeeks(w, 1))}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600"
-          >
+          <button onClick={() => setWeekStart(w => addWeeks(w, 1))} className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600">
             <ChevronRight size={16} />
           </button>
           <button
@@ -208,6 +315,79 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        {/* Search */}
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search meetings…"
+            className="pl-8 pr-8 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* People chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-slate-500 shrink-0">Show:</span>
+          {profiles.map(p => {
+            const isMe = p.id === currentUserId
+            const active = selectedPeople.has(p.id)
+            const colorIdx = colorIndexMap[p.id] ?? 0
+            const pal = PALETTE[colorIdx]
+            return (
+              <button
+                key={p.id}
+                onClick={() => togglePerson(p.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? pal.chip
+                    : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-white/70' : pal.dot}`} />
+                {isMe ? 'Me' : shortName(p)}
+              </button>
+            )
+          })}
+
+          {profiles.length > 1 && (
+            <>
+              <div className="w-px h-4 bg-slate-200 mx-0.5" />
+              {!allSelected && (
+                <button
+                  onClick={() => setSelectedPeople(new Set(profiles.map(p => p.id)))}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium border border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  Everyone
+                </button>
+              )}
+              {!onlyMe && (
+                <button
+                  onClick={() => setSelectedPeople(new Set([currentUserId]))}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium border border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  Just me
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {searchQuery && (
+          <span className="text-xs text-slate-400 ml-1">
+            {allDisplayEvents.length} result{allDisplayEvents.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
       {/* Banners */}
       {!hasMsConnected && (
         <div className="flex items-center gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl shrink-0">
@@ -215,9 +395,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
           <p className="text-sm text-amber-800 flex-1">
             <span className="font-medium">Connect Microsoft</span> on your profile to see your Outlook calendar here.
           </p>
-          <a href="/profile" className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 shrink-0">
-            Connect
-          </a>
+          <a href="/profile" className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 shrink-0">Connect</a>
         </div>
       )}
       {noAccess && hasMsConnected && (
@@ -226,9 +404,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
           <p className="text-sm text-amber-800 flex-1">
             <span className="font-medium">Calendar permissions needed.</span> Reconnect your Microsoft account to grant calendar access.
           </p>
-          <a href="/api/auth/microsoft" className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 shrink-0">
-            Reconnect
-          </a>
+          <a href="/api/auth/microsoft" className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 shrink-0">Reconnect</a>
         </div>
       )}
 
@@ -255,11 +431,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
             {/* Hour labels */}
             <div className="w-14 shrink-0 relative select-none">
               {HOURS_ARR.map(h => (
-                <div
-                  key={h}
-                  className="absolute right-2 text-[10px] text-slate-400 leading-none"
-                  style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT - 6}px` }}
-                >
+                <div key={h} className="absolute right-2 text-[10px] text-slate-400 leading-none" style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT - 6}px` }}>
                   {hourLabel(h)}
                 </div>
               ))}
@@ -267,53 +439,53 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
 
             {/* Day columns */}
             {days.map(day => {
-              const dayEvents = eventsForDay(day)
+              const dayEvents = displayEventsForDay(day)
               return (
                 <div
                   key={day.toISOString()}
-                  className="flex-1 relative border-l border-slate-100 cursor-pointer hover:bg-blue-50/30 transition-colors"
+                  className="flex-1 relative border-l border-slate-100 cursor-pointer hover:bg-blue-50/20 transition-colors"
                   onClick={e => { handleDayClick(day, e); setShowBook(true) }}
                 >
-                  {/* Hour grid lines */}
+                  {/* Hour lines */}
                   {HOURS_ARR.map(h => (
-                    <div
-                      key={h}
-                      className="absolute w-full border-t border-slate-100 pointer-events-none"
-                      style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px` }}
-                    />
+                    <div key={h} className="absolute w-full border-t border-slate-100 pointer-events-none" style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT}px` }} />
                   ))}
-                  {/* Half-hour dashed lines */}
                   {HOURS_ARR.map(h => (
-                    <div
-                      key={`h${h}`}
-                      className="absolute w-full border-t border-dashed border-slate-50 pointer-events-none"
-                      style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }}
-                    />
+                    <div key={`h${h}`} className="absolute w-full border-t border-dashed border-slate-50 pointer-events-none" style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }} />
                   ))}
 
                   {/* Events */}
                   {dayEvents.map(ev => {
-                    const top = eventTopPx(ev.start.dateTime)
-                    const height = eventHeightPx(ev.start.dateTime, ev.end.dateTime)
+                    const top = eventTopPx(ev.startDT)
+                    const height = eventHeightPx(ev.startDT, ev.endDT)
                     if (top < 0 || top >= GRID_HEIGHT) return null
                     const clampedHeight = Math.min(height, GRID_HEIGHT - top)
+                    const pal = PALETTE[ev.colorIdx]
+                    const multiPerson = selectedPeople.size > 1 && !ev.isOwn
                     return (
                       <div
                         key={ev.id}
                         onClick={e => e.stopPropagation()}
                         style={{ top: `${top}px`, height: `${clampedHeight}px`, left: '3px', right: '3px' }}
-                        className="absolute bg-blue-500 text-white rounded-md px-1.5 py-0.5 overflow-hidden z-10 cursor-default hover:bg-blue-600 transition-colors"
-                        title={ev.subject}
+                        className={`absolute ${pal.bg} text-white rounded-md px-1.5 py-0.5 overflow-hidden z-10 cursor-default ${pal.hover} transition-colors ${!ev.isOwn ? 'opacity-80' : ''}`}
+                        title={`${ev.subject}${multiPerson ? ` (${profiles.find(p => p.id === ev.personId)?.full_name ?? ''})` : ''}`}
                       >
-                        <div className="text-[10px] font-semibold leading-tight truncate">{ev.subject}</div>
-                        {height > 28 && (
+                        <div className="flex items-center gap-1 min-w-0">
+                          {!ev.isOwn && (
+                            <div className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[7px] font-bold shrink-0">
+                              {ev.personInitial}
+                            </div>
+                          )}
+                          <div className="text-[10px] font-semibold leading-tight truncate flex-1">{ev.subject}</div>
+                        </div>
+                        {clampedHeight > 30 && (
                           <div className="text-[9px] opacity-75">
-                            {format(new Date(ev.start.dateTime), 'HH:mm')}–{format(new Date(ev.end.dateTime), 'HH:mm')}
+                            {format(new Date(ev.startDT), 'HH:mm')}–{format(new Date(ev.endDT), 'HH:mm')}
                           </div>
                         )}
-                        {ev.onlineMeeting?.joinUrl && height > 42 && (
+                        {ev.joinUrl && clampedHeight > 44 && (
                           <a
-                            href={ev.onlineMeeting.joinUrl}
+                            href={ev.joinUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
@@ -333,27 +505,28 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         </div>
       </div>
 
-      {/* Team availability */}
-      {schedule.length > 0 && (
+      {/* Team availability strip */}
+      {visibleSchedule.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-4 shrink-0">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Team availability this week</h3>
           <div className="space-y-2">
-            {schedule.map(entry => {
+            {visibleSchedule.map(entry => {
               const profile = profiles.find(p => p.email?.toLowerCase() === entry.scheduleId?.toLowerCase())
               const name = profile?.full_name ?? entry.scheduleId?.split('@')[0] ?? '—'
+              const colorIdx = profile ? (colorIndexMap[profile.id] ?? 1) : 1
+              const dot = PALETTE[colorIdx].dot
               return (
                 <div key={entry.scheduleId} className="flex items-center gap-3">
-                  <div className="w-24 text-xs font-medium text-slate-700 truncate shrink-0">{name}</div>
+                  <div className="w-24 flex items-center gap-1.5 shrink-0">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                    <span className="text-xs font-medium text-slate-700 truncate">{name}</span>
+                  </div>
                   <div className="flex gap-1 flex-1">
                     {days.map((day, idx) => {
                       const avail = dayBusiness(entry.availabilityView, idx)
                       return (
-                        <div
-                          key={idx}
-                          className={`flex-1 py-1 text-center rounded text-[10px] font-medium ${availCls[avail]}`}
-                          title={format(day, 'EEE d')}
-                        >
-                          {availLabel[avail]}
+                        <div key={idx} className={`flex-1 py-1 text-center rounded text-[10px] font-medium ${availCls[avail]}`} title={format(day, 'EEE d')}>
+                          {avail === 'free' ? 'Free' : 'Busy'}
                         </div>
                       )
                     })}
@@ -375,11 +548,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
           defaultStart={bookSlot?.time}
           hasMsConnected={hasMsConnected}
           onClose={() => { setShowBook(false); setBookSlot(null) }}
-          onCreated={() => {
-            setShowBook(false)
-            setBookSlot(null)
-            setRefreshKey(k => k + 1)
-          }}
+          onCreated={() => { setShowBook(false); setBookSlot(null); setRefreshKey(k => k + 1) }}
         />
       )}
     </div>
