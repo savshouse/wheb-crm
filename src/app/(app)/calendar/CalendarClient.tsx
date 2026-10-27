@@ -29,10 +29,12 @@ type OwnCalendarEvent = {
   start: { dateTime: string }
   end: { dateTime: string }
   onlineMeeting?: { joinUrl: string }
+  location?: { displayName?: string }
 }
 
 type ScheduleItem = {
   subject?: string
+  location?: { displayName?: string }
   start: { dateTime: string; timeZone: string }
   end: { dateTime: string; timeZone: string }
   status: string
@@ -59,6 +61,7 @@ type SearchResult = {
 type DisplayEvent = {
   id: string
   subject: string
+  location?: string
   startDT: string
   endDT: string
   joinUrl?: string
@@ -321,6 +324,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         evs.push({
           id: ev.id,
           subject: ev.subject,
+          location: ev.location?.displayName || undefined,
           startDT: ev.start.dateTime,
           endDT: ev.end.dateTime,
           joinUrl: ev.onlineMeeting?.joinUrl,
@@ -346,6 +350,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         evs.push({
           id: `${entry.scheduleId}-${item.start.dateTime}`,
           subject,
+          location: item.location?.displayName || undefined,
           startDT: item.start.dateTime,
           endDT: item.end.dateTime,
           personId: profile.id,
@@ -659,7 +664,11 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
                         onClick={e => e.stopPropagation()}
                         style={{ top: `${top}px`, height: `${clampedHeight}px`, left: '3px', right: '3px' }}
                         className={`absolute ${pal.bg} text-white rounded-md px-1.5 py-0.5 overflow-hidden z-10 cursor-default ${pal.hover} transition-colors ${!ev.isOwn ? 'opacity-80' : ''} ${isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-1 z-20' : ''}`}
-                        title={`${ev.subject}${multiPerson ? ` (${profiles.find(p => p.id === ev.personId)?.full_name ?? ''})` : ''}`}
+                        title={[
+                          ev.subject,
+                          ev.location ? `📍 ${ev.location}` : null,
+                          multiPerson ? `(${profiles.find(p => p.id === ev.personId)?.full_name ?? ''})` : null,
+                        ].filter(Boolean).join('\n')}
                       >
                         <div className="flex items-center gap-1 min-w-0">
                           {!ev.isOwn && (
@@ -674,7 +683,13 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
                             {format(new Date(ev.startDT), 'HH:mm')}–{format(new Date(ev.endDT), 'HH:mm')}
                           </div>
                         )}
-                        {ev.joinUrl && clampedHeight > 44 && (
+                        {ev.location && clampedHeight > 44 && (
+                          <div className="flex items-center gap-0.5 text-[9px] opacity-75 mt-0.5 truncate">
+                            <Clock size={7} className="shrink-0" />
+                            {ev.location}
+                          </div>
+                        )}
+                        {ev.joinUrl && clampedHeight > 56 && (
                           <a
                             href={ev.joinUrl}
                             target="_blank"

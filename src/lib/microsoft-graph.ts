@@ -506,7 +506,7 @@ export async function getUserCalendarEvents(
   const params = new URLSearchParams({
     startDateTime: start,
     endDateTime: end,
-    '$select': 'id,subject,start,end,organizer,onlineMeeting,webLink',
+    '$select': 'id,subject,start,end,organizer,onlineMeeting,webLink,location',
     '$orderby': 'start/dateTime',
     '$top': '100',
   })
