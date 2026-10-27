@@ -97,6 +97,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   // TaskModal state
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
 
+  // Complete-step confirmation (when step has open tasks)
+  const [confirmCompleteStep, setConfirmCompleteStep] = useState<Step | null>(null)
+  const [completeStepTasks, setCompleteStepTasks]     = useState(true)
+
+  // Reopen-step task selection
+  const [confirmReopenStep, setConfirmReopenStep]   = useState<Step | null>(null)
+  const [reopenTaskIds, setReopenTaskIds]           = useState<Set<string>>(new Set())
+
   // Delete journey confirmation
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteTasks, setDeleteTasks]     = useState(true)
@@ -156,7 +164,35 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   }
 
   function handleCompleteStep(step: Step) {
+    const openTasks = step.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+    if (openTasks.length > 0) {
+      setConfirmCompleteStep(step)
+      setCompleteStepTasks(true)
+    } else {
+      startTransition(async () => {
+        const { error } = await journeyApi({ op: 'completeJourneyStep', stepId: step.id, journeyId: journey.id })
+        if (error) setError(error)
+        else router.refresh()
+      })
+    }
+  }
+
+  function handleConfirmedCompleteStep() {
+    if (!confirmCompleteStep) return
+    const step = confirmCompleteStep
+    setConfirmCompleteStep(null)
     startTransition(async () => {
+      if (completeStepTasks) {
+        const ids = step.tasks
+          .filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+          .map(t => t.id)
+        if (ids.length) {
+          await supabase
+            .from('tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString() })
+            .in('id', ids)
+        }
+      }
       const { error } = await journeyApi({ op: 'completeJourneyStep', stepId: step.id, journeyId: journey.id })
       if (error) setError(error)
       else router.refresh()
@@ -164,10 +200,41 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   }
 
   function handleReopenStep(step: Step) {
+    const doneTasks = step.tasks.filter(t => t.status === 'completed' || t.status === 'cancelled')
+    if (doneTasks.length > 0) {
+      setConfirmReopenStep(step)
+      setReopenTaskIds(new Set(doneTasks.map(t => t.id)))
+    } else {
+      startTransition(async () => {
+        const { error } = await journeyApi({ op: 'reopenJourneyStep', stepId: step.id, journeyId: journey.id })
+        if (error) setError(error)
+        else router.refresh()
+      })
+    }
+  }
+
+  function handleConfirmedReopenStep() {
+    if (!confirmReopenStep) return
+    const step = confirmReopenStep
+    setConfirmReopenStep(null)
     startTransition(async () => {
+      if (reopenTaskIds.size > 0) {
+        await supabase
+          .from('tasks')
+          .update({ status: 'open', completed_at: null })
+          .in('id', [...reopenTaskIds])
+      }
       const { error } = await journeyApi({ op: 'reopenJourneyStep', stepId: step.id, journeyId: journey.id })
       if (error) setError(error)
       else router.refresh()
+    })
+  }
+
+  function toggleReopenTask(id: string) {
+    setReopenTaskIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
     })
   }
 
@@ -283,6 +350,107 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
           onDeleted={() => { setSelectedTask(null); router.refresh() }}
         />
       )}
+
+      {/* Complete step with open tasks */}
+      {confirmCompleteStep && (() => {
+        const openTasks = confirmCompleteStep.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmCompleteStep(null)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                  <AlertTriangle size={18} className="text-amber-600" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">Complete "{confirmCompleteStep.name}"?</h3>
+                <p className="text-sm text-slate-600 mt-1.5">
+                  There {openTasks.length === 1 ? 'is' : 'are'}{' '}
+                  <span className="font-semibold">{openTasks.length} open task{openTasks.length !== 1 ? 's' : ''}</span>{' '}
+                  on this step.
+                </p>
+                <label className="flex items-start gap-3 mt-4 p-3 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={completeStepTasks}
+                    onChange={e => setCompleteStepTasks(e.target.checked)}
+                    className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-blue-800">
+                    Mark all <span className="font-semibold">{openTasks.length} open task{openTasks.length !== 1 ? 's' : ''}</span> as complete
+                  </span>
+                </label>
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={handleConfirmedCompleteStep}
+                    disabled={isPending}
+                    className="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isPending ? 'Completing…' : 'Complete step'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmCompleteStep(null)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
+
+      {/* Reopen step — pick which tasks to reopen */}
+      {confirmReopenStep && (() => {
+        const doneTasks = confirmReopenStep.tasks.filter(t => t.status === 'completed' || t.status === 'cancelled')
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setConfirmReopenStep(null)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                  <RotateCcw size={18} className="text-blue-600" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">Reopen "{confirmReopenStep.name}"?</h3>
+                <p className="text-sm text-slate-600 mt-1.5 mb-3">
+                  Select which tasks to reopen on this step:
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {doneTasks.map(t => (
+                    <label key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reopenTaskIds.has(t.id)}
+                        onChange={() => toggleReopenTask(t.id)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700 flex-1">{t.title}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${t.status === 'cancelled' ? 'bg-slate-100 text-slate-500' : 'bg-green-100 text-green-700'}`}>
+                        {t.status}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={handleConfirmedReopenStep}
+                    disabled={isPending}
+                    className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isPending ? 'Reopening…' : 'Reopen step'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmReopenStep(null)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {/* Complete journey with open tasks modal */}
       {confirmComplete && (
