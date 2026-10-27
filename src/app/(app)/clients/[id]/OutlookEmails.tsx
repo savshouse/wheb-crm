@@ -21,6 +21,7 @@ type EmailMessage = {
 type EmailThread = {
   id: string
   conversation_id: string
+  item_id: string | null
   subject: string | null
   tagged_at: string
 }

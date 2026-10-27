@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS client_email_threads (
   subject        text,
   tagged_by      uuid REFERENCES profiles(id),
   tagged_at      timestamptz DEFAULT now(),
+  item_id        text,
   UNIQUE(client_id, conversation_id)
 );
 

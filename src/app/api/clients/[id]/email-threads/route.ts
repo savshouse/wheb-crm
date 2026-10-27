@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: threads, error } = await supabase
     .from('client_email_threads')
-    .select('id, conversation_id, subject, tagged_at, tagged_by')
+    .select('id, conversation_id, item_id, subject, tagged_at, tagged_by')
     .eq('client_id', id)
     .order('tagged_at', { ascending: false })
 

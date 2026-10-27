@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { client_id, conversation_id, subject } = await req.json()
+  const { client_id, conversation_id, item_id, subject } = await req.json()
   if (!client_id || !conversation_id) {
     return NextResponse.json({ error: 'client_id and conversation_id are required' }, { status: 400 })
   }
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const { error } = await supabase
     .from('client_email_threads')
     .upsert(
-      { client_id, conversation_id, subject: subject ?? null, tagged_by: user.id },
+      { client_id, conversation_id, item_id: item_id ?? null, subject: subject ?? null, tagged_by: user.id },
       { onConflict: 'client_id,conversation_id' }
     )
 

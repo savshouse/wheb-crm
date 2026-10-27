@@ -48,6 +48,7 @@ export default function OutlookAddinPage() {
 
   // Email thread tagging
   const [ofConvId, setOfConvId]     = useState<string | null>(null)
+  const [ofItemId, setOfItemId]     = useState<string | null>(null)
   const [ofSubject, setOfSubject]   = useState<string>('')
   const [tagging, setTagging]       = useState(false)
   const [tagMsg, setTagMsg]         = useState('')
@@ -68,6 +69,18 @@ export default function OutlookAddinPage() {
         if (sender) { setSearch(sender); setOfContext(sender) }
         if (item.conversationId) setOfConvId(item.conversationId)
         if (item.subject) setOfSubject(item.subject ?? '')
+        // Convert EWS item ID to Graph REST format so we can resolve the thread server-side
+        if (item.itemId) {
+          try {
+            const restId = Office.context.mailbox.convertToRestId(
+              item.itemId,
+              (Office as any).MailboxEnums?.RestVersion?.v2_0 ?? 'v2.0'
+            )
+            setOfItemId(restId)
+          } catch {
+            setOfItemId(item.itemId)
+          }
+        }
       } catch {}
     }
     const t = setTimeout(tryOffice, 1000)
@@ -163,7 +176,7 @@ export default function OutlookAddinPage() {
     const res = await fetch('/api/addin/tag-thread', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: clientId, conversation_id: ofConvId, subject: ofSubject }),
+      body: JSON.stringify({ client_id: clientId, conversation_id: ofConvId, item_id: ofItemId, subject: ofSubject }),
     })
     if (res.ok) {
       setTagMsg('Thread tagged ✓')
