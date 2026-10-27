@@ -393,19 +393,29 @@ export type EmailMessage = {
   bodyPreview: string
   webLink: string
   hasAttachments: boolean
+  isRead?: boolean
+}
+
+export type EmailAttachment = {
+  id: string
+  name: string
+  size: number
+  contentType: string
 }
 
 export async function searchClientEmails(
   token: string,
   clientEmail: string,
-  maxResults = 100
+  { maxResults = 100, keyword }: { maxResults?: number; keyword?: string } = {}
 ): Promise<EmailMessage[]> {
   const PAGE_SIZE = 25 // Search API hard cap per page
-  const query = `from:${clientEmail} OR to:${clientEmail}`
+  const fields = ['id', 'internetMessageId', 'subject', 'from', 'toRecipients', 'receivedDateTime', 'bodyPreview', 'webLink', 'hasAttachments', 'isRead', 'isDraft']
+  const baseQuery = `(from:${clientEmail} OR to:${clientEmail})`
+  const queryString = keyword ? `${baseQuery} AND "${keyword.replace(/"/g, '\\"')}"` : baseQuery
 
   // Fetch first page and read the total count
   const first = await graph(token, 'POST', '/search/query', {
-    requests: [{ entityTypes: ['message'], query: { queryString: query }, from: 0, size: PAGE_SIZE }],
+    requests: [{ entityTypes: ['message'], query: { queryString }, fields, from: 0, size: PAGE_SIZE }],
   })
   const container = first?.value?.[0]?.hitsContainers?.[0]
   const firstHits: any[] = container?.hits ?? []
@@ -417,7 +427,7 @@ export async function searchClientEmails(
     ? await Promise.all(
         Array.from({ length: remainingPages }, (_, i) =>
           graph(token, 'POST', '/search/query', {
-            requests: [{ entityTypes: ['message'], query: { queryString: query }, from: (i + 1) * PAGE_SIZE, size: PAGE_SIZE }],
+            requests: [{ entityTypes: ['message'], query: { queryString }, fields, from: (i + 1) * PAGE_SIZE, size: PAGE_SIZE }],
           }).then(r => r?.value?.[0]?.hitsContainers?.[0]?.hits ?? [])
         )
       )
@@ -427,6 +437,7 @@ export async function searchClientEmails(
   return allHits
     .map((h: any) => h.resource ? { ...h.resource, id: h.resource.id ?? h.hitId } : null)
     .filter(Boolean)
+    .filter((m: any) => m.isDraft !== true) // exclude drafts
 }
 
 export async function getConversationMessages(
@@ -434,10 +445,30 @@ export async function getConversationMessages(
   conversationId: string
 ): Promise<EmailMessage[]> {
   // $orderby is not supported alongside $filter on /me/messages — sort in application code
-  const filter = encodeURIComponent(`conversationId eq '${conversationId}'`)
-  const select = 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink,hasAttachments'
+  const filter = encodeURIComponent(`conversationId eq '${conversationId}' AND isDraft eq false`)
+  const select = 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink,hasAttachments,isRead'
   const result = await graph(token, 'GET', `/me/messages?$filter=${filter}&$select=${select}&$top=50`)
   return (result?.value ?? []).map((m: any) => ({ ...m, id: m.id ?? m.internetMessageId }))
+}
+
+export async function getEmailAttachments(token: string, messageId: string): Promise<EmailAttachment[]> {
+  const result = await graph(token, 'GET',
+    `/me/messages/${encodeURIComponent(messageId)}/attachments?$select=id,name,size,contentType,isInline`)
+  const all: any[] = result?.value ?? []
+  return all
+    .filter((a: any) => a['@odata.type'] !== '#microsoft.graph.referenceAttachment' && !a.isInline)
+    .map((a: any) => ({ id: a.id as string, name: a.name as string, size: a.size as number, contentType: a.contentType as string }))
+}
+
+export async function getAttachmentContent(
+  token: string,
+  messageId: string,
+  attachmentId: string
+): Promise<{ name: string; contentType: string; contentBytes: string } | null> {
+  const result = await graph(token, 'GET',
+    `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}?$select=name,contentType,contentBytes`)
+  if (!result?.contentBytes) return null
+  return { name: result.name as string, contentType: result.contentType as string, contentBytes: result.contentBytes as string }
 }
 
 export async function getMessageBody(

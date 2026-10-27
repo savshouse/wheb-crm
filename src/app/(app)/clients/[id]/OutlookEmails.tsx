@@ -1,7 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Mail, ExternalLink, Paperclip, RefreshCw, AlertCircle, Reply, ChevronLeft, CornerUpRight, MessageSquare, ChevronDown } from 'lucide-react'
+import {
+  Mail, ExternalLink, Paperclip, RefreshCw, AlertCircle,
+  Reply, ChevronLeft, CornerUpRight, MessageSquare, ChevronDown,
+  Search, X,
+} from 'lucide-react'
 import { format, parseISO, isToday, isYesterday, isThisYear } from 'date-fns'
 
 type EmailMessage = {
@@ -14,8 +18,16 @@ type EmailMessage = {
   bodyPreview: string
   webLink: string
   hasAttachments: boolean
+  isRead?: boolean
   ownerId: string
   sentByName: string
+}
+
+type EmailAttachment = {
+  id: string
+  name: string
+  size: number
+  contentType: string
 }
 
 type EmailThread = {
@@ -46,6 +58,12 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
 const AVATAR_COLORS = [
   'bg-blue-500', 'bg-purple-500', 'bg-green-600', 'bg-orange-500',
   'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
@@ -64,6 +82,8 @@ function SingleEmailPane({
   iframeRef,
   onIframeLoad,
   isOwnMailbox,
+  attachments,
+  attachmentLoading,
 }: {
   email: EmailMessage
   body?: { contentType: string; content: string }
@@ -71,6 +91,8 @@ function SingleEmailPane({
   iframeRef: React.RefObject<HTMLIFrameElement | null>
   onIframeLoad: () => void
   isOwnMailbox: boolean
+  attachments?: EmailAttachment[]
+  attachmentLoading?: boolean
 }) {
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || '—'
   const senderAddr = email.from?.emailAddress?.address || ''
@@ -128,6 +150,38 @@ function SingleEmailPane({
           </a>
         </div>
       </div>
+
+      {/* Attachments bar */}
+      {email.hasAttachments && (
+        <div className="px-5 py-2.5 border-b border-slate-100 shrink-0 bg-slate-50">
+          {attachmentLoading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <RefreshCw size={11} className="animate-spin" />Loading attachments…
+            </div>
+          ) : attachments && attachments.length > 0 ? (
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs text-slate-400 shrink-0">
+                <Paperclip size={11} className="inline mr-1" />
+                {attachments.length} attachment{attachments.length !== 1 ? 's' : ''}:
+              </span>
+              {attachments.map(att => (
+                <a
+                  key={att.id}
+                  href={`/api/emails/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(att.id)}?userId=${encodeURIComponent(email.ownerId)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-700 transition-colors"
+                >
+                  <Paperclip size={10} className="text-slate-400 shrink-0" />
+                  <span className="max-w-[160px] truncate">{att.name}</span>
+                  <span className="text-slate-400 shrink-0">{formatFileSize(att.size)}</span>
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {isLoadingBody && (
           <div className="flex items-center gap-2 text-xs text-slate-400 py-6">
@@ -255,7 +309,6 @@ function ThreadPane({
           const isExpanded = expandedMsgId === msg.id
           const isLast = idx === messages.length - 1
           const senderName = msg.from?.emailAddress?.name || msg.from?.emailAddress?.address || '—'
-          const senderAddr = msg.from?.emailAddress?.address || ''
           const body = bodyMap[msg.id]
           const isLoadingThisBody = bodyLoading === msg.id
 
@@ -272,7 +325,9 @@ function ThreadPane({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-slate-800 truncate">{senderName}</span>
+                      <span className={`text-xs truncate ${msg.isRead === false ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`}>
+                        {senderName}
+                      </span>
                       <span className="text-xs text-slate-400 shrink-0">{formatListDate(msg.receivedDateTime)}</span>
                     </div>
                     {!isExpanded && (
@@ -288,7 +343,6 @@ function ThreadPane({
 
               {isExpanded && (
                 <div className="px-5 pb-4">
-                  {/* Sender detail */}
                   <div className="flex items-baseline justify-between gap-2 mb-3 pl-10">
                     <div>
                       <p className="text-xs text-slate-500">
@@ -313,7 +367,6 @@ function ThreadPane({
                     )}
                   </div>
 
-                  {/* Body */}
                   <div className="pl-10">
                     {isLoadingThisBody && (
                       <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
@@ -358,6 +411,8 @@ type Selection =
   | { type: 'email'; id: string }
   | { type: 'thread'; id: string }
 
+const PAGE_SIZE = 25
+
 export default function OutlookEmails({ clientId, hasMsConnected, currentUserId }: Props) {
   const [emails, setEmails] = useState<EmailMessage[]>([])
   const [clientEmail, setClientEmail] = useState<string | null>(null)
@@ -365,6 +420,7 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
   const [noEmail, setNoEmail] = useState(false)
   const [noMs, setNoMs] = useState(!hasMsConnected)
   const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const [threads, setThreads] = useState<EmailThread[]>([])
   const [threadMessages, setThreadMessages] = useState<Record<string, EmailMessage[]>>({})
@@ -376,9 +432,20 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
   const [mobileShowReading, setMobileShowReading] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
+  const [attachmentMap, setAttachmentMap] = useState<Record<string, EmailAttachment[]>>({})
+  const [attachmentLoading, setAttachmentLoading] = useState<string | null>(null)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
   useEffect(() => {
     if (!hasMsConnected) return
     setLoading(true)
+    setEmails([])
+    setThreads([])
+    setSelection(null)
+    setBodyMap({})
+    setAttachmentMap({})
     Promise.all([
       fetch(`/api/clients/${clientId}/emails`).then(r => r.json()),
       fetch(`/api/clients/${clientId}/email-threads`).then(r => r.json()),
@@ -392,21 +459,40 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
       setThreads(threadData.threads ?? [])
     }).catch(() => setError('Could not load emails'))
       .finally(() => setLoading(false))
-  }, [clientId, hasMsConnected])
+  }, [clientId, hasMsConnected, refreshKey])
+
+  function handleRefresh() {
+    setSearchQuery('')
+    setVisibleCount(PAGE_SIZE)
+    setError(null)
+    setRefreshKey(k => k + 1)
+  }
 
   async function selectEmail(id: string) {
     setSelection({ type: 'email', id })
     setMobileShowReading(true)
-    if (bodyMap[id]) return
-    setBodyLoading(id)
     const email = emails.find(e => e.id === id)
-    try {
-      const qs = email?.ownerId ? `?userId=${encodeURIComponent(email.ownerId)}` : ''
-      const res = await fetch(`/api/emails/${encodeURIComponent(id)}/body${qs}`)
-      const data = await res.json()
-      if (data.body) setBodyMap(prev => ({ ...prev, [id]: data.body }))
-    } catch {}
-    finally { setBodyLoading(null) }
+    if (!bodyMap[id]) {
+      setBodyLoading(id)
+      try {
+        const qs = email?.ownerId ? `?userId=${encodeURIComponent(email.ownerId)}` : ''
+        const res = await fetch(`/api/emails/${encodeURIComponent(id)}/body${qs}`)
+        const data = await res.json()
+        if (data.body) setBodyMap(prev => ({ ...prev, [id]: data.body }))
+      } catch {}
+      finally { setBodyLoading(null) }
+    }
+    // Fetch attachments if needed
+    if (email?.hasAttachments && !attachmentMap[id]) {
+      setAttachmentLoading(id)
+      try {
+        const qs = email?.ownerId ? `?userId=${encodeURIComponent(email.ownerId)}` : ''
+        const res = await fetch(`/api/emails/${encodeURIComponent(id)}/attachments${qs}`)
+        const data = await res.json()
+        setAttachmentMap(prev => ({ ...prev, [id]: data.attachments ?? [] }))
+      } catch {}
+      finally { setAttachmentLoading(null) }
+    }
   }
 
   async function selectThread(thread: EmailThread) {
@@ -447,8 +533,24 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
   const selectedEmail = selection?.type === 'email' ? emails.find(e => e.id === selection.id) ?? null : null
   const selectedThread = selection?.type === 'thread' ? threads.find(t => t.id === selection.id) ?? null : null
   const isLoadingBody = !!(selection?.type === 'email' && bodyLoading === selection.id)
+  const isLoadingAttachments = !!(selection?.type === 'email' && attachmentLoading === selection.id)
 
   const senderName = (e: EmailMessage) => e.from?.emailAddress?.name || e.from?.emailAddress?.address || '—'
+
+  // Client-side filtering
+  const filteredEmails = searchQuery.trim()
+    ? emails.filter(e => {
+        const q = searchQuery.toLowerCase()
+        return (
+          senderName(e).toLowerCase().includes(q) ||
+          (e.subject || '').toLowerCase().includes(q) ||
+          (e.bodyPreview || '').toLowerCase().includes(q)
+        )
+      })
+    : emails
+
+  const visibleEmails = filteredEmails.slice(0, visibleCount)
+  const hasMore = filteredEmails.length > visibleCount
 
   const totalCount = threads.length + emails.length
 
@@ -460,6 +562,15 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
         {!loading && totalCount > 0 && (
           <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{totalCount}</span>
         )}
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={loading}
+          title="Refresh emails"
+          className="ml-auto p-1 text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors rounded"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+        </button>
       </div>
 
       {loading && (
@@ -482,87 +593,146 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
         <div className="flex border border-slate-200 rounded-xl overflow-hidden bg-white" style={{ height: '680px' }}>
 
           {/* ── Left pane: list ── */}
-          <div className={`w-72 shrink-0 border-r border-slate-200 overflow-y-auto flex flex-col ${mobileShowReading ? 'hidden sm:flex' : 'flex'}`}>
+          <div className={`w-72 shrink-0 border-r border-slate-200 flex flex-col ${mobileShowReading ? 'hidden sm:flex' : 'flex'}`}>
 
-            {/* Tagged threads section */}
-            {threads.length > 0 && (
-              <>
-                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    Tagged Threads ({threads.length})
-                  </span>
-                </div>
-                {threads.map(thread => {
-                  const isSelected = selection?.type === 'thread' && selection.id === thread.id
-                  const msgs = threadMessages[thread.conversation_id]
-                  const msgCount = msgs?.length ?? null
-                  const lastMsg = msgs?.[msgs.length - 1]
+            {/* Search input */}
+            <div className="px-3 py-2 border-b border-slate-100 shrink-0">
+              <div className="relative">
+                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search emails…"
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setVisibleCount(PAGE_SIZE) }}
+                  className="w-full pl-7 pr-6 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 placeholder-slate-400"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
 
-                  return (
-                    <button
-                      key={thread.id}
-                      type="button"
-                      onClick={() => selectThread(thread)}
-                      className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
-                        isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <MessageSquare size={11} className={isSelected ? 'text-blue-500' : 'text-slate-400'} />
-                        <span className={`text-xs font-semibold truncate flex-1 ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>
-                          {thread.subject || '(No subject)'}
-                        </span>
-                        <span className="text-xs text-slate-400 shrink-0">
-                          {lastMsg ? formatListDate(lastMsg.receivedDateTime) : formatListDate(thread.tagged_at)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 pl-5">
-                        {msgCount !== null ? `${msgCount} message${msgCount !== 1 ? 's' : ''}` : 'Tap to load'}
-                      </p>
-                    </button>
-                  )
-                })}
+            {/* Scrollable list */}
+            <div className="flex-1 overflow-y-auto">
 
-                {emails.length > 0 && (
+              {/* Tagged threads section */}
+              {!searchQuery && threads.length > 0 && (
+                <>
                   <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      All Emails ({emails.length})
+                      Tagged Threads ({threads.length})
                     </span>
                   </div>
-                )}
-              </>
-            )}
+                  {threads.map(thread => {
+                    const isSelected = selection?.type === 'thread' && selection.id === thread.id
+                    const msgs = threadMessages[thread.conversation_id]
+                    const msgCount = msgs?.length ?? null
+                    const lastMsg = msgs?.[msgs.length - 1]
 
-            {/* All emails list */}
-            {emails.map(email => {
-              const isSelected = selection?.type === 'email' && selection.id === email.id
-              const name = senderName(email)
+                    return (
+                      <button
+                        key={thread.id}
+                        type="button"
+                        onClick={() => selectThread(thread)}
+                        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
+                          isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <MessageSquare size={11} className={isSelected ? 'text-blue-500' : 'text-slate-400'} />
+                          <span className={`text-xs font-semibold truncate flex-1 ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>
+                            {thread.subject || '(No subject)'}
+                          </span>
+                          <span className="text-xs text-slate-400 shrink-0">
+                            {lastMsg ? formatListDate(lastMsg.receivedDateTime) : formatListDate(thread.tagged_at)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 pl-5">
+                          {msgCount !== null ? `${msgCount} message${msgCount !== 1 ? 's' : ''}` : 'Tap to load'}
+                        </p>
+                      </button>
+                    )
+                  })}
 
-              return (
+                  {emails.length > 0 && (
+                    <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        All Emails ({emails.length})
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Search hint */}
+              {searchQuery && (
+                <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-100">
+                  <span className="text-[10px] text-slate-400">
+                    {filteredEmails.length} result{filteredEmails.length !== 1 ? 's' : ''} for &ldquo;{searchQuery}&rdquo;
+                  </span>
+                </div>
+              )}
+
+              {/* All emails list */}
+              {visibleEmails.map(email => {
+                const isSelected = selection?.type === 'email' && selection.id === email.id
+                const name = senderName(email)
+                const isUnread = email.isRead === false
+
+                return (
+                  <button
+                    key={email.id}
+                    type="button"
+                    onClick={() => selectEmail(email.id)}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
+                      isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isUnread && (
+                          <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mb-0.5" />
+                        )}
+                        <span className={`text-sm truncate ${isUnread ? 'font-bold' : 'font-semibold'} ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>
+                          {name}
+                        </span>
+                      </div>
+                      <span className={`text-xs shrink-0 ${isSelected ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
+                        {formatListDate(email.receivedDateTime)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {email.hasAttachments && <Paperclip size={10} className="text-slate-400 shrink-0" />}
+                      <p className={`text-xs truncate ${isUnread ? 'font-semibold text-slate-800' : ''} ${isSelected ? 'text-blue-700 font-medium' : 'text-blue-600'}`}>
+                        {email.subject || '(No subject)'}
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">{email.bodyPreview}</p>
+                  </button>
+                )
+              })}
+
+              {/* Load more */}
+              {hasMore && (
                 <button
-                  key={email.id}
                   type="button"
-                  onClick={() => selectEmail(email.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
-                    isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
-                  }`}
+                  onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                  className="w-full py-3 text-xs text-blue-600 hover:text-blue-800 hover:bg-slate-50 transition-colors font-medium border-t border-slate-100"
                 >
-                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                    <span className={`text-sm truncate font-semibold ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>{name}</span>
-                    <span className={`text-xs shrink-0 ${isSelected ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                      {formatListDate(email.receivedDateTime)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {email.hasAttachments && <Paperclip size={10} className="text-slate-400 shrink-0" />}
-                    <p className={`text-xs truncate ${isSelected ? 'text-blue-700 font-medium' : 'text-blue-600'}`}>
-                      {email.subject || '(No subject)'}
-                    </p>
-                  </div>
-                  <p className="text-xs text-slate-400 truncate mt-0.5">{email.bodyPreview}</p>
+                  Load {Math.min(PAGE_SIZE, filteredEmails.length - visibleCount)} more
                 </button>
-              )
-            })}
+              )}
+
+              {filteredEmails.length === 0 && !loading && searchQuery && (
+                <p className="text-xs text-slate-400 px-4 py-6 text-center">No emails match your search.</p>
+              )}
+            </div>
           </div>
 
           {/* ── Right pane: reading ── */}
@@ -589,6 +759,8 @@ export default function OutlookEmails({ clientId, hasMsConnected, currentUserId 
                 iframeRef={iframeRef}
                 onIframeLoad={onIframeLoad}
                 isOwnMailbox={selectedEmail.ownerId === currentUserId}
+                attachments={attachmentMap[selection.id]}
+                attachmentLoading={isLoadingAttachments}
               />
             )}
 
