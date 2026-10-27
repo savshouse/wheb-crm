@@ -8,24 +8,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Resolve the client's email (own field, or primary contact)
-  const { data: client } = await supabase
-    .from('clients')
+  // Collect all email addresses for this client from client_emails table
+  const { data: storedEmails } = await supabase
+    .from('client_emails')
     .select('email')
-    .eq('id', id)
-    .single()
+    .eq('client_id', id)
 
-  let clientEmail = client?.email ?? null
-  if (!clientEmail) {
+  let emailAddresses: string[] = (storedEmails ?? []).map((r: any) => r.email).filter(Boolean)
+
+  // Fallback: primary contact email if no client_emails rows exist
+  if (!emailAddresses.length) {
     const { data: primary } = await supabase
       .from('contacts')
       .select('email')
       .eq('client_id', id)
       .eq('is_primary', true)
       .maybeSingle()
-    clientEmail = primary?.email ?? null
+    if (primary?.email) emailAddresses = [primary.email]
   }
-  if (!clientEmail) return NextResponse.json({ emails: [], noEmail: true })
+
+  if (!emailAddresses.length) return NextResponse.json({ emails: [], noEmail: true })
+
+  const clientEmail = emailAddresses[0] // used for display only
 
   // Get all team members who have Microsoft connected
   const { data: msProfiles } = await supabase
@@ -35,22 +39,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!msProfiles?.length) return NextResponse.json({ emails: [], noMsAccount: true })
 
-  // Search every connected mailbox in parallel
+  // Search every connected mailbox × every client email address in parallel
   const results = await Promise.allSettled(
-    msProfiles.map(async (profile) => {
-      try {
-        const token = await getValidAccessToken(profile.id)
-        if (!token) return []
-        const emails = await searchClientEmails(token, clientEmail!)
-        return emails.map(e => ({
-          ...e,
-          ownerId: profile.id,
-          sentByName: profile.full_name ?? profile.id,
-        }))
-      } catch {
-        return []
-      }
-    })
+    msProfiles.flatMap(profile =>
+      emailAddresses.map(async (addr) => {
+        try {
+          const token = await getValidAccessToken(profile.id)
+          if (!token) return []
+          const emails = await searchClientEmails(token, addr)
+          return emails.map(e => ({
+            ...e,
+            ownerId: profile.id,
+            sentByName: profile.full_name ?? profile.id,
+          }))
+        } catch {
+          return []
+        }
+      })
+    )
   )
 
   // Flatten and deduplicate by internetMessageId (same email appears in multiple mailboxes)
