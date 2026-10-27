@@ -6,7 +6,7 @@ import { format, parseISO, differenceInDays, isPast } from 'date-fns'
 import {
   User, Calendar, CheckCircle2, Circle, Clock,
   Plus, X, Check, AlertCircle, Ban, ExternalLink,
-  RotateCcw, Trash2, AlertTriangle,
+  RotateCcw, Trash2, AlertTriangle, RefreshCw, GitBranch,
 } from 'lucide-react'
 import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
@@ -32,7 +32,19 @@ type Step = {
   name: string
   status: 'pending' | 'in_progress' | 'complete'
   completed_at: string | null
+  template_node_id: string | null
+  attempt_count: number
+  branch_outcome: 'success' | 'failure' | null
   tasks: StepTask[]
+}
+
+type TemplateNode = {
+  id: string
+  name: string
+  next_on_success?: string | null
+  next_on_failure?: string | null
+  retry_delay_days?: number | null
+  retry_max?: number | null
 }
 
 type Journey = {
@@ -56,6 +68,7 @@ type Props = {
   profiles: Profile[]
   currentUserId: string
   userRole: string
+  templateSteps: TemplateNode[]
 }
 
 const priorityBadge: Record<string, string> = {
@@ -64,7 +77,11 @@ const priorityBadge: Record<string, string> = {
   high:   'bg-red-100 text-red-700',
 }
 
-export default function JourneyDetail({ journey, profiles, currentUserId, userRole }: Props) {
+export default function JourneyDetail({ journey, profiles, currentUserId, userRole, templateSteps }: Props) {
+  function nodeConfig(step: Step): TemplateNode | null {
+    if (!step.template_node_id) return null
+    return templateSteps.find(n => n.id === step.template_node_id) ?? null
+  }
   const router  = useRouter()
   const supabase = createClient()
 
@@ -118,6 +135,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   function handleReopenStep(step: Step) {
     startTransition(async () => {
       const { error } = await journeyApi({ op: 'reopenJourneyStep', stepId: step.id, journeyId: journey.id })
+      if (error) setError(error)
+      else router.refresh()
+    })
+  }
+
+  function handleFailStep(step: Step) {
+    startTransition(async () => {
+      const { error } = await journeyApi({ op: 'failJourneyStep', stepId: step.id, journeyId: journey.id })
       if (error) setError(error)
       else router.refresh()
     })
@@ -458,6 +483,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
           const isComplete = step.status === 'complete'
           const isAddingHere = addingToStep === step.id
 
+          const node = nodeConfig(step)
+          const retryMax = node?.retry_max ?? 0
+          const hasBranching = !!(node?.next_on_failure || node?.retry_max)
+          const retriesLeft = retryMax - (step.attempt_count ?? 0)
+          const failureNodeName = node?.next_on_failure
+            ? templateSteps.find(n => n.id === node.next_on_failure)?.name
+            : null
+
           return (
             <div
               key={step.id}
@@ -477,6 +510,21 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                   {step.tasks.length > 0 && (
                     <span className="ml-2 text-xs text-slate-400">
                       {doneTasks.length}/{step.tasks.length} tasks
+                    </span>
+                  )}
+                  {/* Retry badge */}
+                  {isActive && (step.attempt_count ?? 0) > 0 && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                      <RefreshCw size={9} />
+                      Attempt {(step.attempt_count ?? 0) + 1}
+                      {retryMax > 0 && ` of ${retryMax + 1}`}
+                    </span>
+                  )}
+                  {/* Branch outcome badge */}
+                  {isComplete && step.branch_outcome === 'failure' && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium">
+                      <GitBranch size={9} />
+                      Failed — followed failure path
                     </span>
                   )}
                 </div>
@@ -499,16 +547,44 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                     </button>
                   )}
                   {isActive && journey.status === 'active' && (
-                    <button
-                      onClick={() => handleCompleteStep(step)}
-                      disabled={isPending}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:opacity-50 transition-colors"
-                    >
-                      Complete step
-                    </button>
+                    <>
+                      {hasBranching && (
+                        <button
+                          onClick={() => handleFailStep(step)}
+                          disabled={isPending}
+                          title={retriesLeft > 0
+                            ? `Mark as failed (${retriesLeft} retry${retriesLeft !== 1 ? 's' : ''} remaining)`
+                            : failureNodeName
+                              ? `No retries left — will follow failure path to "${failureNodeName}"`
+                              : 'Mark as failed'}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-colors flex items-center gap-1"
+                        >
+                          <X size={11} />
+                          {retriesLeft > 0 ? `Retry (${retriesLeft} left)` : 'Mark as failed'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCompleteStep(step)}
+                        disabled={isPending}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:opacity-50 transition-colors flex items-center gap-1"
+                      >
+                        <Check size={11} />
+                        Complete step
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+              {/* Retry hint for branching steps */}
+              {isActive && hasBranching && retriesLeft > 0 && node?.retry_delay_days && (
+                <div className="px-5 pb-2 -mt-1">
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                    <RefreshCw size={9} />
+                    Retry in {node.retry_delay_days} day{node.retry_delay_days !== 1 ? 's' : ''} if this step fails
+                    {failureNodeName && ` · after ${retryMax} retries → "${failureNodeName}"`}
+                  </span>
+                </div>
+              )}
 
               {/* Tasks */}
               {(step.tasks.length > 0 || isActive) && (

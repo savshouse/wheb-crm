@@ -14,13 +14,14 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
     supabase
       .from('advice_journeys')
       .select(`
-        id, title, category, status, current_step_order, created_at, completed_at, notes,
+        id, title, category, status, current_step_order, created_at, completed_at, notes, template_id,
         client:clients!advice_journeys_client_id_fkey(id, name, type),
         assignee:profiles!advice_journeys_assigned_to_fkey(id, full_name, email),
         creator:profiles!advice_journeys_created_by_fkey(id, full_name, email),
         meeting:meetings!advice_journeys_meeting_id_fkey(id, title, meeting_date),
         steps:advice_journey_steps(
           id, step_order, name, status, completed_at,
+          template_node_id, attempt_count, branch_outcome,
           tasks(id, title, status, priority, due_date, assigned_to, assignee:profiles!tasks_assigned_to_fkey(id, full_name, email), sub_tasks:tasks!parent_task_id(id, title, status, priority, due_date, assigned_to))
         )
       `)
@@ -31,6 +32,17 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
   ])
 
   if (!journey) notFound()
+
+  // Fetch template steps for branch config (retry info, failure path names)
+  let templateSteps: any[] = []
+  if ((journey as any).template_id) {
+    const { data: template } = await supabase
+      .from('advice_journey_templates')
+      .select('steps')
+      .eq('id', (journey as any).template_id)
+      .single()
+    templateSteps = template?.steps ?? []
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -46,6 +58,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
           profiles={(profiles ?? []) as any[]}
           currentUserId={user.id}
           userRole={profile?.role ?? 'user'}
+          templateSteps={templateSteps}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import {
   createJourney,
   updateJourneyStatus,
   completeJourneyStep,
+  failJourneyStep,
   reopenJourneyStep,
   deleteJourney,
   addTaskToStep,
@@ -29,6 +30,10 @@ export async function POST(request: NextRequest) {
     }
     case 'completeJourneyStep': {
       const result = await completeJourneyStep(body.stepId, body.journeyId)
+      return NextResponse.json(result)
+    }
+    case 'failJourneyStep': {
+      const result = await failJourneyStep(body.stepId, body.journeyId)
       return NextResponse.json(result)
     }
     case 'reopenJourneyStep': {
