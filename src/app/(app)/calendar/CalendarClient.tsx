@@ -176,9 +176,13 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
         ])
 
         const crmMeetings: SearchResult[] = (await crmRes.json()).meetings ?? []
-        const outlookEvents: OwnCalendarEvent[] = outlookRes
-          ? ((await outlookRes.json()).events ?? [])
-          : []
+        let outlookEvents: OwnCalendarEvent[] = []
+        if (outlookRes) {
+          try {
+            const od = await outlookRes.json()
+            outlookEvents = od.events ?? []
+          } catch { /* Graph search unavailable — CRM results still shown */ }
+        }
 
         // Convert Graph events to SearchResult shape
         const outlookAsResults: SearchResult[] = outlookEvents.map(ev => ({

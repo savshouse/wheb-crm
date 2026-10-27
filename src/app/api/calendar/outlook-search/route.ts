@@ -18,9 +18,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ events })
   } catch (err: any) {
     const msg = String(err?.message ?? err)
+    console.error('[outlook-search] Graph error:', msg)
     if (msg.includes('401') || msg.includes('403') || msg.includes('AccessDenied')) {
       return NextResponse.json({ events: [], noAccess: true })
     }
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ events: [], error: msg }, { status: 500 })
   }
 }

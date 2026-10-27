@@ -387,10 +387,10 @@ export async function searchCalendarEvents(
   token: string,
   query: string
 ): Promise<CalendarEvent[]> {
+  // Note: $orderby cannot be combined with $search on Graph events — omit it
   const params = new URLSearchParams({
     '$search': `"${query}"`,
     '$select': 'id,subject,start,end,onlineMeeting',
-    '$orderby': 'start/dateTime desc',
     '$top': '50',
   })
   const result = await graph(token, 'GET', `/me/events?${params}`)
