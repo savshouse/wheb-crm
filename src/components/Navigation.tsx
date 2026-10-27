@@ -22,16 +22,18 @@ import {
   Route,
   Wrench,
   Mail,
+  Calendar,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
 const navItems = [
-  { href: '/',         label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/clients',  label: 'Companies', icon: Building2 },
-  { href: '/people',   label: 'People',    icon: Users },
-  { href: '/tasks',    label: 'Tasks',     icon: CheckSquare },
-  { href: '/journeys', label: 'Journeys',  icon: Route },
-  { href: '/emails',   label: 'Emails',    icon: Mail },
+  { href: '/',          label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/clients',   label: 'Companies', icon: Building2 },
+  { href: '/people',    label: 'People',    icon: Users },
+  { href: '/tasks',     label: 'Tasks',     icon: CheckSquare },
+  { href: '/calendar',  label: 'Calendar',  icon: Calendar },
+  { href: '/journeys',  label: 'Journeys',  icon: Route },
+  { href: '/emails',    label: 'Emails',    icon: Mail },
 ]
 
 const adminTemplateItems = [

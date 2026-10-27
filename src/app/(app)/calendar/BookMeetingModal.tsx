@@ -1,0 +1,254 @@
+'use client'
+
+import { useState } from 'react'
+import { X, Calendar, Users, Building2, Video, AlertCircle } from 'lucide-react'
+
+type Profile = { id: string; full_name: string | null; email: string }
+type Client = { id: string; name: string }
+
+type Props = {
+  profiles: Profile[]
+  clients: Client[]
+  currentUserId: string
+  defaultDate?: string
+  defaultStart?: string
+  hasMsConnected: boolean
+  onClose: () => void
+  onCreated: () => void
+}
+
+function addHour(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const end = new Date(2024, 0, 1, h + 1, m)
+  return `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`
+}
+
+export default function BookMeetingModal({
+  profiles, clients, currentUserId, defaultDate, defaultStart, hasMsConnected, onClose, onCreated
+}: Props) {
+  const today = new Date().toISOString().split('T')[0]
+  const [subject, setSubject] = useState('')
+  const [date, setDate] = useState(defaultDate ?? today)
+  const [startTime, setStartTime] = useState(defaultStart ?? '09:00')
+  const [endTime, setEndTime] = useState(() => addHour(defaultStart ?? '09:00'))
+  const [selectedAttendees, setSelectedAttendees] = useState<string[]>([])
+  const [clientId, setClientId] = useState('')
+  const [notes, setNotes] = useState('')
+  const [withTeams, setWithTeams] = useState(hasMsConnected)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const otherProfiles = profiles.filter(p => p.id !== currentUserId)
+
+  function toggleAttendee(id: string) {
+    setSelectedAttendees(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!subject.trim()) { setError('Meeting title is required'); return }
+    if (startTime >= endTime) { setError('End time must be after start time'); return }
+    setSaving(true)
+    setError(null)
+
+    try {
+      const attendeeEmails = selectedAttendees
+        .map(id => profiles.find(p => p.id === id)?.email)
+        .filter(Boolean) as string[]
+
+      const res = await fetch('/api/calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: subject.trim(),
+          start: `${date}T${startTime}:00`,
+          end: `${date}T${endTime}:00`,
+          attendeeEmails,
+          bodyText: notes || undefined,
+          withTeams: hasMsConnected && withTeams,
+          clientId: clientId || null,
+          notes: notes || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to book meeting')
+      onCreated()
+    } catch (err: any) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-2">
+            <Calendar size={18} className="text-blue-600" />
+            <h2 className="text-base font-semibold text-slate-900">Book a meeting</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
+            <X size={18} className="text-slate-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Subject */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Meeting title *</label>
+            <input
+              type="text"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              placeholder="e.g. Annual review with Acme Ltd"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              autoFocus
+            />
+          </div>
+
+          {/* Date + Time */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-1">
+              <label className="block text-xs font-medium text-slate-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Start</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => { setStartTime(e.target.value); setEndTime(addHour(e.target.value)) }}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">End</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Attendees */}
+          {otherProfiles.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                <Users size={12} />
+                Invite team members
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {otherProfiles.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggleAttendee(p.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      selectedAttendees.includes(p.id)
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                      selectedAttendees.includes(p.id) ? 'bg-blue-500' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {(p.full_name || p.email).charAt(0).toUpperCase()}
+                    </div>
+                    {p.full_name ?? p.email.split('@')[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Client */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+              <Building2 size={12} />
+              Link to client <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <select
+              value={clientId}
+              onChange={e => setClientId(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">— Internal meeting / no client —</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Notes <span className="text-slate-400 font-normal">(optional)</span></label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Agenda, preparation notes..."
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {/* Teams toggle */}
+          {hasMsConnected ? (
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={withTeams}
+                onChange={e => setWithTeams(e.target.checked)}
+              />
+              <div className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${withTeams ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${withTeams ? 'translate-x-4' : ''}`} />
+              </div>
+              <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                <Video size={14} className="text-blue-600" />
+                Add Teams meeting link
+              </div>
+            </label>
+          ) : (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <AlertCircle size={14} className="text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-700">
+                <a href="/profile" className="font-medium underline">Connect Microsoft</a> to add a Teams link automatically.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            >
+              {saving ? 'Booking…' : 'Book meeting'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

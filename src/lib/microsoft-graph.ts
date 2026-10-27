@@ -371,6 +371,84 @@ export async function disconnectMicrosoft(userId: string): Promise<void> {
   }).eq('id', userId)
 }
 
+// ─── Calendar ────────────────────────────────────────────────────────────────
+
+export type CalendarEvent = {
+  id: string
+  subject: string
+  start: { dateTime: string; timeZone: string }
+  end: { dateTime: string; timeZone: string }
+  organizer?: { emailAddress: { name: string; address: string } }
+  onlineMeeting?: { joinUrl: string }
+  webLink?: string
+}
+
+export async function getUserCalendarEvents(
+  token: string,
+  start: string,
+  end: string
+): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams({
+    startDateTime: start,
+    endDateTime: end,
+    '$select': 'id,subject,start,end,organizer,onlineMeeting,webLink',
+    '$orderby': 'start/dateTime',
+    '$top': '100',
+  })
+  const result = await graph(token, 'GET', `/me/calendar/calendarView?${params}`)
+  return result?.value ?? []
+}
+
+export async function getTeamSchedule(
+  token: string,
+  emails: string[],
+  start: string,
+  end: string
+): Promise<{ scheduleId: string; availabilityView: string }[]> {
+  if (!emails.length) return []
+  const result = await graph(token, 'POST', '/me/calendar/getSchedule', {
+    schedules: emails,
+    startTime: { dateTime: start, timeZone: 'Europe/London' },
+    endTime: { dateTime: end, timeZone: 'Europe/London' },
+    availabilityViewInterval: 30,
+  })
+  return result?.value ?? []
+}
+
+export type NewCalendarEvent = {
+  subject: string
+  start: string
+  end: string
+  attendeeEmails: string[]
+  bodyText?: string
+  withTeams: boolean
+}
+
+export async function createCalendarEvent(
+  token: string,
+  e: NewCalendarEvent
+): Promise<{ id: string; joinUrl: string | null }> {
+  const body: any = {
+    subject: e.subject,
+    start: { dateTime: e.start, timeZone: 'Europe/London' },
+    end: { dateTime: e.end, timeZone: 'Europe/London' },
+    attendees: e.attendeeEmails.map(email => ({
+      emailAddress: { address: email },
+      type: 'required',
+    })),
+    isOnlineMeeting: e.withTeams,
+    onlineMeetingProvider: e.withTeams ? 'teamsForBusiness' : 'unknown',
+  }
+  if (e.bodyText) {
+    body.body = { contentType: 'text', content: e.bodyText }
+  }
+  const result = await graph(token, 'POST', '/me/events', body)
+  return {
+    id: result.id as string,
+    joinUrl: result.onlineMeeting?.joinUrl ?? null,
+  }
+}
+
 // Syncs a single CRM task to the assigned user's Microsoft To Do immediately.
 // Called after any task create/update so changes appear in To Do without waiting for the cron.
 // Fire-and-forget: caller should .catch(console.error) rather than awaiting.
