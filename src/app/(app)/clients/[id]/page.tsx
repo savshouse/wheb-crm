@@ -306,7 +306,7 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
         {activeTab === 'emails' && (
           <div className="flex-1 overflow-y-auto p-6">
             <ClientEmailHistory clientId={id} />
-            <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} />
+            <OutlookEmails clientId={id} hasMsConnected={hasMsConnected} currentUserId={user.id} />
           </div>
         )}
 

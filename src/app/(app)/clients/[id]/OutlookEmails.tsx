@@ -29,6 +29,7 @@ type EmailThread = {
 type Props = {
   clientId: string
   hasMsConnected: boolean
+  currentUserId: string
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,12 +63,14 @@ function SingleEmailPane({
   isLoadingBody,
   iframeRef,
   onIframeLoad,
+  isOwnMailbox,
 }: {
   email: EmailMessage
   body?: { contentType: string; content: string }
   isLoadingBody: boolean
   iframeRef: React.RefObject<HTMLIFrameElement | null>
   onIframeLoad: () => void
+  isOwnMailbox: boolean
 }) {
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || '—'
   const senderAddr = email.from?.emailAddress?.address || ''
@@ -93,6 +96,9 @@ function SingleEmailPane({
                   ? email.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
                   : '—'}
               </p>
+              {!isOwnMailbox && (
+                <p className="text-xs text-amber-600 mt-0.5">via {email.sentByName}&apos;s mailbox</p>
+              )}
             </div>
           </div>
           <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">
@@ -100,14 +106,22 @@ function SingleEmailPane({
           </span>
         </div>
         <div className="flex items-center gap-2 mt-3">
-          <a href={email.webLink} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
-            <Reply size={12} />Reply
-          </a>
-          <a href={email.webLink} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
-            <CornerUpRight size={12} />Forward
-          </a>
+          {isOwnMailbox ? (
+            <>
+              <a href={email.webLink} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+                <Reply size={12} />Reply
+              </a>
+              <a href={email.webLink} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+                <CornerUpRight size={12} />Forward
+              </a>
+            </>
+          ) : (
+            <span className="text-xs text-slate-400 italic">
+              Open in {email.sentByName}&apos;s Outlook to reply
+            </span>
+          )}
           <a href={email.webLink} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-blue-600 transition-colors ml-auto">
             <ExternalLink size={12} />Open in Outlook
@@ -153,12 +167,14 @@ function ThreadPane({
   messages,
   loading,
   clientId,
+  currentUserId,
   onUntag,
 }: {
   thread: EmailThread
   messages: EmailMessage[]
   loading: boolean
   clientId: string
+  currentUserId: string
   onUntag: () => void
 }) {
   const [expandedMsgId, setExpandedMsgId] = useState<string | null>(null)
@@ -274,16 +290,27 @@ function ThreadPane({
                 <div className="px-5 pb-4">
                   {/* Sender detail */}
                   <div className="flex items-baseline justify-between gap-2 mb-3 pl-10">
-                    <p className="text-xs text-slate-500">
-                      <span className="text-slate-400">To: </span>
-                      {msg.toRecipients?.length
-                        ? msg.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
-                        : '—'}
-                    </p>
-                    <a href={msg.webLink} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 shrink-0 transition-colors">
-                      <ExternalLink size={10} />Open
-                    </a>
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        <span className="text-slate-400">To: </span>
+                        {msg.toRecipients?.length
+                          ? msg.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
+                          : '—'}
+                      </p>
+                      {msg.ownerId !== currentUserId && (
+                        <p className="text-xs text-amber-600 mt-0.5">via {msg.sentByName}&apos;s mailbox</p>
+                      )}
+                    </div>
+                    {msg.ownerId === currentUserId ? (
+                      <a href={msg.webLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 shrink-0 transition-colors">
+                        <ExternalLink size={10} />Open · Reply
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-300 shrink-0" title={`Open in ${msg.sentByName}'s Outlook`}>
+                        <ExternalLink size={10} className="inline mr-0.5" />via {msg.sentByName}
+                      </span>
+                    )}
                   </div>
 
                   {/* Body */}
@@ -331,7 +358,7 @@ type Selection =
   | { type: 'email'; id: string }
   | { type: 'thread'; id: string }
 
-export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
+export default function OutlookEmails({ clientId, hasMsConnected, currentUserId }: Props) {
   const [emails, setEmails] = useState<EmailMessage[]>([])
   const [clientEmail, setClientEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -561,6 +588,7 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
                 isLoadingBody={isLoadingBody}
                 iframeRef={iframeRef}
                 onIframeLoad={onIframeLoad}
+                isOwnMailbox={selectedEmail.ownerId === currentUserId}
               />
             )}
 
@@ -570,6 +598,7 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
                 messages={threadMessages[selectedThread.conversation_id] ?? []}
                 loading={threadLoading === selectedThread.conversation_id}
                 clientId={clientId}
+                currentUserId={currentUserId}
                 onUntag={() => untagThread(selectedThread)}
               />
             )}
