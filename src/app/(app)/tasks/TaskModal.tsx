@@ -996,7 +996,7 @@ export default function TaskModal({ task, profiles, currentUserId, onClose, onSa
 
           {/* ── Suggested correspondence templates ──────────────── */}
           <TaskTemplatesSuggestions
-            taskTemplateId={null}
+            taskTemplateId={task.task_template_id ?? null}
             journeyStepId={task.journey_step_id ?? null}
             clientId={task.client?.id ?? null}
           />

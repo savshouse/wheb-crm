@@ -430,6 +430,9 @@ export async function applyTemplateToTask(
   if (itemsError) return { error: itemsError.message }
   if (!items?.length) return { error: null }
 
+  // Stamp the task_template_id on the parent task so suggestions can be shown later
+  await supabase.from('tasks').update({ task_template_id: templateId }).eq('id', taskId)
+
   // Build a lookup of children grouped by parent item id
   const childrenByParent: Record<string, typeof items> = {}
   for (const item of items) {
