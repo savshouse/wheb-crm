@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Mail, ExternalLink, Paperclip, RefreshCw, AlertCircle, Reply, ChevronLeft, CornerUpRight } from 'lucide-react'
+import { Mail, ExternalLink, Paperclip, RefreshCw, AlertCircle, Reply, ChevronLeft, CornerUpRight, MessageSquare, ChevronDown } from 'lucide-react'
 import { format, parseISO, isToday, isYesterday, isThisYear } from 'date-fns'
 
 type EmailMessage = {
@@ -18,10 +18,19 @@ type EmailMessage = {
   sentByName: string
 }
 
+type EmailThread = {
+  id: string
+  conversation_id: string
+  subject: string | null
+  tagged_at: string
+}
+
 type Props = {
   clientId: string
   hasMsConnected: boolean
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatListDate(dateStr: string) {
   const date = dateStr ? parseISO(dateStr) : new Date()
@@ -32,13 +41,7 @@ function formatListDate(dateStr: string) {
 }
 
 function getInitials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
 const AVATAR_COLORS = [
@@ -50,6 +53,283 @@ function avatarColor(name: string) {
   return AVATAR_COLORS[idx]
 }
 
+// ── Reading pane: single email ────────────────────────────────────────────────
+
+function SingleEmailPane({
+  email,
+  body,
+  isLoadingBody,
+  iframeRef,
+  onIframeLoad,
+}: {
+  email: EmailMessage
+  body?: { contentType: string; content: string }
+  isLoadingBody: boolean
+  iframeRef: React.RefObject<HTMLIFrameElement | null>
+  onIframeLoad: () => void
+}) {
+  const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || '—'
+  const senderAddr = email.from?.emailAddress?.address || ''
+
+  return (
+    <>
+      <div className="px-5 py-4 border-b border-slate-100 shrink-0">
+        <h3 className="text-sm font-semibold text-slate-900 leading-snug mb-3">
+          {email.subject || '(No subject)'}
+        </h3>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 select-none ${avatarColor(senderName)}`}>
+              {getInitials(senderName)}
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-1.5">
+                <span className="text-sm font-semibold text-slate-900">{senderName}</span>
+                <span className="text-xs text-slate-400 truncate">&lt;{senderAddr}&gt;</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                To: {email.toRecipients?.length
+                  ? email.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
+                  : '—'}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">
+            {email.receivedDateTime ? format(parseISO(email.receivedDateTime), 'EEE d MMM yyyy, HH:mm') : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <a href={email.webLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+            <Reply size={12} />Reply
+          </a>
+          <a href={email.webLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+            <CornerUpRight size={12} />Forward
+          </a>
+          <a href={email.webLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-blue-600 transition-colors ml-auto">
+            <ExternalLink size={12} />Open in Outlook
+          </a>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        {isLoadingBody && (
+          <div className="flex items-center gap-2 text-xs text-slate-400 py-6">
+            <RefreshCw size={12} className="animate-spin" />Loading message…
+          </div>
+        )}
+        {!isLoadingBody && body && (
+          body.contentType === 'html' ? (
+            <iframe
+              key={email.id}
+              ref={iframeRef}
+              srcDoc={body.content}
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              className="w-full"
+              style={{ minHeight: '300px', height: '400px', border: 'none' }}
+              title="Email body"
+              onLoad={onIframeLoad}
+            />
+          ) : (
+            <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+              {body.content}
+            </pre>
+          )
+        )}
+        {!isLoadingBody && !body && (
+          <p className="text-sm text-slate-600 leading-relaxed">{email.bodyPreview}</p>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ── Reading pane: full thread ─────────────────────────────────────────────────
+
+function ThreadPane({
+  thread,
+  messages,
+  loading,
+  clientId,
+  onUntag,
+}: {
+  thread: EmailThread
+  messages: EmailMessage[]
+  loading: boolean
+  clientId: string
+  onUntag: () => void
+}) {
+  const [expandedMsgId, setExpandedMsgId] = useState<string | null>(null)
+  const [bodyMap, setBodyMap] = useState<Record<string, { contentType: string; content: string }>>({})
+  const [bodyLoading, setBodyLoading] = useState<string | null>(null)
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({})
+
+  // Auto-expand the last message
+  useEffect(() => {
+    if (messages.length > 0) {
+      setExpandedMsgId(messages[messages.length - 1].id)
+    }
+  }, [messages])
+
+  async function toggleMsg(msg: EmailMessage) {
+    if (expandedMsgId === msg.id) { setExpandedMsgId(null); return }
+    setExpandedMsgId(msg.id)
+    if (bodyMap[msg.id]) return
+    setBodyLoading(msg.id)
+    try {
+      const qs = msg.ownerId ? `?userId=${encodeURIComponent(msg.ownerId)}` : ''
+      const res = await fetch(`/api/emails/${encodeURIComponent(msg.id)}/body${qs}`)
+      const data = await res.json()
+      if (data.body) setBodyMap(prev => ({ ...prev, [msg.id]: data.body }))
+    } catch {}
+    finally { setBodyLoading(null) }
+  }
+
+  function onIframeLoad(id: string) {
+    const iframe = iframeRefs.current[id]
+    if (!iframe) return
+    try {
+      const h = iframe.contentDocument?.documentElement?.scrollHeight
+      if (h) iframe.style.height = `${h + 24}px`
+    } catch {}
+  }
+
+  return (
+    <>
+      {/* Thread header */}
+      <div className="px-5 py-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2 min-w-0">
+            <MessageSquare size={16} className="text-blue-500 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 leading-snug">
+                {thread.subject || '(No subject)'}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {messages.length} message{messages.length !== 1 ? 's' : ''} in thread
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onUntag}
+            className="shrink-0 text-xs text-slate-400 hover:text-red-500 transition-colors"
+            title="Remove thread tag"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {/* Thread messages */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-slate-400 p-5">
+            <RefreshCw size={12} className="animate-spin" />Loading thread…
+          </div>
+        )}
+
+        {!loading && messages.length === 0 && (
+          <p className="text-sm text-slate-400 p-5">No messages found in this thread.</p>
+        )}
+
+        {!loading && messages.map((msg, idx) => {
+          const isExpanded = expandedMsgId === msg.id
+          const isLast = idx === messages.length - 1
+          const senderName = msg.from?.emailAddress?.name || msg.from?.emailAddress?.address || '—'
+          const senderAddr = msg.from?.emailAddress?.address || ''
+          const body = bodyMap[msg.id]
+          const isLoadingThisBody = bodyLoading === msg.id
+
+          return (
+            <div key={msg.id} className={`border-b border-slate-100 ${isLast ? 'border-b-0' : ''}`}>
+              <button
+                type="button"
+                onClick={() => toggleMsg(msg)}
+                className="w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors focus:outline-none"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(senderName)}`}>
+                    {getInitials(senderName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-800 truncate">{senderName}</span>
+                      <span className="text-xs text-slate-400 shrink-0">{formatListDate(msg.receivedDateTime)}</span>
+                    </div>
+                    {!isExpanded && (
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{msg.bodyPreview}</p>
+                    )}
+                  </div>
+                  <ChevronDown
+                    size={13}
+                    className={`text-slate-400 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  />
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="px-5 pb-4">
+                  {/* Sender detail */}
+                  <div className="flex items-baseline justify-between gap-2 mb-3 pl-10">
+                    <p className="text-xs text-slate-500">
+                      <span className="text-slate-400">To: </span>
+                      {msg.toRecipients?.length
+                        ? msg.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
+                        : '—'}
+                    </p>
+                    <a href={msg.webLink} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 shrink-0 transition-colors">
+                      <ExternalLink size={10} />Open
+                    </a>
+                  </div>
+
+                  {/* Body */}
+                  <div className="pl-10">
+                    {isLoadingThisBody && (
+                      <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                        <RefreshCw size={11} className="animate-spin" />Loading…
+                      </div>
+                    )}
+                    {!isLoadingThisBody && body && (
+                      body.contentType === 'html' ? (
+                        <iframe
+                          key={msg.id}
+                          ref={el => { iframeRefs.current[msg.id] = el }}
+                          srcDoc={body.content}
+                          sandbox="allow-popups allow-popups-to-escape-sandbox"
+                          className="w-full rounded"
+                          style={{ minHeight: '120px', height: '250px', border: 'none' }}
+                          title="Email body"
+                          onLoad={() => onIframeLoad(msg.id)}
+                        />
+                      ) : (
+                        <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed bg-slate-50 rounded p-3 max-h-64 overflow-y-auto">
+                          {body.content}
+                        </pre>
+                      )
+                    )}
+                    {!isLoadingThisBody && !body && (
+                      <p className="text-xs text-slate-600 leading-relaxed">{msg.bodyPreview}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+type Selection =
+  | { type: 'email'; id: string }
+  | { type: 'thread'; id: string }
+
 export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
   const [emails, setEmails] = useState<EmailMessage[]>([])
   const [clientEmail, setClientEmail] = useState<string | null>(null)
@@ -57,7 +337,12 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
   const [noEmail, setNoEmail] = useState(false)
   const [noMs, setNoMs] = useState(!hasMsConnected)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const [threads, setThreads] = useState<EmailThread[]>([])
+  const [threadMessages, setThreadMessages] = useState<Record<string, EmailMessage[]>>({})
+  const [threadLoading, setThreadLoading] = useState<string | null>(null)
+
+  const [selection, setSelection] = useState<Selection | null>(null)
   const [bodyMap, setBodyMap] = useState<Record<string, { contentType: string; content: string }>>({})
   const [bodyLoading, setBodyLoading] = useState<string | null>(null)
   const [mobileShowReading, setMobileShowReading] = useState(false)
@@ -66,20 +351,23 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
   useEffect(() => {
     if (!hasMsConnected) return
     setLoading(true)
-    fetch(`/api/clients/${clientId}/emails`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.noEmail) { setNoEmail(true); return }
-        if (data.noMsAccount) { setNoMs(true); return }
-        setEmails(data.emails ?? [])
-        setClientEmail(data.clientEmail ?? null)
-      })
-      .catch(() => setError('Could not load emails'))
+    Promise.all([
+      fetch(`/api/clients/${clientId}/emails`).then(r => r.json()),
+      fetch(`/api/clients/${clientId}/email-threads`).then(r => r.json()),
+    ]).then(([emailData, threadData]) => {
+      if (emailData.noEmail) setNoEmail(true)
+      else if (emailData.noMsAccount) setNoMs(true)
+      else {
+        setEmails(emailData.emails ?? [])
+        setClientEmail(emailData.clientEmail ?? null)
+      }
+      setThreads(threadData.threads ?? [])
+    }).catch(() => setError('Could not load emails'))
       .finally(() => setLoading(false))
   }, [clientId, hasMsConnected])
 
   async function selectEmail(id: string) {
-    setSelectedId(id)
+    setSelection({ type: 'email', id })
     setMobileShowReading(true)
     if (bodyMap[id]) return
     setBodyLoading(id)
@@ -89,8 +377,31 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
       const res = await fetch(`/api/emails/${encodeURIComponent(id)}/body${qs}`)
       const data = await res.json()
       if (data.body) setBodyMap(prev => ({ ...prev, [id]: data.body }))
-    } catch { /* fallback to bodyPreview */ }
+    } catch {}
     finally { setBodyLoading(null) }
+  }
+
+  async function selectThread(thread: EmailThread) {
+    setSelection({ type: 'thread', id: thread.id })
+    setMobileShowReading(true)
+    if (threadMessages[thread.conversation_id]) return
+    setThreadLoading(thread.conversation_id)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/email-threads/${encodeURIComponent(thread.conversation_id)}/messages`)
+      const data = await res.json()
+      setThreadMessages(prev => ({ ...prev, [thread.conversation_id]: data.messages ?? [] }))
+    } catch {}
+    finally { setThreadLoading(null) }
+  }
+
+  async function untagThread(thread: EmailThread) {
+    await fetch('/api/addin/tag-thread', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, conversation_id: thread.conversation_id }),
+    })
+    setThreads(prev => prev.filter(t => t.id !== thread.id))
+    if (selection?.type === 'thread' && selection.id === thread.id) setSelection(null)
   }
 
   function onIframeLoad() {
@@ -99,34 +410,33 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
     try {
       const h = iframe.contentDocument?.documentElement?.scrollHeight
       if (h) iframe.style.height = `${h + 24}px`
-    } catch { /* cross-origin: fixed height fallback */ }
+    } catch {}
   }
 
   if (noMs) return null
-  if (noEmail) return null
+  if (noEmail && threads.length === 0) return null
 
-  const selectedEmail = selectedId ? emails.find(e => e.id === selectedId) ?? null : null
-  const selectedBody = selectedId ? bodyMap[selectedId] : undefined
-  const isLoadingBody = !!(selectedId && bodyLoading === selectedId)
+  const selectedEmail = selection?.type === 'email' ? emails.find(e => e.id === selection.id) ?? null : null
+  const selectedThread = selection?.type === 'thread' ? threads.find(t => t.id === selection.id) ?? null : null
+  const isLoadingBody = !!(selection?.type === 'email' && bodyLoading === selection.id)
 
   const senderName = (e: EmailMessage) => e.from?.emailAddress?.name || e.from?.emailAddress?.address || '—'
-  const senderAddress = (e: EmailMessage) => e.from?.emailAddress?.address || ''
+
+  const totalCount = threads.length + emails.length
 
   return (
     <div className="flex flex-col">
-      {/* Section header */}
       <div className="flex items-center gap-2 mb-3 px-1">
         <Mail size={15} className="text-slate-400" />
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Outlook Emails</h2>
-        {!loading && emails.length > 0 && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{emails.length}</span>
+        {!loading && totalCount > 0 && (
+          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{totalCount}</span>
         )}
       </div>
 
       {loading && (
         <div className="flex items-center gap-2 text-sm text-slate-400 py-6">
-          <RefreshCw size={14} className="animate-spin" />
-          Loading emails…
+          <RefreshCw size={14} className="animate-spin" />Loading emails…
         </div>
       )}
 
@@ -136,25 +446,69 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
         </div>
       )}
 
-      {!loading && !error && emails.length === 0 && (
+      {!loading && !error && totalCount === 0 && (
         <p className="text-sm text-slate-400 py-2">No emails found{clientEmail ? ` for ${clientEmail}` : ''}.</p>
       )}
 
-      {!loading && emails.length > 0 && (
-        <div
-          className="flex border border-slate-200 rounded-xl overflow-hidden bg-white"
-          style={{ height: '680px' }}
-        >
-          {/* ── Left: email list ── */}
-          <div
-            className={`w-72 shrink-0 border-r border-slate-200 overflow-y-auto flex flex-col ${
-              mobileShowReading ? 'hidden sm:flex' : 'flex'
-            }`}
-          >
+      {!loading && totalCount > 0 && (
+        <div className="flex border border-slate-200 rounded-xl overflow-hidden bg-white" style={{ height: '680px' }}>
+
+          {/* ── Left pane: list ── */}
+          <div className={`w-72 shrink-0 border-r border-slate-200 overflow-y-auto flex flex-col ${mobileShowReading ? 'hidden sm:flex' : 'flex'}`}>
+
+            {/* Tagged threads section */}
+            {threads.length > 0 && (
+              <>
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Tagged Threads ({threads.length})
+                  </span>
+                </div>
+                {threads.map(thread => {
+                  const isSelected = selection?.type === 'thread' && selection.id === thread.id
+                  const msgs = threadMessages[thread.conversation_id]
+                  const msgCount = msgs?.length ?? null
+                  const lastMsg = msgs?.[msgs.length - 1]
+
+                  return (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      onClick={() => selectThread(thread)}
+                      className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
+                        isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <MessageSquare size={11} className={isSelected ? 'text-blue-500' : 'text-slate-400'} />
+                        <span className={`text-xs font-semibold truncate flex-1 ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>
+                          {thread.subject || '(No subject)'}
+                        </span>
+                        <span className="text-xs text-slate-400 shrink-0">
+                          {lastMsg ? formatListDate(lastMsg.receivedDateTime) : formatListDate(thread.tagged_at)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 pl-5">
+                        {msgCount !== null ? `${msgCount} message${msgCount !== 1 ? 's' : ''}` : 'Tap to load'}
+                      </p>
+                    </button>
+                  )
+                })}
+
+                {emails.length > 0 && (
+                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      All Emails ({emails.length})
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* All emails list */}
             {emails.map(email => {
-              const isSelected = selectedId === email.id
+              const isSelected = selection?.type === 'email' && selection.id === email.id
               const name = senderName(email)
-              const dateStr = formatListDate(email.receivedDateTime)
 
               return (
                 <button
@@ -162,17 +516,13 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
                   type="button"
                   onClick={() => selectEmail(email.id)}
                   className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-slate-50 focus:outline-none ${
-                    isSelected
-                      ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5'
-                      : 'border-l-2 border-l-transparent'
+                    isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 pl-3.5' : 'border-l-2 border-l-transparent'
                   }`}
                 >
                   <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                    <span className={`text-sm truncate font-semibold ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>
-                      {name}
-                    </span>
+                    <span className={`text-sm truncate font-semibold ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>{name}</span>
                     <span className={`text-xs shrink-0 ${isSelected ? 'text-blue-600 font-medium' : 'text-slate-400'}`}>
-                      {dateStr}
+                      {formatListDate(email.receivedDateTime)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -187,134 +537,40 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
             })}
           </div>
 
-          {/* ── Right: reading pane ── */}
-          <div
-            className={`flex-1 flex flex-col overflow-hidden ${
-              mobileShowReading ? 'flex' : 'hidden sm:flex'
-            }`}
-          >
-            {!selectedEmail ? (
+          {/* ── Right pane: reading ── */}
+          <div className={`flex-1 flex flex-col overflow-hidden ${mobileShowReading ? 'flex' : 'hidden sm:flex'}`}>
+            {/* Mobile back */}
+            {mobileShowReading && (
+              <button type="button" onClick={() => setMobileShowReading(false)}
+                className="flex items-center gap-1 text-xs text-blue-600 px-4 py-2 border-b border-slate-100 sm:hidden">
+                <ChevronLeft size={14} />Back
+              </button>
+            )}
+
+            {!selection && (
               <div className="flex-1 flex items-center justify-center text-slate-400 text-sm select-none">
                 Select an email to read
               </div>
-            ) : (
-              <>
-                {/* Reading pane header */}
-                <div className="px-5 py-4 border-b border-slate-100 shrink-0">
-                  {/* Mobile back */}
-                  <button
-                    type="button"
-                    onClick={() => setMobileShowReading(false)}
-                    className="flex items-center gap-1 text-xs text-blue-600 mb-2 sm:hidden"
-                  >
-                    <ChevronLeft size={14} />
-                    Back to list
-                  </button>
+            )}
 
-                  <h3 className="text-sm font-semibold text-slate-900 leading-snug mb-3">
-                    {selectedEmail.subject || '(No subject)'}
-                  </h3>
+            {selection?.type === 'email' && selectedEmail && (
+              <SingleEmailPane
+                email={selectedEmail}
+                body={bodyMap[selection.id]}
+                isLoadingBody={isLoadingBody}
+                iframeRef={iframeRef}
+                onIframeLoad={onIframeLoad}
+              />
+            )}
 
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      {/* Avatar */}
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 select-none ${avatarColor(senderName(selectedEmail))}`}
-                      >
-                        {getInitials(senderName(selectedEmail))}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-baseline gap-1.5">
-                          <span className="text-sm font-semibold text-slate-900">{senderName(selectedEmail)}</span>
-                          <span className="text-xs text-slate-400 truncate">&lt;{senderAddress(selectedEmail)}&gt;</span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          To:{' '}
-                          {selectedEmail.toRecipients?.length
-                            ? selectedEmail.toRecipients.map(r => r.emailAddress?.name || r.emailAddress?.address).join(', ')
-                            : '—'
-                          }
-                        </p>
-                        {selectedEmail.sentByName && senderAddress(selectedEmail).toLowerCase() !== selectedEmail.sentByName.toLowerCase() && (
-                          <p className="text-xs text-slate-400 mt-0.5">via {selectedEmail.sentByName}'s mailbox</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-slate-400 whitespace-nowrap">
-                        {selectedEmail.receivedDateTime
-                          ? format(parseISO(selectedEmail.receivedDateTime), 'EEE d MMM yyyy, HH:mm')
-                          : ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Action strip */}
-                  <div className="flex items-center gap-2 mt-3">
-                    <a
-                      href={selectedEmail.webLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                    >
-                      <Reply size={12} />
-                      Reply
-                    </a>
-                    <a
-                      href={selectedEmail.webLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                    >
-                      <CornerUpRight size={12} />
-                      Forward
-                    </a>
-                    <a
-                      href={selectedEmail.webLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-blue-600 transition-colors ml-auto"
-                    >
-                      <ExternalLink size={12} />
-                      Open in Outlook
-                    </a>
-                  </div>
-                </div>
-
-                {/* Email body */}
-                <div className="flex-1 overflow-y-auto px-5 py-4">
-                  {isLoadingBody && (
-                    <div className="flex items-center gap-2 text-xs text-slate-400 py-6">
-                      <RefreshCw size={12} className="animate-spin" />
-                      Loading message…
-                    </div>
-                  )}
-
-                  {!isLoadingBody && selectedBody && (
-                    selectedBody.contentType === 'html' ? (
-                      <iframe
-                        key={selectedEmail.id}
-                        ref={iframeRef}
-                        srcDoc={selectedBody.content}
-                        sandbox="allow-popups allow-popups-to-escape-sandbox"
-                        className="w-full"
-                        style={{ minHeight: '300px', height: '400px', border: 'none' }}
-                        title="Email body"
-                        onLoad={onIframeLoad}
-                      />
-                    ) : (
-                      <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-                        {selectedBody.content}
-                      </pre>
-                    )
-                  )}
-
-                  {!isLoadingBody && !selectedBody && !isLoadingBody && (
-                    <p className="text-sm text-slate-600 leading-relaxed">{selectedEmail.bodyPreview}</p>
-                  )}
-                </div>
-              </>
+            {selection?.type === 'thread' && selectedThread && (
+              <ThreadPane
+                thread={selectedThread}
+                messages={threadMessages[selectedThread.conversation_id] ?? []}
+                loading={threadLoading === selectedThread.conversation_id}
+                clientId={clientId}
+                onUntag={() => untagThread(selectedThread)}
+              />
             )}
           </div>
         </div>

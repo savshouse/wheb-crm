@@ -46,6 +46,12 @@ export default function OutlookAddinPage() {
   const [saving, setSaving]         = useState(false)
   const [saveMsg, setSaveMsg]       = useState('')
 
+  // Email thread tagging
+  const [ofConvId, setOfConvId]     = useState<string | null>(null)
+  const [ofSubject, setOfSubject]   = useState<string>('')
+  const [tagging, setTagging]       = useState(false)
+  const [tagMsg, setTagMsg]         = useState('')
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
     supabase.auth.onAuthStateChange((_, s) => setSession(s))
@@ -60,6 +66,8 @@ export default function OutlookAddinPage() {
         const item = Office.context.mailbox.item
         const sender = item.from?.displayName ?? item.organizer?.displayName ?? ''
         if (sender) { setSearch(sender); setOfContext(sender) }
+        if (item.conversationId) setOfConvId(item.conversationId)
+        if (item.subject) setOfSubject(item.subject ?? '')
       } catch {}
     }
     const t = setTimeout(tryOffice, 1000)
@@ -147,6 +155,24 @@ export default function OutlookAddinPage() {
       setTimeout(() => { setEditingId(null); setSaveMsg('') }, 800)
     }
     setSaving(false)
+  }
+
+  async function tagThread(clientId: string) {
+    if (!ofConvId) { setTagMsg('No conversation ID found — open an email first'); return }
+    setTagging(true); setTagMsg('')
+    const res = await fetch('/api/addin/tag-thread', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, conversation_id: ofConvId, subject: ofSubject }),
+    })
+    if (res.ok) {
+      setTagMsg('Thread tagged ✓')
+    } else {
+      const d = await res.json().catch(() => ({}))
+      setTagMsg(d.error ?? 'Error tagging thread')
+    }
+    setTagging(false)
+    setTimeout(() => setTagMsg(''), 4000)
   }
 
   function renderEditForm(t: Task) {
@@ -271,6 +297,32 @@ export default function OutlookAddinPage() {
             <a href={`https://wheb-crm.vercel.app/clients/${selected.id}`} target="_blank" rel="noopener noreferrer"
               style={{ marginLeft: 'auto', fontSize: 11, color: '#2563eb', textDecoration: 'none' }}>Open in CRM ↗</a>
           </div>
+
+          {/* Tag thread button */}
+          {ofConvId && (
+            <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8 }}>
+              <p style={{ fontSize: 11, color: '#0369a1', marginBottom: 6, fontWeight: 500 }}>
+                📧 Tag this email thread to {selected.name}
+              </p>
+              {ofSubject && (
+                <p style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                  "{ofSubject}"
+                </p>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => tagThread(selected.id)}
+                  disabled={tagging}
+                  style={{ ...btnSt, padding: '5px 12px', fontSize: 11, background: tagging ? '#93c5fd' : '#2563eb' }}
+                >
+                  {tagging ? 'Saving…' : 'Tag thread'}
+                </button>
+                {tagMsg && (
+                  <span style={{ fontSize: 11, color: tagMsg.includes('✓') ? '#16a34a' : '#dc2626' }}>{tagMsg}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Open tasks */}
           {tasks.length > 0 && (

@@ -429,6 +429,20 @@ export async function searchClientEmails(
     .filter(Boolean)
 }
 
+export async function getConversationMessages(
+  token: string,
+  conversationId: string
+): Promise<EmailMessage[]> {
+  const params = new URLSearchParams({
+    '$filter': `conversationId eq '${conversationId}'`,
+    '$select': 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink,hasAttachments,conversationId',
+    '$orderby': 'receivedDateTime asc',
+    '$top': '50',
+  })
+  const result = await graph(token, 'GET', `/me/messages?${params}`)
+  return (result?.value ?? []).map((m: any) => ({ ...m, id: m.id ?? m.internetMessageId }))
+}
+
 export async function getMessageBody(
   token: string,
   messageId: string
