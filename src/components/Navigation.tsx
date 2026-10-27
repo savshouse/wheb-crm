@@ -23,6 +23,7 @@ import {
   Wrench,
   Mail,
   Calendar,
+  MessageSquare,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -37,6 +38,7 @@ const navItems = [
 ]
 
 const adminTemplateItems = [
+  { href: '/admin/correspondence',    label: 'Correspondence',    icon: MessageSquare },
   { href: '/admin/email-templates',   label: 'Email Templates',   icon: Mail },
   { href: '/admin/journey-templates', label: 'Journey Templates', icon: Route },
   { href: '/templates',               label: 'Task Templates',    icon: LayoutTemplate },

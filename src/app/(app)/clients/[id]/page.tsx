@@ -20,6 +20,7 @@ import ClientJourneys from './ClientJourneys'
 import KeyPersonnel from './KeyPersonnel'
 import RemindersBell from '@/components/RemindersBell'
 import EmailButton from './EmailButton'
+import UseTemplateButton from './UseTemplateButton'
 import ClientEmailHistory from './ClientEmailHistory'
 import OutlookEmails from './OutlookEmails'
 import ClientTabNav from './ClientTabNav'
@@ -288,6 +289,33 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
                   payroll_id:      (client as any).payroll_id ?? null,
                 }} />
               ) : null
+            })()}
+            {(() => {
+              const primaryEmail = (clientEmails ?? []).find((e: any) => e.is_primary) ?? (clientEmails ?? [])[0]
+              const myProfile = (profiles ?? []).find((p: any) => p.id === user.id)
+              return (
+                <UseTemplateButton
+                  clientEmail={primaryEmail?.email ?? client.email ?? null}
+                  ctx={{
+                    client: {
+                      name:          client.name,
+                      email:         primaryEmail?.email ?? client.email ?? null,
+                      phone:         client.phone ?? null,
+                      address:       client.address ?? null,
+                      ni_number:     (client as any).ni_number ?? null,
+                      date_of_birth: (client as any).date_of_birth ?? null,
+                      employer:      (employer as any)?.name ?? null,
+                      vnext_id:      (client as any).vnext_id ?? null,
+                      salary:        (client as any).salary ?? null,
+                      payroll_id:    (client as any).payroll_id ?? null,
+                    },
+                    adviser: {
+                      full_name: myProfile?.full_name ?? null,
+                      email:     myProfile?.email ?? user.email ?? '',
+                    },
+                  }}
+                />
+              )
             })()}
             <Link
               href={`/clients/${id}/edit`}
