@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns'
 
 type EmailMessage = {
   id: string
+  internetMessageId?: string
   subject: string
   from: { emailAddress: { name: string; address: string } }
   toRecipients: { emailAddress: { name: string; address: string } }[]
@@ -13,6 +14,8 @@ type EmailMessage = {
   bodyPreview: string
   webLink: string
   hasAttachments: boolean
+  ownerId: string
+  sentByName: string
 }
 
 type Props = {
@@ -53,8 +56,10 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
     setExpandedId(id)
     if (bodyMap[id]) return
     setBodyLoading(id)
+    const email = emails.find(e => e.id === id)
     try {
-      const res = await fetch(`/api/emails/${encodeURIComponent(id)}/body`)
+      const qs = email?.ownerId ? `?userId=${encodeURIComponent(email.ownerId)}` : ''
+      const res = await fetch(`/api/emails/${encodeURIComponent(id)}/body${qs}`)
       const data = await res.json()
       if (data.body) setBodyMap(prev => ({ ...prev, [id]: data.body }))
     } catch { /* fallback to preview */ }
@@ -149,12 +154,19 @@ export default function OutlookEmails({ clientId, hasMsConnected }: Props) {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-slate-600 truncate">
-                              {isSent
-                                ? `To: ${email.toRecipients[0]?.emailAddress.name || email.toRecipients[0]?.emailAddress.address || '—'}`
-                                : `From: ${email.from.emailAddress.name || email.from.emailAddress.address}`
-                              }
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-xs font-medium text-slate-600 truncate">
+                                {isSent
+                                  ? `To: ${email.toRecipients[0]?.emailAddress.name || email.toRecipients[0]?.emailAddress.address || '—'}`
+                                  : `From: ${email.from.emailAddress.name || email.from.emailAddress.address}`
+                                }
+                              </span>
+                              {isSent && (
+                                <span className="shrink-0 text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                                  via {email.sentByName}
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {email.hasAttachments && <Paperclip size={11} className="text-slate-400" />}
                               <span className="text-xs text-slate-400">{dateLabel} · {timeLabel}</span>

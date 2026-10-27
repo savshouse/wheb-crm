@@ -385,6 +385,7 @@ export type CalendarEvent = {
 
 export type EmailMessage = {
   id: string
+  internetMessageId?: string
   subject: string
   from: { emailAddress: { name: string; address: string } }
   toRecipients: { emailAddress: { name: string; address: string } }[]
