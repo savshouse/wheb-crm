@@ -16,15 +16,16 @@ type Template = {
 type Props = {
   ctx: MergeContext
   clientEmail?: string | null
+  initialTemplate?: Template
   onClose: () => void
 }
 
-export default function UseTemplateModal({ ctx, clientEmail, onClose }: Props) {
+export default function UseTemplateModal({ ctx, clientEmail, initialTemplate, onClose }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'snippet'>('all')
-  const [selected, setSelected] = useState<Template | null>(null)
+  const [selected, setSelected] = useState<Template | null>(initialTemplate ?? null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
