@@ -9,16 +9,34 @@ export async function GET(req: NextRequest) {
   const q = new URL(req.url).searchParams.get('q')?.trim()
   if (!q || q.length < 2) return NextResponse.json({ meetings: [] })
 
-  const { data, error } = await supabase
-    .from('meetings')
-    .select('id, title, meeting_date, start_time, end_time, calendar_event_id, teams_meeting_url, client:clients(id, name)')
-    .ilike('title', `%${q}%`)
-    .limit(60)
+  const SELECT = 'id, title, meeting_date, start_time, end_time, calendar_event_id, teams_meeting_url, client:clients(id, name)'
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Search by title AND by client name in parallel
+  const [titleRes, clientRes] = await Promise.all([
+    supabase.from('meetings').select(SELECT).ilike('title', `%${q}%`).limit(60),
+    supabase.from('clients').select('id').ilike('name', `%${q}%`).limit(40),
+  ])
+
+  if (titleRes.error) return NextResponse.json({ error: titleRes.error.message }, { status: 500 })
+
+  // Fetch meetings linked to matching clients (if any)
+  const clientIds = (clientRes.data ?? []).map((c: any) => c.id)
+  let clientMeetings: any[] = []
+  if (clientIds.length > 0) {
+    const { data: cm } = await supabase
+      .from('meetings').select(SELECT).in('client_id', clientIds).limit(60)
+    clientMeetings = cm ?? []
+  }
+
+  // Merge and deduplicate by id
+  const seen = new Set<string>()
+  const merged: any[] = []
+  for (const m of [...(titleRes.data ?? []), ...clientMeetings]) {
+    if (!seen.has(m.id)) { seen.add(m.id); merged.push(m) }
+  }
 
   const today = new Date().toISOString().split('T')[0]
-  const rows = (data ?? []).map((m: any) => ({
+  const rows = merged.map((m: any) => ({
     ...m,
     client: Array.isArray(m.client) ? (m.client[0] ?? null) : (m.client ?? null),
   }))
