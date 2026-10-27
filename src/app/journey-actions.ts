@@ -6,66 +6,19 @@ import { createActionClient } from '@/lib/supabase/server'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type BranchNodeConfig = {
+type SupabaseClient = Awaited<ReturnType<typeof createActionClient>>
+
+type TemplateNode = {
   id?: string
-  name?: string
+  name: string
+  task_template_id?: string | null
   next_on_success?: string | null
   next_on_failure?: string | null
   retry_delay_days?: number | null
   retry_max?: number | null
 }
 
-/** Look up the template graph node config for a given journey step. */
-async function getNodeConfig(
-  stepId: string,
-  supabase: SupabaseClient
-): Promise<BranchNodeConfig | null> {
-  const { data: step } = await supabase
-    .from('advice_journey_steps')
-    .select('template_node_id, journey_id')
-    .eq('id', stepId)
-    .single()
-  if (!step?.template_node_id) return null
-
-  const { data: journey } = await supabase
-    .from('advice_journeys')
-    .select('template_id')
-    .eq('id', step.journey_id)
-    .single()
-  if (!journey?.template_id) return null
-
-  const { data: template } = await supabase
-    .from('advice_journey_templates')
-    .select('steps')
-    .eq('id', journey.template_id)
-    .single()
-
-  const nodes: BranchNodeConfig[] = template?.steps ?? []
-  return nodes.find(n => n.id === step.template_node_id) ?? null
-}
-
-/** Find the next step to activate, using the template graph or falling back to linear order. */
-function pickNextStep(
-  allSteps: any[],
-  completedStepId: string,
-  targetNodeId: string | null | undefined
-): any | null {
-  const candidates = allSteps.filter(s => s.id !== completedStepId)
-
-  // targetNodeId = undefined → no template config, use linear order
-  // targetNodeId = null     → terminal node, no next step
-  // targetNodeId = string   → follow graph edge
-  if (targetNodeId === undefined) {
-    return candidates.find(s => s.status === 'pending') ?? null
-  }
-  if (targetNodeId === null) return null
-  return candidates.find(s => s.template_node_id === targetNodeId && s.status === 'pending') ?? null
-}
-
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-type SupabaseClient = Awaited<ReturnType<typeof createActionClient>>
-
 
 /** Create tasks from a task_template linked to a journey step. */
 async function createTasksFromTemplate(
@@ -146,6 +99,99 @@ async function activateStep(
   }
 }
 
+/** Load the template node array for a journey. Returns null if no template. */
+async function loadTemplateNodes(
+  journeyId: string,
+  supabase: SupabaseClient
+): Promise<TemplateNode[] | null> {
+  const { data: journey } = await supabase
+    .from('advice_journeys')
+    .select('template_id')
+    .eq('id', journeyId)
+    .single()
+  if (!journey?.template_id) return null
+
+  const { data: template } = await supabase
+    .from('advice_journey_templates')
+    .select('steps')
+    .eq('id', journey.template_id)
+    .single()
+  return (template?.steps as TemplateNode[]) ?? null
+}
+
+/**
+ * Find the next template node to activate.
+ * - success: follow next_on_success (undefined = auto-link to next in array; null/'__end__' = terminal)
+ * - failure: follow next_on_failure (undefined/null = same as success path)
+ */
+function findNextTemplateNode(
+  nodes: TemplateNode[],
+  currentNodeId: string,
+  outcome: 'success' | 'failure'
+): TemplateNode | null {
+  const currentIdx = nodes.findIndex(n => n.id === currentNodeId)
+  if (currentIdx < 0) return null
+  const current = nodes[currentIdx]
+
+  if (outcome === 'failure') {
+    const targetId = current.next_on_failure ?? null
+    if (targetId) return nodes.find(n => n.id === targetId) ?? null
+    // No failure branch → fall through to success path logic
+  }
+
+  // Success path
+  const raw = current.next_on_success
+  if (raw === '__end__' || raw === null) return null
+  if (raw === undefined) {
+    // Auto-link: next in array
+    return currentIdx + 1 < nodes.length ? nodes[currentIdx + 1] : null
+  }
+  return nodes.find(n => n.id === raw) ?? null
+}
+
+/** Get the next unused step_order for a journey. */
+async function nextStepOrder(journeyId: string, supabase: SupabaseClient): Promise<number> {
+  const { data } = await supabase
+    .from('advice_journey_steps')
+    .select('step_order')
+    .eq('journey_id', journeyId)
+    .order('step_order', { ascending: false })
+    .limit(1)
+  return (data?.[0]?.step_order ?? -1) + 1
+}
+
+/** Insert a step from a template node and activate it immediately. */
+async function createAndActivateStep(
+  journeyId: string,
+  node: TemplateNode,
+  order: number,
+  clientId: string,
+  userId: string,
+  assignedTo: string | null,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { data: newStep } = await supabase
+    .from('advice_journey_steps')
+    .insert({
+      journey_id:       journeyId,
+      step_order:       order,
+      name:             node.name,
+      status:           'pending',
+      task_template_id: node.task_template_id ?? null,
+      template_node_id: node.id ?? null,
+    })
+    .select('id, task_template_id')
+    .single()
+
+  if (newStep) {
+    await activateStep(newStep.id, newStep.task_template_id, clientId, userId, supabase, assignedTo)
+    await supabase
+      .from('advice_journeys')
+      .update({ current_step_order: order, updated_at: new Date().toISOString() })
+      .eq('id', journeyId)
+  }
+}
+
 // ─── public actions ───────────────────────────────────────────────────────────
 
 export async function createJourney(payload: {
@@ -169,9 +215,8 @@ export async function createJourney(payload: {
 
   if (!template) return { journeyId: null, error: 'Template not found' }
 
-  // Support both old string[] and new {name, task_template_id}[] formats
   const rawSteps: any[] = template.steps ?? []
-  const steps = rawSteps.map((s: any) =>
+  const steps: TemplateNode[] = rawSteps.map((s: any) =>
     typeof s === 'string' ? { name: s, task_template_id: null } : s
   )
 
@@ -194,25 +239,23 @@ export async function createJourney(payload: {
 
   if (journeyError || !journey) return { journeyId: null, error: journeyError?.message ?? 'Failed to create journey' }
 
+  // Lazy creation: only insert and activate the first step
   if (steps.length > 0) {
-    const stepRows = steps.map((s: any, i: number) => ({
-      journey_id:        journey.id,
-      step_order:        i,
-      name:              s.name,
-      status:            'pending',
-      task_template_id:  s.task_template_id ?? null,
-      template_node_id:  s.id ?? null,
-    }))
-
-    const { error: stepsError, data: createdSteps } = await supabase
+    const first = steps[0]
+    const { data: firstStep, error: stepError } = await supabase
       .from('advice_journey_steps')
-      .insert(stepRows)
-      .select('id, step_order, task_template_id')
+      .insert({
+        journey_id:       journey.id,
+        step_order:       0,
+        name:             first.name,
+        status:           'pending',
+        task_template_id: first.task_template_id ?? null,
+        template_node_id: first.id ?? null,
+      })
+      .select('id, task_template_id')
+      .single()
 
-    if (stepsError) return { journeyId: null, error: stepsError.message }
-
-    // Activate first step (create template tasks if linked)
-    const firstStep = (createdSteps ?? []).find((s: any) => s.step_order === 0)
+    if (stepError) return { journeyId: null, error: stepError.message }
     if (firstStep) {
       await activateStep(firstStep.id, firstStep.task_template_id, payload.clientId, user.id, supabase, payload.assignedTo)
     }
@@ -229,12 +272,6 @@ export async function updateJourneyStatus(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  const { data: journey } = await supabase
-    .from('advice_journeys')
-    .select('client_id')
-    .eq('id', journeyId)
-    .single()
-
   const { error } = await supabase
     .from('advice_journeys')
     .update({
@@ -245,7 +282,6 @@ export async function updateJourneyStatus(
     .eq('id', journeyId)
 
   if (error) return { error: error.message }
-
   return { error: null }
 }
 
@@ -257,53 +293,66 @@ export async function completeJourneyStep(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
+  const now = new Date().toISOString()
+
   await supabase
     .from('advice_journey_steps')
-    .update({ status: 'complete', completed_at: new Date().toISOString(), branch_outcome: 'success' })
+    .update({ status: 'complete', completed_at: now, branch_outcome: 'success' })
     .eq('id', stepId)
 
-  const { data: journey } = await supabase
-    .from('advice_journeys')
-    .select('client_id, assigned_to')
-    .eq('id', journeyId)
-    .single()
+  const [{ data: step }, { data: journey }] = await Promise.all([
+    supabase.from('advice_journey_steps').select('template_node_id, step_order').eq('id', stepId).single(),
+    supabase.from('advice_journeys').select('client_id, assigned_to').eq('id', journeyId).single(),
+  ])
 
   const clientId  = journey?.client_id ?? ''
   const assignedTo = journey?.assigned_to ?? null
 
-  // Look up template node to get explicit next-step routing
-  const node = await getNodeConfig(stepId, supabase)
-  // undefined = no config → linear; null/'__end__' = explicit terminal; string = graph target
-  const rawSuccess = node && 'next_on_success' in node ? node.next_on_success : undefined
-  const nextOnSuccess: string | null | undefined = rawSuccess === '__end__' ? null : rawSuccess
+  if (step?.template_node_id) {
+    // New lazy path: create the next step from the template graph
+    const nodes = await loadTemplateNodes(journeyId, supabase)
+    if (nodes) {
+      const nextNode = findNextTemplateNode(nodes, step.template_node_id, 'success')
+      if (!nextNode) {
+        await supabase
+          .from('advice_journeys')
+          .update({ status: 'complete', completed_at: now, updated_at: now })
+          .eq('id', journeyId)
+      } else {
+        const order = await nextStepOrder(journeyId, supabase)
+        await createAndActivateStep(journeyId, nextNode, order, clientId, user.id, assignedTo, supabase)
+      }
+      return { error: null }
+    }
+  }
 
+  // Legacy fallback: all steps were pre-created (journeys started before lazy creation)
   const { data: allSteps } = await supabase
     .from('advice_journey_steps')
-    .select('id, step_order, status, task_template_id, template_node_id')
+    .select('id, step_order, status, task_template_id')
     .eq('journey_id', journeyId)
     .order('step_order')
 
-  const nextStep = pickNextStep(allSteps ?? [], stepId, nextOnSuccess)
+  const nextStep  = (allSteps ?? []).find(s => s.id !== stepId && s.status === 'pending')
   const otherActive = (allSteps ?? []).some(s => s.id !== stepId && s.status === 'in_progress')
 
   if (!nextStep && !otherActive) {
     await supabase
       .from('advice_journeys')
-      .update({ status: 'complete', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({ status: 'complete', completed_at: now, updated_at: now })
       .eq('id', journeyId)
   } else if (nextStep) {
     await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase, assignedTo)
     await supabase
       .from('advice_journeys')
-      .update({ current_step_order: nextStep.step_order, updated_at: new Date().toISOString() })
+      .update({ current_step_order: nextStep.step_order, updated_at: now })
       .eq('id', journeyId)
   }
 
   return { error: null }
 }
 
-/** Mark a step as failed. If retries remain, increments attempt_count and keeps in_progress.
- *  Once retries are exhausted, marks complete with branch_outcome='failure' and follows next_on_failure. */
+/** Mark a step as failed. Increments attempt_count; follows retry or failure branch once exhausted. */
 export async function failJourneyStep(
   stepId: string,
   journeyId: string
@@ -319,13 +368,13 @@ export async function failJourneyStep(
     .single()
   if (!step) return { error: 'Step not found' }
 
-  const node = await getNodeConfig(stepId, supabase)
+  const nodes = step.template_node_id ? await loadTemplateNodes(journeyId, supabase) : null
+  const node   = nodes?.find(n => n.id === step.template_node_id) ?? null
   const retryMax = node?.retry_max ?? 0
-
   const newAttemptCount = (step.attempt_count ?? 0) + 1
 
   if (newAttemptCount < retryMax) {
-    // Retries remaining — stay in_progress, increment count
+    // Still have retries — stay in_progress, just increment
     await supabase
       .from('advice_journey_steps')
       .update({ attempt_count: newAttemptCount })
@@ -333,15 +382,11 @@ export async function failJourneyStep(
     return { error: null }
   }
 
-  // No retries remaining — complete with failure outcome and follow failure branch
+  // Retries exhausted — complete with failure outcome and follow failure branch
+  const now = new Date().toISOString()
   await supabase
     .from('advice_journey_steps')
-    .update({
-      status:         'complete',
-      completed_at:   new Date().toISOString(),
-      branch_outcome: 'failure',
-      attempt_count:  newAttemptCount,
-    })
+    .update({ status: 'complete', completed_at: now, branch_outcome: 'failure', attempt_count: newAttemptCount })
     .eq('id', stepId)
 
   const { data: journey } = await supabase
@@ -353,32 +398,22 @@ export async function failJourneyStep(
   const clientId  = journey?.client_id ?? ''
   const assignedTo = journey?.assigned_to ?? null
 
-  const nextOnFailure: string | null | undefined =
-    node && 'next_on_failure' in node ? (node.next_on_failure ?? null) : undefined
-
-  const { data: allSteps } = await supabase
-    .from('advice_journey_steps')
-    .select('id, step_order, status, task_template_id, template_node_id')
-    .eq('journey_id', journeyId)
-    .order('step_order')
-
-  const nextStep = pickNextStep(allSteps ?? [], stepId, nextOnFailure)
-  const otherActive = (allSteps ?? []).some(s => s.id !== stepId && s.status === 'in_progress')
-
-  if (!nextStep && !otherActive) {
-    await supabase
-      .from('advice_journeys')
-      .update({ status: 'complete', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', journeyId)
-  } else if (nextStep) {
-    await activateStep(nextStep.id, nextStep.task_template_id, clientId, user.id, supabase, assignedTo)
-    await supabase
-      .from('advice_journeys')
-      .update({ current_step_order: nextStep.step_order, updated_at: new Date().toISOString() })
-      .eq('id', journeyId)
+  if (step.template_node_id && nodes) {
+    const nextNode = findNextTemplateNode(nodes, step.template_node_id, 'failure')
+    if (!nextNode) {
+      await supabase
+        .from('advice_journeys')
+        .update({ status: 'complete', completed_at: now, updated_at: now })
+        .eq('id', journeyId)
+    } else {
+      const order = await nextStepOrder(journeyId, supabase)
+      await createAndActivateStep(journeyId, nextNode, order, clientId, user.id, assignedTo, supabase)
+    }
+    return { error: null }
   }
 
-  return { error: null }
+  // Legacy fallback (no template_node_id — treat failure same as success)
+  return completeJourneyStep(stepId, journeyId)
 }
 
 export async function reopenJourneyStep(
@@ -395,9 +430,19 @@ export async function reopenJourneyStep(
     .eq('id', stepId)
     .single()
 
+  // Remove any pending steps that were created after this one (lazy path clean-up)
+  if (step?.step_order != null) {
+    await supabase
+      .from('advice_journey_steps')
+      .delete()
+      .eq('journey_id', journeyId)
+      .gt('step_order', step.step_order)
+      .eq('status', 'pending')
+  }
+
   await supabase
     .from('advice_journey_steps')
-    .update({ status: 'in_progress', completed_at: null })
+    .update({ status: 'in_progress', completed_at: null, branch_outcome: null })
     .eq('id', stepId)
 
   await supabase
@@ -409,12 +454,6 @@ export async function reopenJourneyStep(
       updated_at:         new Date().toISOString(),
     })
     .eq('id', journeyId)
-
-  const { data: journey } = await supabase
-    .from('advice_journeys')
-    .select('client_id')
-    .eq('id', journeyId)
-    .single()
 
   return { error: null }
 }
@@ -445,7 +484,6 @@ export async function deleteJourney(journeyId: string, deleteTasks = false): Pro
 
   const { error } = await supabase.from('advice_journeys').delete().eq('id', journeyId)
   if (error) return { error: error.message }
-
   return { error: null }
 }
 
@@ -543,7 +581,6 @@ export async function checkJourneyStepAdvance(taskId: string, newStatus: string)
   if (!step) return
 
   if (newStatus === 'completed' || newStatus === 'cancelled') {
-    // Check if all tasks for this step are now done
     const { data: stepTasks } = await supabase
       .from('tasks')
       .select('id, status')
@@ -556,7 +593,6 @@ export async function checkJourneyStepAdvance(taskId: string, newStatus: string)
       await completeJourneyStep(stepId, step.journey_id)
     }
   } else {
-    // Task reopened — reopen the step if it was complete
     if (step.status === 'complete') {
       await reopenJourneyStep(stepId, step.journey_id)
     }

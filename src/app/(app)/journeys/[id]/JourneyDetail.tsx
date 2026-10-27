@@ -115,6 +115,37 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   const daysOpen    = differenceInDays(new Date(), parseISO(journey.created_at))
   const clientHref  = journey.client ? `/clients/${journey.client.id}` : '#'
 
+  // Walk the template graph from the current active step to find upcoming nodes
+  const upcomingNodes: TemplateNode[] = (() => {
+    if (!templateSteps.length) return []
+    const activeStep = sortedSteps.find(s => s.status === 'in_progress')
+    const startNodeId = activeStep?.template_node_id
+    if (!startNodeId) return []
+
+    const createdNodeIds = new Set(sortedSteps.map(s => s.template_node_id).filter(Boolean))
+    const result: TemplateNode[] = []
+    let currentId: string | null | undefined = startNodeId
+    const seen = new Set<string>()
+
+    while (currentId) {
+      if (seen.has(currentId)) break
+      seen.add(currentId)
+      const node = templateSteps.find(n => n.id === currentId)
+      if (!node) break
+      const raw = node.next_on_success
+      const nextId = raw === '__end__' ? null : raw === undefined
+        ? (() => { const idx = templateSteps.findIndex(n => n.id === currentId); return idx >= 0 && idx + 1 < templateSteps.length ? templateSteps[idx + 1].id : null })()
+        : raw
+      if (!nextId) break
+      currentId = nextId
+      if (!createdNodeIds.has(nextId)) {
+        const nextNode = templateSteps.find(n => n.id === nextId)
+        if (nextNode) result.push(nextNode)
+      }
+    }
+    return result
+  })()
+
   async function openTask(task: StepTask) {
     const { data } = await supabase
       .from('tasks')
@@ -449,14 +480,15 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
       {sortedSteps.length > 0 && (() => {
         const completedCount = sortedSteps.filter(s => s.status === 'complete').length
         const activeStep = sortedSteps.find(s => s.status === 'in_progress')
-        const pct = Math.round((completedCount / sortedSteps.length) * 100)
+        const totalCount = sortedSteps.length + upcomingNodes.length
+        const pct = Math.round((completedCount / totalCount) * 100)
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-700">
-                {activeStep ? `Current: ${activeStep.name}` : completedCount === sortedSteps.length ? 'All steps complete' : 'Not started'}
+                {activeStep ? `Current: ${activeStep.name}` : completedCount === sortedSteps.length && !upcomingNodes.length ? 'All steps complete' : 'Not started'}
               </span>
-              <span className="text-xs text-slate-500">{completedCount} / {sortedSteps.length} steps · {pct}%</span>
+              <span className="text-xs text-slate-500">{completedCount} / {totalCount} steps · {pct}%</span>
             </div>
             <div className="flex gap-1">
               {sortedSteps.map(step => (
@@ -468,6 +500,9 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                     step.status === 'in_progress' ? 'bg-blue-500'  : 'bg-slate-200'
                   }`}
                 />
+              ))}
+              {upcomingNodes.map((n, i) => (
+                <div key={`upcoming-${i}`} title={n.name} className="h-2 flex-1 rounded-full bg-slate-100 border border-slate-200" />
               ))}
             </div>
           </div>
@@ -741,6 +776,17 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
             </div>
           )
         })}
+
+        {/* Upcoming steps (lazy — not yet created, shown as ghost preview) */}
+        {upcomingNodes.map((node, i) => (
+          <div key={`ghost-${i}`} className="bg-white rounded-2xl border border-dashed border-slate-200 opacity-50">
+            <div className="flex items-center gap-3 px-5 py-3.5">
+              <div className="w-5 h-5 rounded-full border-2 border-slate-200 shrink-0" />
+              <span className="text-sm text-slate-400">{node.name}</span>
+              <span className="ml-auto text-xs text-slate-300">upcoming</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
