@@ -457,12 +457,28 @@ export async function reopenJourneyStep(
   // Lazily-created steps are immediately activated (in_progress), not pending,
   // so we must delete both pending and in_progress steps — but never complete ones.
   if (step?.step_order != null) {
-    await supabase
+    const { data: stepsToRemove } = await supabase
       .from('advice_journey_steps')
-      .delete()
+      .select('id')
       .eq('journey_id', journeyId)
       .gt('step_order', step.step_order)
       .neq('status', 'complete')
+
+    const removeIds = (stepsToRemove ?? []).map((s: any) => s.id)
+
+    if (removeIds.length > 0) {
+      // Cancel tasks linked to these steps before removing the steps themselves
+      await supabase
+        .from('tasks')
+        .update({ status: 'cancelled' })
+        .in('journey_step_id', removeIds)
+        .not('status', 'in', '("completed","cancelled")')
+
+      await supabase
+        .from('advice_journey_steps')
+        .delete()
+        .in('id', removeIds)
+    }
   }
 
   await supabase
