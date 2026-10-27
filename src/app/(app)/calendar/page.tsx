@@ -9,17 +9,22 @@ export default async function CalendarPage() {
   if (!user) return null
 
   const [{ data: profiles }, { data: clients }, { data: profile }] = await Promise.all([
-    supabase.from('profiles').select('id, full_name, email').order('full_name'),
+    supabase.from('profiles').select('id, full_name, email, ms_refresh_token').order('full_name'),
     supabase.from('clients').select('id, name').order('name').limit(500),
     supabase.from('profiles').select('ms_refresh_token').eq('id', user.id).single(),
   ])
 
+  const msConnectedProfileIds = (profiles ?? [])
+    .filter((p: any) => !!p.ms_refresh_token)
+    .map((p: any) => p.id as string)
+
   return (
     <CalendarClient
-      profiles={profiles ?? []}
+      profiles={(profiles ?? []).map(({ ms_refresh_token: _, ...p }: any) => p)}
       clients={clients ?? []}
       currentUserId={user.id}
       hasMsConnected={!!profile?.ms_refresh_token}
+      msConnectedProfileIds={msConnectedProfileIds}
     />
   )
 }

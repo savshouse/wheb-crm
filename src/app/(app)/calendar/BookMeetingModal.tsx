@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { X, Calendar, Users, Building2, Video, AlertCircle, Search } from 'lucide-react'
+import { X, Calendar, Users, Building2, Video, AlertCircle, Search, UserCheck } from 'lucide-react'
 
 type Profile = { id: string; full_name: string | null; email: string }
 type Client = { id: string; name: string }
@@ -13,6 +13,7 @@ type Props = {
   defaultDate?: string
   defaultStart?: string
   hasMsConnected: boolean
+  msConnectedProfileIds: string[]
   onClose: () => void
   onCreated: () => void
 }
@@ -24,7 +25,7 @@ function addHour(time: string): string {
 }
 
 export default function BookMeetingModal({
-  profiles, clients, currentUserId, defaultDate, defaultStart, hasMsConnected, onClose, onCreated
+  profiles, clients, currentUserId, defaultDate, defaultStart, hasMsConnected, msConnectedProfileIds, onClose, onCreated
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [subject, setSubject] = useState('')
@@ -41,7 +42,11 @@ export default function BookMeetingModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [bookForUserId, setBookForUserId] = useState(currentUserId)
+
   const otherProfiles = profiles.filter(p => p.id !== currentUserId)
+  const bookableProfiles = profiles.filter(p => msConnectedProfileIds.includes(p.id))
+  const bookForHasMs = msConnectedProfileIds.includes(bookForUserId)
 
   const selectedClientName = clients.find(c => c.id === clientId)?.name ?? ''
   const filteredClients = clients.filter(c =>
@@ -89,6 +94,7 @@ export default function BookMeetingModal({
           withTeams: hasMsConnected && withTeams,
           clientId: clientId || null,
           notes: notes || null,
+          bookForUserId: bookForUserId !== currentUserId ? bookForUserId : undefined,
         }),
       })
       const data = await res.json()
@@ -158,6 +164,36 @@ export default function BookMeetingModal({
               />
             </div>
           </div>
+
+          {/* Book for */}
+          {bookableProfiles.length > 1 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+                <UserCheck size={12} />
+                Book for
+              </label>
+              <select
+                value={bookForUserId}
+                onChange={e => {
+                  const id = e.target.value
+                  setBookForUserId(id)
+                  setWithTeams(msConnectedProfileIds.includes(id))
+                }}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {bookableProfiles.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name ?? p.email.split('@')[0]}{p.id === currentUserId ? ' (me)' : ''}
+                  </option>
+                ))}
+              </select>
+              {bookForUserId !== currentUserId && (
+                <p className="text-xs text-amber-700 mt-1">
+                  This meeting will be created on {profiles.find(p => p.id === bookForUserId)?.full_name ?? 'their'}'s calendar.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Attendees */}
           {otherProfiles.length > 0 && (
@@ -265,7 +301,7 @@ export default function BookMeetingModal({
           </div>
 
           {/* Teams toggle */}
-          {hasMsConnected ? (
+          {bookForHasMs ? (
             <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
               <input
                 type="checkbox"
@@ -285,7 +321,10 @@ export default function BookMeetingModal({
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
               <AlertCircle size={14} className="text-amber-600 shrink-0" />
               <p className="text-xs text-amber-700">
-                <a href="/profile" className="font-medium underline">Connect Microsoft</a> to add a Teams link automatically.
+                {bookForUserId === currentUserId
+                  ? <><a href="/profile" className="font-medium underline">Connect Microsoft</a> to add a Teams link automatically.</>
+                  : `${profiles.find(p => p.id === bookForUserId)?.full_name ?? 'This person'} hasn't connected Microsoft — no Teams link will be added.`
+                }
               </p>
             </div>
           )}

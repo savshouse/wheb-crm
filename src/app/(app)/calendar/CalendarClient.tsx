@@ -76,6 +76,7 @@ type Props = {
   clients: Client[]
   currentUserId: string
   hasMsConnected: boolean
+  msConnectedProfileIds: string[]
 }
 
 function eventTopPx(dateTime: string): number {
@@ -123,7 +124,7 @@ function shortName(p: Profile) {
   return p.email.split('@')[0]
 }
 
-export default function CalendarClient({ profiles, clients, currentUserId, hasMsConnected }: Props) {
+export default function CalendarClient({ profiles, clients, currentUserId, hasMsConnected, msConnectedProfileIds }: Props) {
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
   )
@@ -737,6 +738,7 @@ export default function CalendarClient({ profiles, clients, currentUserId, hasMs
           defaultDate={bookSlot?.date}
           defaultStart={bookSlot?.time}
           hasMsConnected={hasMsConnected}
+          msConnectedProfileIds={msConnectedProfileIds}
           onClose={() => { setShowBook(false); setBookSlot(null) }}
           onCreated={() => { setShowBook(false); setBookSlot(null); setRefreshKey(k => k + 1) }}
         />

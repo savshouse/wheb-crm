@@ -40,16 +40,18 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { subject, start, end, attendeeEmails, bodyText, withTeams, clientId, notes } = body
+  const { subject, start, end, attendeeEmails, bodyText, withTeams, clientId, notes, bookForUserId } = body
 
   if (!subject?.trim()) {
     return NextResponse.json({ error: 'Subject is required' }, { status: 400 })
   }
 
+  const calendarOwnerId: string = bookForUserId ?? user.id
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('ms_refresh_token')
-    .eq('id', user.id)
+    .eq('id', calendarOwnerId)
     .single()
 
   let calendarEventId: string | null = null
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   if (profile?.ms_refresh_token) {
     try {
-      const token = await getValidAccessToken(user.id)
+      const token = await getValidAccessToken(calendarOwnerId)
       if (!token) throw new Error('No token')
       const result = await createCalendarEvent(token, {
         subject: subject.trim(),
