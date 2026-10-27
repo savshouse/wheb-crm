@@ -398,19 +398,33 @@ export type EmailMessage = {
 export async function searchClientEmails(
   token: string,
   clientEmail: string,
-  size = 50
+  maxResults = 100
 ): Promise<EmailMessage[]> {
+  const PAGE_SIZE = 25 // Search API hard cap per page
   const query = `from:${clientEmail} OR to:${clientEmail}`
-  const result = await graph(token, 'POST', '/search/query', {
-    requests: [{
-      entityTypes: ['message'],
-      query: { queryString: query },
-      from: 0,
-      size,
-    }],
+
+  // Fetch first page and read the total count
+  const first = await graph(token, 'POST', '/search/query', {
+    requests: [{ entityTypes: ['message'], query: { queryString: query }, from: 0, size: PAGE_SIZE }],
   })
-  const hits: any[] = result?.value?.[0]?.hitsContainers?.[0]?.hits ?? []
-  return hits.map((h: any) => h.resource).filter(Boolean)
+  const container = first?.value?.[0]?.hitsContainers?.[0]
+  const firstHits: any[] = container?.hits ?? []
+  const total: number = Math.min(container?.total ?? 0, maxResults)
+
+  // Fetch remaining pages in parallel
+  const remainingPages = Math.ceil((total - PAGE_SIZE) / PAGE_SIZE)
+  const extraHits: any[][] = remainingPages > 0
+    ? await Promise.all(
+        Array.from({ length: remainingPages }, (_, i) =>
+          graph(token, 'POST', '/search/query', {
+            requests: [{ entityTypes: ['message'], query: { queryString: query }, from: (i + 1) * PAGE_SIZE, size: PAGE_SIZE }],
+          }).then(r => r?.value?.[0]?.hitsContainers?.[0]?.hits ?? [])
+        )
+      )
+    : []
+
+  const allHits = [...firstHits, ...extraHits.flat()]
+  return allHits.map((h: any) => h.resource).filter(Boolean)
 }
 
 export async function getMessageBody(
