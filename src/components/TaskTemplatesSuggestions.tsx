@@ -25,6 +25,7 @@ export default function TaskTemplatesSuggestions({ taskTemplateId: directId, jou
   const [templates, setTemplates]   = useState<DocTemplate[]>([])
   const [loading, setLoading]       = useState(false)
   const [open, setOpen]             = useState(false)
+  const [browseAll, setBrowseAll]   = useState(false)
   const [ctx, setCtx]               = useState<MergeContext | null>(directCtx ?? null)
   const [selected, setSelected]     = useState<DocTemplate | null>(null)
   const [primaryEmail, setPrimaryEmail] = useState<string | null>(clientEmail ?? null)
@@ -59,9 +60,9 @@ export default function TaskTemplatesSuggestions({ taskTemplateId: directId, jou
       })
   }, [templateId])
 
-  // Step 3: lazily fetch client merge context when panel is opened
+  // Step 3: lazily fetch client merge context when panel or browse-all is opened
   useEffect(() => {
-    if (!open || ctx || !clientId) return
+    if ((!open && !browseAll) || ctx || !clientId) return
     const supabase = createClient()
     Promise.all([
       supabase.from('clients').select('name, email, phone, address, ni_number, date_of_birth, vnext_id, salary, payroll_id, employer_id').eq('id', clientId).single(),
@@ -102,7 +103,7 @@ export default function TaskTemplatesSuggestions({ taskTemplateId: directId, jou
         },
       })
     })
-  }, [open, ctx, clientId])
+  }, [open, browseAll, ctx, clientId])
 
   if (loading) return (
     <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
@@ -111,56 +112,73 @@ export default function TaskTemplatesSuggestions({ taskTemplateId: directId, jou
     </div>
   )
 
-  if (!loading && templates.length === 0) return null
+  // Nothing to render if no linked templates and no client to browse against
+  if (!loading && templates.length === 0 && !clientId) return null
+
+  const modalOpen = selected !== null || browseAll
+  const closeModal = () => { setSelected(null); setBrowseAll(false) }
 
   return (
     <>
-      <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden">
+      {templates.length > 0 && (
+        <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <FileText size={13} className="text-blue-600" />
+              <span className="text-xs font-semibold text-slate-700">Suggested templates</span>
+              <span className="text-xs text-slate-400">({templates.length})</span>
+            </div>
+            {open ? <ChevronDown size={13} className="text-slate-400" /> : <ChevronRight size={13} className="text-slate-400" />}
+          </button>
+
+          {open && (
+            <div className="divide-y divide-slate-100">
+              {templates.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSelected(t)}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-blue-50 transition-colors text-left group"
+                >
+                  <div className={`shrink-0 ${t.type === 'email' ? 'text-blue-500' : 'text-amber-500'}`}>
+                    {t.type === 'email' ? <Mail size={13} /> : <FileText size={13} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-800 group-hover:text-blue-700">{t.name}</p>
+                    {t.subject && <p className="text-[11px] text-slate-400 truncate">{t.subject}</p>}
+                  </div>
+                  <span className="text-[10px] text-slate-400 shrink-0 group-hover:text-blue-500">Use →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {clientId && (
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+          onClick={() => setBrowseAll(true)}
+          className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <FileText size={13} className="text-blue-600" />
-            <span className="text-xs font-semibold text-slate-700">Suggested templates</span>
-            <span className="text-xs text-slate-400">({templates.length})</span>
-          </div>
-          {open ? <ChevronDown size={13} className="text-slate-400" /> : <ChevronRight size={13} className="text-slate-400" />}
+          <FileText size={12} />
+          Browse all correspondence templates
         </button>
+      )}
 
-        {open && (
-          <div className="divide-y divide-slate-100">
-            {templates.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelected(t)}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-blue-50 transition-colors text-left group"
-              >
-                <div className={`shrink-0 ${t.type === 'email' ? 'text-blue-500' : 'text-amber-500'}`}>
-                  {t.type === 'email' ? <Mail size={13} /> : <FileText size={13} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-800 group-hover:text-blue-700">{t.name}</p>
-                  {t.subject && <p className="text-[11px] text-slate-400 truncate">{t.subject}</p>}
-                </div>
-                <span className="text-[10px] text-slate-400 shrink-0 group-hover:text-blue-500">Use →</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {selected && ctx && (
+      {modalOpen && ctx && (
         <UseTemplateModal
           ctx={ctx}
           clientEmail={primaryEmail}
-          initialTemplate={selected}
-          onClose={() => setSelected(null)}
+          initialTemplate={selected ?? undefined}
+          onClose={closeModal}
         />
       )}
-      {selected && !ctx && (
+      {modalOpen && !ctx && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 flex items-center gap-3 text-sm text-slate-600">
             <Loader2 size={16} className="animate-spin text-blue-600" />
