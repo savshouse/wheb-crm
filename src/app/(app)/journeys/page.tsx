@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { Route, Clock, User, ChevronRight, Plus } from 'lucide-react'
 import JourneysFilter from './JourneysFilter'
+import AddJourneyButton from './AddJourneyButton'
+import RemindersBell from '@/components/RemindersBell'
 
 export default async function JourneysPage() {
   const supabase = await createClient()
@@ -43,6 +45,10 @@ export default async function JourneysPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900">Advice Journeys</h1>
             <p className="text-sm text-slate-500 mt-0.5">Track live advice cases and their progress</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <AddJourneyButton currentUserId={user.id} />
+            <RemindersBell />
           </div>
         </div>
         {/* Summary chips */}
