@@ -38,48 +38,43 @@ export default async function JourneysPage() {
   const stuckRows    = activeRows.filter(r => r.daysOpen > 30)
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Advice Journeys</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Track live advice cases and their progress</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <AddJourneyButton currentUserId={user.id} />
-            <RemindersBell />
-          </div>
+    <div className="p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Advice Journeys</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Track live advice cases and their progress</p>
         </div>
-        {/* Summary chips */}
-        <div className="flex flex-wrap gap-3 mt-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-center">
-            <p className="text-xl font-bold text-blue-700">{activeRows.length}</p>
-            <p className="text-xs text-blue-600">Active</p>
-          </div>
-          {Object.entries(byCategory).map(([cat, count]) => (
-            <div key={cat} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-center">
-              <p className="text-xl font-bold text-slate-700">{count as number}</p>
-              <p className="text-xs text-slate-500">{cat}</p>
-            </div>
-          ))}
-          {stuckRows.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-center">
-              <p className="text-xl font-bold text-amber-700">{stuckRows.length}</p>
-              <p className="text-xs text-amber-600">Over 30 days</p>
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          <AddJourneyButton currentUserId={user.id} />
+          <RemindersBell />
         </div>
       </div>
 
-      {/* Filters + table */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <JourneysFilter
-          journeys={rows}
-          profiles={(profiles ?? []) as any[]}
-          currentUserId={user.id}
-        />
+      {/* Summary chips */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-center">
+          <p className="text-xl font-bold text-blue-700">{activeRows.length}</p>
+          <p className="text-xs text-blue-600">Active</p>
+        </div>
+        {Object.entries(byCategory).map(([cat, count]) => (
+          <div key={cat} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-center">
+            <p className="text-xl font-bold text-slate-700">{count as number}</p>
+            <p className="text-xs text-slate-500">{cat}</p>
+          </div>
+        ))}
+        {stuckRows.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-center">
+            <p className="text-xl font-bold text-amber-700">{stuckRows.length}</p>
+            <p className="text-xs text-amber-600">Over 30 days</p>
+          </div>
+        )}
       </div>
+
+      <JourneysFilter
+        journeys={rows}
+        profiles={(profiles ?? []) as any[]}
+        currentUserId={user.id}
+      />
     </div>
   )
 }
