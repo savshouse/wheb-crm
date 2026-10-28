@@ -9,6 +9,8 @@ import {
   addTaskToStep,
   completeStepTask,
   saveJourneyTemplate,
+  reassignJourney,
+  reassignJourneyStep,
 } from '@/app/journey-actions'
 
 export async function POST(request: NextRequest) {
@@ -54,6 +56,14 @@ export async function POST(request: NextRequest) {
     }
     case 'saveJourneyTemplate': {
       const result = await saveJourneyTemplate(body.id ?? null, body.payload)
+      return NextResponse.json(result)
+    }
+    case 'reassignJourney': {
+      const result = await reassignJourney(body.journeyId, body.newAssigneeId ?? null, body.cascadeToOpenTasks === true)
+      return NextResponse.json(result)
+    }
+    case 'reassignJourneyStep': {
+      const result = await reassignJourneyStep(body.journeyId, body.taskAssignments ?? [], body.updateJourneyDefault === true, body.newJourneyAssigneeId ?? null)
       return NextResponse.json(result)
     }
     default:

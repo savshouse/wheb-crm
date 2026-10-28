@@ -702,3 +702,61 @@ export async function saveJourneyTemplate(
 
   return { error: null }
 }
+
+export async function reassignJourney(
+  journeyId: string,
+  newAssigneeId: string | null,
+  cascadeToOpenTasks: boolean
+): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('advice_journeys')
+    .update({ assigned_to: newAssigneeId, updated_at: now })
+    .eq('id', journeyId)
+  if (error) return { error: error.message }
+
+  if (cascadeToOpenTasks) {
+    const { data: steps } = await supabase
+      .from('advice_journey_steps')
+      .select('id')
+      .eq('journey_id', journeyId)
+
+    if (steps?.length) {
+      await supabase
+        .from('tasks')
+        .update({ assigned_to: newAssigneeId })
+        .in('journey_step_id', steps.map((s: any) => s.id))
+        .not('status', 'in', '("completed","cancelled")')
+    }
+  }
+
+  return { error: null }
+}
+
+export async function reassignJourneyStep(
+  journeyId: string,
+  taskAssignments: { taskId: string; assignedTo: string | null }[],
+  updateJourneyDefault: boolean,
+  newJourneyAssigneeId: string | null
+): Promise<{ error: string | null }> {
+  const supabase = await createActionClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  for (const { taskId, assignedTo } of taskAssignments) {
+    await supabase.from('tasks').update({ assigned_to: assignedTo }).eq('id', taskId)
+  }
+
+  if (updateJourneyDefault) {
+    await supabase
+      .from('advice_journeys')
+      .update({ assigned_to: newJourneyAssigneeId, updated_at: new Date().toISOString() })
+      .eq('id', journeyId)
+  }
+
+  return { error: null }
+}

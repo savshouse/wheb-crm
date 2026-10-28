@@ -6,7 +6,7 @@ import { format, parseISO, differenceInDays, isPast } from 'date-fns'
 import {
   User, Calendar, CheckCircle2, Circle, Clock,
   Plus, X, Check, AlertCircle, Ban, ExternalLink,
-  RotateCcw, Trash2, AlertTriangle, RefreshCw, GitBranch,
+  RotateCcw, Trash2, AlertTriangle, RefreshCw, GitBranch, Users,
 } from 'lucide-react'
 import { journeyApi } from '@/lib/journey-api'
 import { createClient } from '@/lib/supabase/client'
@@ -115,6 +115,17 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
   // Complete journey confirmation
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [autoCompleteTasks, setAutoCompleteTasks] = useState(true)
+
+  // Journey-level reassign
+  const [reassignJourneyOpen, setReassignJourneyOpen] = useState(false)
+  const [newJourneyAssigneeId, setNewJourneyAssigneeId] = useState(journey.assignee?.id ?? '')
+  const [cascadeToJourneyTasks, setCascadeToJourneyTasks] = useState(true)
+
+  // Step-level reassign
+  const [reassignStep, setReassignStep] = useState<Step | null>(null)
+  const [stepAssignments, setStepAssignments] = useState<Record<string, string | null>>({})
+  const [stepReassignUpdateJourney, setStepReassignUpdateJourney] = useState(false)
+  const [stepReassignJourneyAssignee, setStepReassignJourneyAssignee] = useState<string | null>(journey.assignee?.id ?? null)
 
   const openTaskIds = journey.steps.flatMap(s =>
     s.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').map(t => t.id)
@@ -294,6 +305,45 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
     })
   }
 
+  function openStepReassign(step: Step) {
+    const openTasks = step.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+    const initial: Record<string, string | null> = {}
+    openTasks.forEach(t => { initial[t.id] = t.assigned_to ?? journey.assignee?.id ?? null })
+    setStepAssignments(initial)
+    setStepReassignUpdateJourney(false)
+    setStepReassignJourneyAssignee(journey.assignee?.id ?? null)
+    setReassignStep(step)
+  }
+
+  function handleJourneyReassign() {
+    startTransition(async () => {
+      const { error } = await journeyApi({
+        op: 'reassignJourney',
+        journeyId: journey.id,
+        newAssigneeId: newJourneyAssigneeId || null,
+        cascadeToOpenTasks: cascadeToJourneyTasks,
+      })
+      if (error) setError(error)
+      else { setReassignJourneyOpen(false); router.refresh() }
+    })
+  }
+
+  function handleStepReassign() {
+    if (!reassignStep) return
+    const assignments = Object.entries(stepAssignments).map(([taskId, assignedTo]) => ({ taskId, assignedTo }))
+    startTransition(async () => {
+      const { error } = await journeyApi({
+        op: 'reassignJourneyStep',
+        journeyId: journey.id,
+        taskAssignments: assignments,
+        updateJourneyDefault: stepReassignUpdateJourney,
+        newJourneyAssigneeId: stepReassignUpdateJourney ? (stepReassignJourneyAssignee || null) : null,
+      })
+      if (error) setError(error)
+      else { setReassignStep(null); router.refresh() }
+    })
+  }
+
   function handleCompleteClick() {
     if (openTaskIds.length > 0) {
       setConfirmComplete(true)
@@ -351,6 +401,162 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
           onDeleted={() => { setSelectedTask(null); router.refresh() }}
         />
       )}
+
+      {/* Journey reassign modal */}
+      {reassignJourneyOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setReassignJourneyOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <h3 className="text-base font-bold text-slate-900 mb-4">Reassign journey</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Assign to</label>
+                  <select
+                    value={newJourneyAssigneeId}
+                    onChange={e => setNewJourneyAssigneeId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cascadeToJourneyTasks}
+                    onChange={e => setCascadeToJourneyTasks(e.target.checked)}
+                    className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-blue-800">Also reassign all open tasks on this journey</span>
+                </label>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={handleJourneyReassign}
+                  disabled={isPending}
+                  className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setReassignJourneyOpen(false)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Step reassign modal */}
+      {reassignStep && (() => {
+        const openTasks = reassignStep.tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+        const vals = Object.values(stepAssignments)
+        const allSame = vals.length > 0 && vals.every(v => v === vals[0])
+        const bulkValue = allSame ? (vals[0] ?? '') : ''
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setReassignStep(null)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                <h3 className="text-base font-bold text-slate-900 mb-0.5">Reassign step</h3>
+                <p className="text-xs text-slate-500 mb-4">{reassignStep.name}</p>
+
+                {openTasks.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4 text-center">No open tasks on this step.</p>
+                ) : (
+                  <>
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">Set all tasks to</label>
+                      <select
+                        value={bulkValue}
+                        onChange={e => {
+                          const v = e.target.value || null
+                          const updated: Record<string, string | null> = {}
+                          openTasks.forEach(t => { updated[t.id] = v })
+                          setStepAssignments(updated)
+                          if (stepReassignUpdateJourney) setStepReassignJourneyAssignee(v)
+                        }}
+                        className="w-full rounded-lg border border-slate-300 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Unassigned</option>
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {openTasks.length > 1 && (
+                      <div className="mb-4 divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                        {openTasks.map(task => (
+                          <div key={task.id} className="flex items-center gap-3 px-3 py-2.5">
+                            <span className="flex-1 text-xs text-slate-700 truncate">{task.title}</span>
+                            <select
+                              value={stepAssignments[task.id] ?? ''}
+                              onChange={e => setStepAssignments(prev => ({ ...prev, [task.id]: e.target.value || null }))}
+                              className="text-xs rounded-lg border border-slate-200 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[160px]"
+                            >
+                              <option value="">Unassigned</option>
+                              {profiles.map(p => (
+                                <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="border-t border-slate-100 pt-4 mt-2 space-y-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={stepReassignUpdateJourney}
+                      onChange={e => setStepReassignUpdateJourney(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-700">Update journey default — future steps assigned to:</span>
+                  </label>
+                  {stepReassignUpdateJourney && (
+                    <select
+                      value={stepReassignJourneyAssignee ?? ''}
+                      onChange={e => setStepReassignJourneyAssignee(e.target.value || null)}
+                      className="w-full rounded-lg border border-slate-300 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Unassigned</option>
+                      {profiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={handleStepReassign}
+                    disabled={isPending}
+                    className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isPending ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button
+                    onClick={() => setReassignStep(null)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       {/* Complete step with open tasks */}
       {confirmCompleteStep && (() => {
@@ -605,6 +811,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                   Complete
                 </button>
                 <button
+                  onClick={() => { setNewJourneyAssigneeId(journey.assignee?.id ?? ''); setCascadeToJourneyTasks(true); setReassignJourneyOpen(true) }}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                >
+                  <Users size={13} />
+                  Reassign
+                </button>
+                <button
                   onClick={() => handleStatusChange('cancelled')}
                   disabled={isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
@@ -767,6 +981,14 @@ export default function JourneyDetail({ journey, profiles, currentUserId, userRo
                           {retriesLeft > 0 ? `Retry (${retriesLeft} left)` : 'Mark as failed'}
                         </button>
                       )}
+                      <button
+                        onClick={() => openStepReassign(step)}
+                        disabled={isPending}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 disabled:opacity-50 transition-colors flex items-center gap-1"
+                      >
+                        <Users size={11} />
+                        Reassign
+                      </button>
                       <button
                         onClick={() => handleCompleteStep(step)}
                         disabled={isPending}
