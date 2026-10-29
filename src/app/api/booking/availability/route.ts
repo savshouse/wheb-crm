@@ -39,14 +39,26 @@ function parseTime(t: string) {
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const slug = searchParams.get('slug')
-  const eventTypeId = searchParams.get('eventTypeId')
+  const bookingId = searchParams.get('bookingId') // reschedule mode: derive eventTypeId from booking
+  let eventTypeId = searchParams.get('eventTypeId')
   const month = searchParams.get('month') // YYYY-MM
 
-  if (!slug || !eventTypeId || !month) {
+  if (!slug || !month || (!eventTypeId && !bookingId)) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })
   }
 
   const db = adminClient()
+
+  // In reschedule mode, look up eventTypeId from the existing booking
+  if (bookingId && !eventTypeId) {
+    const { data: existingBooking } = await db
+      .from('bookings')
+      .select('event_type_id')
+      .eq('id', bookingId)
+      .single()
+    if (!existingBooking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    eventTypeId = existingBooking.event_type_id
+  }
 
   // Load booking profile
   const { data: profile } = await db
@@ -69,7 +81,7 @@ export async function GET(req: NextRequest) {
       )
     `)
     .eq('booking_profile_id', profile.id)
-    .eq('event_type_id', eventTypeId)
+    .eq('event_type_id', eventTypeId!)
     .eq('is_active', true)
     .single()
 

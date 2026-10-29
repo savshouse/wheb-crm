@@ -606,6 +606,21 @@ export async function createCalendarEvent(
   }
 }
 
+export async function deleteCalendarEvent(token: string, eventId: string): Promise<void> {
+  await graph(token, 'DELETE', `/me/events/${eventId}`)
+}
+
+export async function updateCalendarEvent(
+  token: string,
+  eventId: string,
+  patch: { start: string; end: string }
+): Promise<void> {
+  await graph(token, 'PATCH', `/me/events/${eventId}`, {
+    start: { dateTime: patch.start, timeZone: 'Europe/London' },
+    end:   { dateTime: patch.end,   timeZone: 'Europe/London' },
+  })
+}
+
 // Syncs a single CRM task to the assigned user's Microsoft To Do immediately.
 // Called after any task create/update so changes appear in To Do without waiting for the cron.
 // Fire-and-forget: caller should .catch(console.error) rather than awaiting.
