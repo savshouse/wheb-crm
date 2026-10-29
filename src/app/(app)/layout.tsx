@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Navigation from '@/components/Navigation'
 import MsTodoAutoSync from '@/components/MsTodoAutoSync'
 import FloatingRecentActivity from '@/components/FloatingRecentActivity'
+import IdleDetector from '@/components/IdleDetector'
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const supabase = await createClient()
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
       </main>
       {hasMicrosoft && <MsTodoAutoSync />}
       <FloatingRecentActivity />
+      <IdleDetector />
     </div>
   )
 }
