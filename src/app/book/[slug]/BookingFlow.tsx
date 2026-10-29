@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { format, parseISO, addMonths, subMonths, startOfMonth, getDay, getDaysInMonth, isSameDay, isSameMonth } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
-import { ChevronLeft, ChevronRight, Clock, MapPin, Video, Building2, Car, CheckCircle, Loader2, ArrowLeft } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, MapPin, Video, Building2, Car, CheckCircle, Loader2, ArrowLeft, ExternalLink } from 'lucide-react'
 
 type Profile = {
   id: string
@@ -13,6 +13,8 @@ type Profile = {
   bio: string | null
   avatar_url: string | null
   timezone: string
+  office_address: string | null
+  office_maps_url: string | null
 }
 
 type EventType = {
@@ -184,6 +186,12 @@ export default function BookingFlow({ profile, eventTypes }: { profile: Profile;
                           {LOCATION_LABELS[et.location_type] ?? et.location_type}
                         </span>
                       </div>
+                      {et.location_type === 'our_office' && profile.office_address && (
+                        <div className="flex items-start gap-1 mt-1.5 text-xs text-slate-400">
+                          <MapPin size={11} className="mt-0.5 shrink-0" />
+                          <span className="whitespace-pre-line leading-tight">{profile.office_address}</span>
+                        </div>
+                      )}
                     </div>
                     <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-400 shrink-0" />
                   </div>
@@ -271,10 +279,25 @@ export default function BookingFlow({ profile, eventTypes }: { profile: Profile;
               <ArrowLeft size={14} />Back
             </button>
             <h2 className="text-base font-semibold text-slate-800 mb-1">{selectedEvent.name}</h2>
-            <p className="text-sm text-slate-500 mb-5">
-              {format(toZonedTime(new Date(selectedSlot), profile.timezone), "EEEE d MMMM 'at' h:mm a")}
-              {' · '}{selectedEvent.duration_minutes} min
-            </p>
+            <div className="text-sm text-slate-500 mb-5 space-y-1">
+              <p>
+                {format(toZonedTime(new Date(selectedSlot), profile.timezone), "EEEE d MMMM 'at' h:mm a")}
+                {' · '}{selectedEvent.duration_minutes} min
+              </p>
+              {selectedEvent.location_type === 'our_office' && profile.office_address && (
+                <div className="flex items-start gap-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <MapPin size={12} className="mt-0.5 shrink-0 text-slate-400" />
+                  <div>
+                    <span className="whitespace-pre-line">{profile.office_address}</span>
+                    {profile.office_maps_url && (
+                      <a href={profile.office_maps_url} target="_blank" rel="noopener noreferrer" className="block text-blue-600 hover:underline mt-0.5">
+                        View on Google Maps →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -340,6 +363,19 @@ export default function BookingFlow({ profile, eventTypes }: { profile: Profile;
               >
                 <Video size={16} />Join Teams meeting
               </a>
+            )}
+            {selectedEvent?.location_type === 'our_office' && profile.office_address && (
+              <div className="text-left mx-auto max-w-xs bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-4">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-1">
+                  <MapPin size={14} className="text-slate-400" />Meeting location
+                </div>
+                <p className="text-sm text-slate-600 whitespace-pre-line">{profile.office_address}</p>
+                {profile.office_maps_url && (
+                  <a href={profile.office_maps_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-flex items-center gap-1">
+                    <ExternalLink size={11} />View on Google Maps
+                  </a>
+                )}
+              </div>
             )}
             <p className="text-sm text-slate-500">
               A confirmation has been sent to {form.email}. Check your inbox for the calendar invite.

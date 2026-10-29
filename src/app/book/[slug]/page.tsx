@@ -33,7 +33,11 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
 
   const { data: profile } = await db
     .from('booking_profiles')
-    .select('id, slug, display_name, title, bio, avatar_url, timezone')
+    .select(`
+      id, slug, display_name, title, bio, avatar_url,
+      timezone, office_address, office_maps_url,
+      owner:profiles!booking_profiles_user_id_fkey(avatar_url)
+    `)
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
@@ -71,9 +75,16 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
     )
   }
 
+  // Use CRM profile photo as fallback when no booking-specific avatar is set
+  const owner = (profile as any).owner
+  const resolvedProfile = {
+    ...profile,
+    avatar_url: profile.avatar_url ?? (Array.isArray(owner) ? owner[0]?.avatar_url : owner?.avatar_url) ?? null,
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <BookingFlow profile={profile} eventTypes={eventTypes} />
+      <BookingFlow profile={resolvedProfile} eventTypes={eventTypes} />
     </main>
   )
 }

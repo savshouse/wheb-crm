@@ -4,9 +4,10 @@ import { useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
-  Save, Plus, Trash2, CheckCircle, Video, Building2, Car, ExternalLink,
-  Clock, Globe, Edit2, X, ChevronDown, ChevronUp,
+  Save, Plus, CheckCircle, Video, Building2, Car, ExternalLink,
+  Clock, Edit2, X, MapPin, Link as LinkIcon,
 } from 'lucide-react'
+import Link from 'next/link'
 
 type BookingProfile = {
   id: string
@@ -17,6 +18,8 @@ type BookingProfile = {
   bio: string | null
   timezone: string
   is_active: boolean
+  office_address: string | null
+  office_maps_url: string | null
 }
 
 type EventType = {
@@ -43,6 +46,8 @@ type StaffLink = {
 type Props = {
   userId: string
   myProfile: BookingProfile | null
+  crmAvatarUrl: string | null
+  crmDisplayName: string | null
   eventTypes: EventType[]
   staffLinks: StaffLink[]
   allProfiles: { id: string; full_name: string | null; email: string }[]
@@ -61,7 +66,7 @@ const LOCATION_ICONS: Record<string, React.ReactNode> = {
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
-export default function BookingSettingsClient({ userId, myProfile, eventTypes, staffLinks, allProfiles }: Props) {
+export default function BookingSettingsClient({ userId, myProfile, crmAvatarUrl, crmDisplayName, eventTypes, staffLinks, allProfiles }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [, startTransition] = useTransition()
@@ -70,13 +75,17 @@ export default function BookingSettingsClient({ userId, myProfile, eventTypes, s
   const [profile, setProfile] = useState<Partial<BookingProfile>>(
     myProfile ?? {
       slug: '',
-      display_name: allProfiles.find(p => p.id === userId)?.full_name ?? '',
+      display_name: crmDisplayName ?? allProfiles.find(p => p.id === userId)?.full_name ?? '',
       title: '',
       bio: '',
       timezone: 'Europe/London',
       is_active: true,
+      office_address: null,
+      office_maps_url: null,
     }
   )
+  // The avatar shown on the booking page — uses CRM profile photo automatically
+  const displayAvatar = crmAvatarUrl
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSuccess, setProfileSuccess] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -206,6 +215,24 @@ export default function BookingSettingsClient({ userId, myProfile, eventTypes, s
           }
         </p>
 
+        {/* Avatar preview — auto-synced from CRM profile photo */}
+        <div className="flex items-center gap-4 py-2">
+          {displayAvatar ? (
+            <img src={displayAvatar} alt="Profile photo" className="w-16 h-16 rounded-full object-cover border-2 border-slate-200" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-xl font-bold border-2 border-slate-200">
+              {(profile.display_name ?? crmDisplayName ?? '?').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-slate-700">Profile photo</p>
+            <p className="text-xs text-slate-400 mt-0.5">Your photo from the CRM is used automatically.</p>
+            <Link href="/profile" className="text-xs text-blue-600 hover:underline mt-0.5 inline-block">
+              Change photo in profile settings →
+            </Link>
+          </div>
+        </div>
+
         <form onSubmit={saveProfile} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 sm:col-span-1">
@@ -232,6 +259,39 @@ export default function BookingSettingsClient({ userId, myProfile, eventTypes, s
               <label className={labelClass}>Short bio</label>
               <textarea value={profile.bio ?? ''} onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))} rows={2} placeholder="Shown on your booking page" className={inputClass + ' resize-none'} />
             </div>
+
+            {/* Office address — shown on booking page for "our office" meetings */}
+            <div className="col-span-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 mb-3">
+                <MapPin size={14} className="text-slate-400" />
+                <span className="text-sm font-medium text-slate-700">Office address</span>
+                <span className="text-xs text-slate-400">(shown to clients when meeting type is &ldquo;Our office&rdquo;)</span>
+              </div>
+            </div>
+            <div className="col-span-2">
+              <label className={labelClass}>Address</label>
+              <textarea
+                value={profile.office_address ?? ''}
+                onChange={e => setProfile(p => ({ ...p, office_address: e.target.value || null }))}
+                rows={3}
+                placeholder={`e.g.\nWarren House\n123 High Street\nLondon, EC1A 1BB`}
+                className={inputClass + ' resize-none font-mono text-xs'}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className={labelClass}>Google Maps link <span className="text-slate-400 font-normal">(optional)</span></label>
+              <div className="relative">
+                <LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="url"
+                  value={profile.office_maps_url ?? ''}
+                  onChange={e => setProfile(p => ({ ...p, office_maps_url: e.target.value || null }))}
+                  placeholder="https://maps.app.goo.gl/..."
+                  className={inputClass + ' pl-8'}
+                />
+              </div>
+            </div>
+
             <div className="col-span-2 sm:col-span-1">
               <label className={labelClass}>Timezone</label>
               <select value={profile.timezone ?? 'Europe/London'} onChange={e => setProfile(p => ({ ...p, timezone: e.target.value }))} className={inputClass}>

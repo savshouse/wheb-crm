@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Load booking profile
   const { data: profile } = await db
     .from('booking_profiles')
-    .select('id, user_id, display_name, title, timezone')
+    .select('id, user_id, display_name, title, timezone, office_address, office_maps_url')
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
@@ -109,9 +109,11 @@ export async function POST(req: NextRequest) {
   if (token) {
     try {
       const withTeams = locationType === 'teams'
+      const officeAddr = (profile as any).office_address
       const locationText =
         locationType === 'teams' ? 'Microsoft Teams (link in invite)'
-        : locationType === 'our_office' ? 'Our office — details in confirmation email'
+        : locationType === 'our_office'
+          ? `Our office${officeAddr ? ` — ${officeAddr.replace(/\n/g, ', ')}` : ' — details in confirmation email'}`
         : 'Your location — we will contact you to confirm details'
 
       const result = await createCalendarEvent(token, {
@@ -199,11 +201,13 @@ export async function POST(req: NextRequest) {
 
   // Send confirmation emails
   const formattedDateTime = formatLocalDT(startAt, tz)
+  const officeAddress = (profile as any).office_address as string | null
+  const officeMapsUrl = (profile as any).office_maps_url as string | null
   const locationLine =
     locationType === 'teams'
       ? `This will be a Microsoft Teams video call.${teamsMeetingUrl ? `<br><strong>Teams link:</strong> <a href="${teamsMeetingUrl}">${teamsMeetingUrl}</a>` : ' The meeting link will be in your calendar invite.'}`
       : locationType === 'our_office'
-      ? 'This meeting will take place at our office.'
+      ? `This meeting will take place at our office.${officeAddress ? `<br><strong>Address:</strong><br><span style="white-space:pre-line">${officeAddress}</span>${officeMapsUrl ? `<br><a href="${officeMapsUrl}">View on Google Maps</a>` : ''}` : ''}`
       : 'This is an in-person meeting at your location — we will be in touch to confirm the address.'
 
   // Email to client

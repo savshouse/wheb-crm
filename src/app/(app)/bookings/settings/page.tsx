@@ -18,6 +18,7 @@ export default async function BookingSettingsPage() {
     { data: eventTypes },
     { data: staffLinks },
     { data: profiles },
+    { data: crmProfile },
   ] = await Promise.all([
     supabase
       .from('booking_event_types')
@@ -33,6 +34,11 @@ export default async function BookingSettingsPage() {
       .from('profiles')
       .select('id, full_name, email')
       .order('full_name'),
+    supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', user.id)
+      .single(),
   ])
 
   return (
@@ -45,6 +51,8 @@ export default async function BookingSettingsPage() {
         <BookingSettingsClient
           userId={user.id}
           myProfile={myProfile ?? null}
+          crmAvatarUrl={crmProfile?.avatar_url ?? null}
+          crmDisplayName={crmProfile?.full_name ?? null}
           eventTypes={(eventTypes ?? []) as any[]}
           staffLinks={(staffLinks ?? []) as any[]}
           allProfiles={(profiles ?? []) as any[]}
