@@ -1,33 +1,23 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-function corsHeaders(origin: string): Record<string, string> {
-  if (!origin.startsWith('chrome-extension://')) return {}
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Credentials': 'true',
-  }
-}
+import { isExtensionOrigin, extensionCorsHeaders } from '@/lib/extension-cors'
 
 export async function OPTIONS(req: NextRequest) {
   const origin = req.headers.get('origin') ?? ''
-  if (origin.startsWith('chrome-extension://')) {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    })
-  }
-  return new NextResponse(null, { status: 204 })
+  if (!isExtensionOrigin(origin)) return new NextResponse(null, { status: 204 })
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      ...extensionCorsHeaders(origin),
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }
 
 export async function GET(req: NextRequest) {
   const origin = req.headers.get('origin') ?? ''
-  const headers = corsHeaders(origin)
+  const headers = extensionCorsHeaders(origin)
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
