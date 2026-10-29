@@ -12,12 +12,15 @@ import {
   crmStatusToTodo,
   createTodoSubscription,
   renewTodoSubscription,
+  createCalendarSubscription,
+  renewCalendarSubscription,
   type TodoTaskInput,
   type SubTaskEntry,
   type SubTaskIds,
 } from '@/lib/microsoft-graph'
 
 const WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/ms-todo'
+const CALENDAR_WEBHOOK_URL = 'https://wheb-crm.vercel.app/api/webhook/calendar'
 
 // GET /api/cron/ms-todo-sync
 // Called by Vercel cron every 15 minutes.
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   const { data: users } = await adminClient
     .from('profiles')
-    .select('id, ms_refresh_token, ms_todo_list_id, ms_todo_subscription_id, ms_todo_subscription_expires_at')
+    .select('id, ms_refresh_token, ms_todo_list_id, ms_todo_subscription_id, ms_todo_subscription_expires_at, ms_calendar_subscription_id, ms_calendar_subscription_expires_at')
     .not('ms_refresh_token', 'is', null)
 
   if (!users?.length) return NextResponse.json({ ok: true, synced: 0 })
@@ -74,6 +77,25 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {
         console.error(`Subscription renewal failed for ${user.id}:`, e)
+      }
+
+      // Renew calendar change-notification subscription if expiring within 2 days
+      try {
+        const calExpiry = user.ms_calendar_subscription_expires_at
+          ? new Date(user.ms_calendar_subscription_expires_at)
+          : new Date(0)
+        const twoDaysFromNow = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+        if (!user.ms_calendar_subscription_id || calExpiry < twoDaysFromNow) {
+          if (user.ms_calendar_subscription_id && calExpiry > new Date()) {
+            const newExpiry = await renewCalendarSubscription(token, user.ms_calendar_subscription_id)
+            await adminClient.from('profiles').update({ ms_calendar_subscription_expires_at: newExpiry }).eq('id', user.id)
+          } else {
+            const { id: calSubId, expiresAt: calExpiresAt } = await createCalendarSubscription(token, CALENDAR_WEBHOOK_URL, process.env.MS_WEBHOOK_SECRET ?? '')
+            await adminClient.from('profiles').update({ ms_calendar_subscription_id: calSubId, ms_calendar_subscription_expires_at: calExpiresAt }).eq('id', user.id)
+          }
+        }
+      } catch (e) {
+        console.error(`Calendar subscription renewal failed for ${user.id}:`, e)
       }
 
       // --- Sync To Do → CRM (completions) FIRST ---

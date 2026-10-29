@@ -368,7 +368,42 @@ export async function disconnectMicrosoft(userId: string): Promise<void> {
     ms_todo_list_id: null,
     ms_todo_subscription_id: null,
     ms_todo_subscription_expires_at: null,
+    ms_calendar_subscription_id: null,
+    ms_calendar_subscription_expires_at: null,
   }).eq('id', userId)
+}
+
+// Calendar subscription management — fires when events are created/updated in the user's calendar.
+// Subscriptions last ~3 days; the cron renews them. Webhook → /api/webhook/calendar
+export async function createCalendarSubscription(
+  token: string,
+  notificationUrl: string,
+  clientState: string
+): Promise<{ id: string; expiresAt: string }> {
+  const expirationDateTime = new Date(Date.now() + 4230 * 60 * 1000).toISOString()
+  const result = await graph(token, 'POST', '/subscriptions', {
+    changeType: 'created,updated',
+    notificationUrl,
+    resource: 'me/events',
+    expirationDateTime,
+    clientState,
+  })
+  return { id: result.id as string, expiresAt: result.expirationDateTime as string }
+}
+
+export async function renewCalendarSubscription(token: string, subscriptionId: string): Promise<string> {
+  const expirationDateTime = new Date(Date.now() + 4230 * 60 * 1000).toISOString()
+  const result = await graph(token, 'PATCH', `/subscriptions/${subscriptionId}`, { expirationDateTime })
+  return result.expirationDateTime as string
+}
+
+export async function getCalendarEventById(token: string, eventId: string): Promise<any | null> {
+  try {
+    return await graph(token, 'GET',
+      `/me/events/${encodeURIComponent(eventId)}?$select=id,subject,start,end,attendees,onlineMeeting,isCancelled`)
+  } catch {
+    return null
+  }
 }
 
 // ─── Calendar ────────────────────────────────────────────────────────────────
