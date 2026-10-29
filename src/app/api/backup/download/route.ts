@@ -13,6 +13,15 @@ export async function GET(request: NextRequest) {
   const blobUrl = request.nextUrl.searchParams.get('url')
   if (!blobUrl) return NextResponse.json({ error: 'Missing url' }, { status: 400 })
 
+  // Validate the URL is a genuine Vercel Blob URL before forwarding the token
+  let parsed: URL
+  try { parsed = new URL(blobUrl) } catch {
+    return NextResponse.json({ error: 'Invalid url' }, { status: 400 })
+  }
+  if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.blob.vercel-storage.com')) {
+    return NextResponse.json({ error: 'Invalid url' }, { status: 400 })
+  }
+
   const response = await fetch(blobUrl, {
     headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
   })
