@@ -33,29 +33,33 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
 
   const { data: profile } = await db
     .from('booking_profiles')
-    .select(`
-      id, slug, display_name, title, bio, avatar_url,
-      timezone, office_address, office_maps_url,
-      owner:profiles!booking_profiles_user_id_fkey(avatar_url)
-    `)
+    .select('id, slug, display_name, title, bio, avatar_url, timezone, office_address, office_maps_url, user_id')
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
 
   if (!profile) notFound()
 
-  // Load active event types for this advisor
-  const { data: staffLinks } = await db
-    .from('booking_staff_event_types')
-    .select(`
-      buffer_after_override,
-      event_type:booking_event_types(
-        id, name, slug, description, duration_minutes,
-        location_type, advance_days, min_notice_hours
-      )
-    `)
-    .eq('booking_profile_id', profile.id)
-    .eq('is_active', true)
+  // Fetch event types and CRM avatar in parallel
+  const [{ data: staffLinks }, { data: crmProfile }] = await Promise.all([
+    db
+      .from('booking_staff_event_types')
+      .select(`
+        buffer_after_override,
+        event_type:booking_event_types(
+          id, name, slug, description, duration_minutes,
+          location_type, advance_days, min_notice_hours
+        )
+      `)
+      .eq('booking_profile_id', profile.id)
+      .eq('is_active', true),
+    // Separate query to public.profiles — no FK join needed
+    db
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', profile.user_id)
+      .single(),
+  ])
 
   const eventTypes = (staffLinks ?? [])
     .map((l: any) => l.event_type)
@@ -76,10 +80,9 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
   }
 
   // Use CRM profile photo as fallback when no booking-specific avatar is set
-  const owner = (profile as any).owner
   const resolvedProfile = {
     ...profile,
-    avatar_url: profile.avatar_url ?? (Array.isArray(owner) ? owner[0]?.avatar_url : owner?.avatar_url) ?? null,
+    avatar_url: profile.avatar_url ?? crmProfile?.avatar_url ?? null,
   }
 
   return (
