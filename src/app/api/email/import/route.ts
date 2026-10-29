@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 function plainToHtml(text: string): string {
   return text
@@ -9,6 +10,10 @@ function plainToHtml(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   let formData: FormData
   try {
     formData = await request.formData()

@@ -9,11 +9,21 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Allow Outlook to load the task pane in its iframe/webview
+        // Base security headers for all routes
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+      {
+        // Outlook add-in task pane — CSP frame-ancestors overrides X-Frame-Options
+        // in Chromium-based Outlook (Edge WebView2). Narrowed from 'frame-ancestors *'.
         source: '/outlook',
         headers: [
-          { key: 'X-Frame-Options', value: 'ALLOWALL' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors *;" },
+          { key: 'Content-Security-Policy', value: 'frame-ancestors https://outlook.office365.com https://outlook.office.com https://outlook.live.com;' },
         ],
       },
     ]

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getValidAccessToken, getTodoTask, getChecklistItems } from '@/lib/microsoft-graph'
 
 const WEBHOOK_SECRET = process.env.MS_WEBHOOK_SECRET ?? ''
+const debug = (...args: unknown[]) => { if (process.env.LOG_LEVEL === 'debug') console.log(...args) }
 
 // POST /api/webhook/ms-todo
 // Receives Microsoft Graph change notifications when To Do tasks are updated.
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     const taskId: string | undefined =
       (notification.resourceData?.id as string | undefined) ??
       (notification.resource as string | undefined)?.split('/tasks/')?.[1]
-    console.log(`[Webhook] notification: changeType=${notification.changeType} taskId=${taskId ?? 'MISSING'} resourceData=${JSON.stringify(notification.resourceData)}`)
+    debug(`[Webhook] notification: changeType=${notification.changeType} taskId=${taskId ?? 'MISSING'} resourceData=${JSON.stringify(notification.resourceData)}`)
     if (!taskId || !subscriptionId) continue
 
     try {
@@ -56,20 +57,20 @@ export async function POST(req: NextRequest) {
       if (!token) continue
 
       const listId = profile.ms_todo_list_id as string
-      console.log(`[Webhook] processing taskId=${taskId} listId=${listId}`)
+      debug(`[Webhook] processing taskId=${taskId} listId=${listId}`)
 
       // Fetch task — retry once after 2 s if not yet completed, because
       // Graph change notifications fire faster than the API reflects the change.
       let task = await getTodoTask(token, listId, taskId)
-      console.log(`[Webhook] task status=${task?.status} completedDateTime=${task?.completedDateTime}`)
+      debug(`[Webhook] task status=${task?.status} completedDateTime=${task?.completedDateTime}`)
       if (task && task.status !== 'completed' && task.completedDateTime == null) {
         await new Promise(r => setTimeout(r, 2000))
         task = await getTodoTask(token, listId, taskId)
-        console.log(`[Webhook] after retry: status=${task?.status} completedDateTime=${task?.completedDateTime}`)
+        debug(`[Webhook] after retry: status=${task?.status} completedDateTime=${task?.completedDateTime}`)
       }
 
       const steps = await getChecklistItems(token, listId, taskId)
-      console.log(`[Webhook] steps=${steps.length} checked=${steps.filter(s => s.isChecked).length}`)
+      debug(`[Webhook] steps=${steps.length} checked=${steps.filter(s => s.isChecked).length}`)
 
       // --- Parent task completion ---
       if (task?.status === 'completed' || task?.completedDateTime != null) {
@@ -79,12 +80,12 @@ export async function POST(req: NextRequest) {
           .eq('ms_todo_task_id', taskId)
           .not('status', 'in', '("completed","cancelled")')
           .maybeSingle()
-        console.log(`[Webhook] CRM lookup: found=${!!crmTask} error=${lookupErr?.message}`)
+        debug(`[Webhook] CRM lookup: found=${!!crmTask} error=${lookupErr?.message}`)
         if (crmTask) {
           await db.from('tasks')
             .update({ status: 'completed', updated_at: new Date().toISOString() })
             .eq('id', crmTask.id)
-          console.log(`[Webhook] Marked CRM task ${crmTask.id} complete (parent task)`)
+          debug(`[Webhook] Marked CRM task ${crmTask.id} complete (parent task)`)
         }
       }
 
@@ -128,12 +129,12 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          console.log(`[Webhook] Step match: ${toComplete.length} sub-task(s) to complete`)
+          debug(`[Webhook] Step match: ${toComplete.length} sub-task(s) to complete`)
           if (toComplete.length) {
             await db.from('tasks')
               .update({ status: 'completed', updated_at: new Date().toISOString() })
               .in('id', [...new Set(toComplete)])
-            console.log(`[Webhook] Marked sub-tasks complete: ${toComplete.join(', ')}`)
+            debug(`[Webhook] Marked sub-tasks complete: ${toComplete.join(', ')}`)
           }
         }
       }

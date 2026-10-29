@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: 'AI not configured — add ANTHROPIC_API_KEY to Vercel env vars' }, { status: 503 })
@@ -70,7 +75,6 @@ Rules:
 
     const data = await res.json() as { content: { type: string; text: string }[] }
     const raw = data.content[0]?.text ?? ''
-    console.log('[AI] Claude response:', raw)
 
     // Strip markdown code fences if present
     const cleaned = raw.trim()
