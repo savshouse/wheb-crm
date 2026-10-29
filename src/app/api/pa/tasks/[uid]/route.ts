@@ -13,6 +13,15 @@ export async function GET(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+
+  const token = _req.nextUrl.searchParams.get('token')
+  const { data: tokenProfile } = await adminClient
+    .from('profiles')
+    .select('id')
+    .eq('api_token', token ?? '')
+    .maybeSingle()
+  if (!tokenProfile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { uid } = await params
 
   const { data: profile } = await adminClient
@@ -85,6 +94,15 @@ export async function PATCH(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+
+  const token = req.nextUrl.searchParams.get('token')
+  const { data: tokenProfile } = await adminClient
+    .from('profiles')
+    .select('id')
+    .eq('api_token', token ?? '')
+    .maybeSingle()
+  if (!tokenProfile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { uid } = await params
 
   const { data: profile } = await adminClient

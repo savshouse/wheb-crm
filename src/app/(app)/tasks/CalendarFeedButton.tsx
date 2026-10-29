@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CalendarDays, Copy, Check, X } from 'lucide-react'
+import { CalendarDays, Copy, Check, X, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect from '@/components/SearchableSelect'
 
@@ -12,6 +12,8 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [selectedUid, setSelectedUid] = useState(userId)
+  const [apiToken, setApiToken] = useState<string | null>(null)
+  const [rotating, setRotating] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -20,14 +22,30 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
       .select('id, full_name, email')
       .order('full_name')
       .then(({ data }) => setProfiles(data ?? []))
+    fetch('/api/user/api-token')
+      .then(r => r.json())
+      .then(d => setApiToken(d.token ?? null))
   }, [open])
+
+  async function rotateToken() {
+    setRotating(true)
+    try {
+      const res = await fetch('/api/user/api-token', { method: 'POST' })
+      const d = await res.json()
+      setApiToken(d.token ?? null)
+    } finally {
+      setRotating(false)
+    }
+  }
 
   const selectedProfile = profiles.find(p => p.id === selectedUid)
   const displayName = selectedProfile
     ? (selectedProfile.full_name ?? selectedProfile.email)
     : null
 
-  const url = `https://wheb-crm.vercel.app/api/calendar/${selectedUid}`
+  const url = apiToken
+    ? `https://wheb-crm.vercel.app/api/calendar/${selectedUid}?token=${apiToken}`
+    : ''
 
   async function copy() {
     await navigator.clipboard.writeText(url)
@@ -90,14 +108,29 @@ export default function CalendarFeedButton({ userId }: { userId: string }) {
               </div>
 
               {/* URL box */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2 mb-5">
-                <span className="flex-1 text-xs font-mono text-slate-600 break-all">{url}</span>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2 mb-2">
+                {url
+                  ? <span className="flex-1 text-xs font-mono text-slate-600 break-all">{url}</span>
+                  : <span className="flex-1 text-xs text-slate-400 italic">Generating secure link…</span>
+                }
                 <button
                   onClick={copy}
-                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+                  disabled={!url}
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
                 >
                   {copied ? <Check size={12} /> : <Copy size={12} />}
                   {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <div className="flex items-center justify-end mb-4">
+                <button
+                  onClick={rotateToken}
+                  disabled={rotating}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+                  title="Generate a new token — invalidates the current feed URL"
+                >
+                  <RefreshCw size={11} className={rotating ? 'animate-spin' : ''} />
+                  Rotate token
                 </button>
               </div>
 
