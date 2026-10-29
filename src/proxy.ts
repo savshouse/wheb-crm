@@ -1,7 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Routes served to external services (MS Graph, Vercel cron) — never have a
+// Supabase session, so skip the auth check entirely to avoid pointless network calls.
+const EXTERNAL_PREFIXES = ['/api/webhook/', '/api/cron/']
+
+// Routes accessible without a session (auth pages, public token-protected feeds, add-in).
+const PUBLIC_PREFIXES = [
+  '/auth/',
+  '/api/rss/',
+  '/api/pa/',
+  '/privacy',
+  '/outlook',  // covers /outlook and /outlook-addin
+]
+
+// /api/calendar/{uuid} — iCal feed, token-protected at the route level.
+// Other /api/calendar/* routes (schedule, search, outlook-search) are protected.
+// 's', 'o', 'u' etc. are not hex chars so those names won't match.
+const CALENDAR_FEED_RE = /^\/api\/calendar\/[0-9a-f-]{32,}$/i
+
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Let external-service routes bypass session handling completely
+  if (EXTERNAL_PREFIXES.some(p => pathname.startsWith(p))) {
+    return NextResponse.next()
+  }
+
+  // Build the response object; setAll will replace it with a new one carrying
+  // refreshed cookies whenever Supabase rotates the session token.
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -23,23 +50,25 @@ export async function proxy(request: NextRequest) {
     }
   )
 
+  // getUser() validates the JWT with Supabase Auth (unlike getSession() which trusts
+  // the local cookie without re-checking). This also triggers token refresh.
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/auth')
-  const isPublicAsset = /\.(svg|png|jpg|jpeg|gif|webp|ico|css|js)$/.test(request.nextUrl.pathname)
-  const isPublicApi = request.nextUrl.pathname.startsWith('/api/calendar')
-    || request.nextUrl.pathname.startsWith('/api/pa/')
-    || request.nextUrl.pathname.startsWith('/api/rss/')
-    || request.nextUrl.pathname.startsWith('/api/cron/')
-    || request.nextUrl.pathname.startsWith('/api/webhook/')
+  const isPublic =
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p)) ||
+    CALENDAR_FEED_RE.test(pathname)
 
-  if (!user && !isAuthRoute && !isPublicAsset && !isPublicApi) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
+  if (!user && !isPublic) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/auth/login'
+    return NextResponse.redirect(loginUrl)
   }
 
-  if (user && isAuthRoute) {
+  // Redirect already-authenticated users away from auth pages
+  if (user && pathname.startsWith('/auth/')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
@@ -49,5 +78,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    // Run on all paths except Next.js internals and static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+  ],
 }
