@@ -23,16 +23,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Strict CSP for all routes except the Outlook add-in task pane
-        source: '/((?!outlook(?:-addin)?).*)',
+        // Global CSP — all routes. Outlook rule below overrides this for /outlook paths.
+        source: '/(.*)',
         headers: [
           { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self';" },
         ],
       },
       {
-        // Outlook add-in task pane — allow embedding only inside Outlook web clients.
-        // CSP frame-ancestors takes precedence over X-Frame-Options in modern browsers.
-        source: '/outlook:path*',
+        // Outlook add-in task pane — override CSP + X-Frame-Options so Outlook can embed it.
+        // Next.js applies rules in order; later rules override earlier ones for the same key.
+        source: '/outlook(.*)',
         headers: [
           { key: 'X-Frame-Options',         value: 'SAMEORIGIN' },
           { key: 'Content-Security-Policy', value: 'frame-ancestors https://outlook.office365.com https://outlook.office.com https://outlook.live.com;' },
