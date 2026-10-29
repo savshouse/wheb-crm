@@ -24,6 +24,7 @@ import {
   Mail,
   Calendar,
   MessageSquare,
+  CalendarCheck,
 } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 
@@ -35,6 +36,7 @@ const navItems = [
   { href: '/calendar',  label: 'Calendar',  icon: Calendar },
   { href: '/journeys',  label: 'Journeys',  icon: Route },
   { href: '/emails',    label: 'Emails',    icon: Mail },
+  { href: '/bookings',  label: 'Bookings',  icon: CalendarCheck },
 ]
 
 const adminTemplateItems = [

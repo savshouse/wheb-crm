@@ -550,12 +550,18 @@ export async function getUserCalendarEvents(
   return result?.value ?? []
 }
 
+export type ScheduleItem = {
+  status: string
+  start: { dateTime: string; timeZone: string }
+  end: { dateTime: string; timeZone: string }
+}
+
 export async function getTeamSchedule(
   token: string,
   emails: string[],
   start: string,
   end: string
-): Promise<{ scheduleId: string; availabilityView: string }[]> {
+): Promise<{ scheduleId: string; availabilityView: string; scheduleItems?: ScheduleItem[] }[]> {
   if (!emails.length) return []
   const result = await graph(token, 'POST', '/me/calendar/getSchedule', {
     schedules: emails,

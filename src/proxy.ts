@@ -10,8 +10,10 @@ const PUBLIC_PREFIXES = [
   '/auth/',
   '/api/rss/',
   '/api/pa/',
+  '/api/booking/',  // public booking availability + confirm endpoints
   '/privacy',
-  '/outlook',  // covers /outlook and /outlook-addin
+  '/outlook',       // covers /outlook and /outlook-addin
+  '/book',          // public per-staff booking pages
 ]
 
 // /api/calendar/{uuid} — iCal feed, token-protected at the route level.
