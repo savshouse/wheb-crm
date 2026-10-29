@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { getOrCreateWhebList, createTodoSubscription } from '@/lib/microsoft-graph'
+import { encryptToken } from '@/lib/token-crypto'
 
 const APP_URL = 'https://wheb-crm.vercel.app'
 
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
 
   await adminClient.from('profiles').update({
     ms_access_token:    tokens.access_token,
-    ms_refresh_token:   tokens.refresh_token,
+    ms_refresh_token:   encryptToken(tokens.refresh_token),
     ms_token_expires_at: expiresAt.toISOString(),
     ms_todo_list_id:    null,
   }).eq('id', user.id)

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { encryptToken, decryptToken } from '@/lib/token-crypto'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
 const TOKEN_URL = `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`
@@ -34,7 +35,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
       grant_type: 'refresh_token',
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      refresh_token: profile.ms_refresh_token as string,
+      refresh_token: decryptToken(profile.ms_refresh_token as string),
     }),
   })
 
@@ -45,7 +46,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
   await adminClient().from('profiles').update({
     ms_access_token: data.access_token,
-    ms_refresh_token: data.refresh_token ?? profile.ms_refresh_token,
+    ms_refresh_token: encryptToken(data.refresh_token ?? decryptToken(profile.ms_refresh_token as string)),
     ms_token_expires_at: newExpiry.toISOString(),
   }).eq('id', userId)
 
