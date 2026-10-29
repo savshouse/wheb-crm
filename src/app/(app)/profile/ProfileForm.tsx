@@ -7,6 +7,7 @@ import { ArrowLeft, Camera, Save, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, 
 import { updateProfile } from '@/app/actions'
 import { createClient } from '@/lib/supabase/client'
 import CropModal from './CropModal'
+import MfaEnroll from '@/components/MfaEnroll'
 
 type Profile = { id: string; full_name: string | null; email: string; role: string; avatar_url: string | null; ms_refresh_token: string | null }
 
@@ -221,6 +222,9 @@ export default function ProfileForm({
             </button>
           </form>
         </div>
+
+        {/* Two-factor authentication */}
+        <MfaEnroll />
 
         {/* Microsoft To Do integration */}
         <div className="mt-6 bg-white rounded-xl border border-slate-200 p-6">

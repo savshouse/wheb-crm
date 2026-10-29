@@ -67,11 +67,26 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Redirect already-authenticated users away from auth pages
-  if (user && pathname.startsWith('/auth/')) {
+  // Redirect already-authenticated users away from auth pages,
+  // EXCEPT /auth/mfa-challenge which is the AAL1→AAL2 step-up screen.
+  if (user && pathname.startsWith('/auth/') && pathname !== '/auth/mfa-challenge') {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
+  }
+
+  // MFA enforcement: if the user has a verified TOTP factor but the current session
+  // is only AAL1 (not yet verified this session), gate all app routes.
+  if (user && !isPublic && pathname !== '/auth/mfa-challenge') {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'mfa_required' }, { status: 401 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/mfa-challenge'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
