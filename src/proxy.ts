@@ -16,6 +16,10 @@ const PUBLIC_PREFIXES = [
   '/book',          // public per-staff booking pages
 ]
 
+// Routes that require a session but are exempt from the device trust check
+// (e.g. the device registration flow itself).
+const DEVICE_EXEMPT_PREFIXES = ['/api/auth/device/']
+
 // /api/calendar/{uuid} — iCal feed, token-protected at the route level.
 // Other /api/calendar/* routes (schedule, search, outlook-search) are protected.
 // 's', 'o', 'u' etc. are not hex chars so those names won't match.
@@ -87,6 +91,35 @@ export async function proxy(request: NextRequest) {
       }
       const url = request.nextUrl.clone()
       url.pathname = '/auth/mfa-challenge'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Device trust check — every protected, non-device-exempt route requires a
+  // verified browser token. This runs after MFA so we know the user is fully
+  // authenticated before we care about which device they're on.
+  const isDeviceExempt = DEVICE_EXEMPT_PREFIXES.some(p => pathname.startsWith(p))
+  if (user && !isPublic && !isDeviceExempt) {
+    const deviceToken = request.cookies.get('wheb_device')?.value
+    let deviceTrusted = false
+
+    if (deviceToken) {
+      const { data } = await supabase
+        .from('trusted_devices')
+        .select('id')
+        .eq('device_token', deviceToken)
+        .eq('is_active', true)
+        .not('verified_at', 'is', null)
+        .single()
+      deviceTrusted = !!data
+    }
+
+    if (!deviceTrusted) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'device_not_trusted' }, { status: 403 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/device-required'
       return NextResponse.redirect(url)
     }
   }
