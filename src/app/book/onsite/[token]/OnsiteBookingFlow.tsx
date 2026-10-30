@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
-import { ArrowLeft, Calendar, MapPin, Clock, Users, CheckCircle, Loader2, Phone } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from 'date-fns'
+import { ArrowLeft, Calendar, MapPin, Clock, Users, CheckCircle, Loader2, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type OnsiteBooking = { id: string; status: string }
 type OnsiteSlot = {
@@ -38,6 +38,107 @@ function getAvailable(slot: OnsiteSlot): number {
   return Math.max(0, slot.max_capacity - booked)
 }
 
+// ── Mini calendar ──────────────────────────────────────────────────────────────
+function MiniCalendar({
+  days,
+  onSelectDate,
+}: {
+  days: OnsiteDay[]
+  onSelectDate: (date: string) => void
+}) {
+  const firstDate = days.length > 0 ? parseISO(days[0].date) : new Date()
+  const [month, setMonth] = useState(() => new Date(firstDate.getFullYear(), firstDate.getMonth(), 1))
+
+  const monthStart = startOfMonth(month)
+  const monthEnd = endOfMonth(month)
+  const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  const startPad = (getDay(monthStart) + 6) % 7 // Mon = 0
+
+  // Map date string → available count
+  const dayInfo = new Map<string, { available: number; total: number }>()
+  for (const d of days) {
+    const total = d.onsite_slots.reduce((n, s) => n + s.max_capacity, 0)
+    const booked = d.onsite_slots.reduce((n, s) => n + s.onsite_bookings.filter(b => b.status === 'confirmed').length, 0)
+    dayInfo.set(d.date, { available: total - booked, total })
+  }
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+
+  return (
+    <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
+      {/* Month nav */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <button
+          onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-sm font-semibold text-slate-800">{format(month, 'MMMM yyyy')}</span>
+        <button
+          onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      <div className="px-3 py-3">
+        {/* Day headers */}
+        <div className="grid grid-cols-7 mb-1">
+          {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
+            <div key={d} className="text-center text-xs text-slate-400 font-medium py-1">{d}</div>
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7 gap-y-1">
+          {Array.from({ length: startPad }).map((_, i) => <div key={`p${i}`} />)}
+          {allDays.map(day => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const info = dayInfo.get(dateStr)
+            const hasSession = !!info
+            const isFull = hasSession && info.available === 0
+            const isToday = dateStr === today
+
+            return (
+              <button
+                key={dateStr}
+                onClick={() => hasSession && !isFull && onSelectDate(dateStr)}
+                disabled={!hasSession || isFull}
+                className={[
+                  'relative mx-auto flex flex-col items-center justify-center w-8 h-8 rounded-lg text-xs transition-colors',
+                  hasSession && !isFull
+                    ? 'bg-blue-600 text-white font-semibold hover:bg-blue-700 cursor-pointer'
+                    : isFull
+                    ? 'bg-slate-100 text-slate-400 cursor-default'
+                    : isToday
+                    ? 'font-bold text-blue-600'
+                    : 'text-slate-600 cursor-default',
+                ].join(' ')}
+                title={hasSession ? `${info.available} slot${info.available !== 1 ? 's' : ''} available` : undefined}
+              >
+                {format(day, 'd')}
+                {isFull && <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-slate-400" />}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 mt-3 px-1">
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="w-3 h-3 rounded bg-blue-600 inline-block" />Available
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="w-3 h-3 rounded bg-slate-100 inline-block" />Full
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function OnsiteBookingFlow({
   company, advisor, days, isEmbed, bookingToken,
 }: {
@@ -49,6 +150,12 @@ export default function OnsiteBookingFlow({
 }) {
   const [step, setStep] = useState<Step>('day')
   const [selectedDay, setSelectedDay] = useState<OnsiteDay | null>(null)
+  const dayCardRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+
+  function scrollToDay(dateStr: string) {
+    const el = dayCardRefs.current.get(dateStr)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
   const [selectedSlot, setSelectedSlot] = useState<OnsiteSlot | null>(null)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
   const [submitting, setSubmitting] = useState(false)
@@ -117,7 +224,9 @@ export default function OnsiteBookingFlow({
                 No upcoming appointments are currently available. Please check back soon.
               </p>
             ) : (
-              <div className="space-y-3">
+              <>
+                <MiniCalendar days={days} onSelectDate={scrollToDay} />
+                <div className="space-y-3">
                 {days.map(day => {
                   const totalSlots = day.onsite_slots.reduce((sum, s) => sum + s.max_capacity, 0)
                   const bookedSlots = day.onsite_slots.reduce((sum, s) =>
@@ -127,6 +236,7 @@ export default function OnsiteBookingFlow({
                   return (
                     <button
                       key={day.id}
+                      ref={el => { if (el) dayCardRefs.current.set(day.date, el); else dayCardRefs.current.delete(day.date) }}
                       onClick={() => { setSelectedDay(day); setStep('slot') }}
                       disabled={availableSlots === 0}
                       className="w-full text-left px-4 py-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors group disabled:opacity-50 disabled:cursor-default"
@@ -162,6 +272,7 @@ export default function OnsiteBookingFlow({
                   )
                 })}
               </div>
+              </>
             )}
           </div>
         )}
