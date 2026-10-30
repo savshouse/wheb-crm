@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import OnsiteDaysTab from './OnsiteDaysTab'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday } from 'date-fns'
 import { Video, Building2, Car, ExternalLink, Settings, X, ChevronLeft, ChevronRight, Loader2, Ban, CalendarClock, UserCheck, UserX } from 'lucide-react'
 import Link from 'next/link'
@@ -252,7 +253,16 @@ function RescheduleModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function BookingsClient({ bookings: initial, clients }: { bookings: Booking[]; clients: Client[] }) {
+export default function BookingsClient({
+  bookings: initial,
+  clients,
+  onsiteDays,
+}: {
+  bookings: Booking[]
+  clients: Client[]
+  onsiteDays: any[]
+}) {
+  const [activeTab, setActiveTab] = useState<'appointments' | 'onsite'>('appointments')
   const [bookings, setBookings] = useState(initial)
   const [filter, setFilter] = useState<'all' | 'confirmed' | 'cancelled'>('all')
   const [search, setSearch] = useState('')
@@ -332,6 +342,29 @@ export default function BookingsClient({ bookings: initial, clients }: { booking
           onDone={(newStartAt) => handleRescheduleDone(reschedulingBooking.id, newStartAt)}
         />
       )}
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+        {(['appointments', 'onsite'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === tab
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab === 'appointments' ? 'Appointments' : 'On-site days'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'onsite' && (
+        <OnsiteDaysTab initialDays={onsiteDays} clients={clients} />
+      )}
+
+      {activeTab === 'appointments' && <>
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -506,6 +539,7 @@ export default function BookingsClient({ bookings: initial, clients }: { booking
           ))}
         </div>
       )}
+      </> }
     </div>
   )
 }

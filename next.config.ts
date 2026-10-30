@@ -38,6 +38,15 @@ const nextConfig: NextConfig = {
           { key: 'Content-Security-Policy', value: 'frame-ancestors https://outlook.office365.com https://outlook.office.com https://outlook.live.com;' },
         ],
       },
+      {
+        // On-site booking pages — allow embedding in any external client portal via iframe.
+        // CSP frame-ancestors * supersedes X-Frame-Options in all modern browsers.
+        source: '/book/onsite(.*)',
+        headers: [
+          { key: 'X-Frame-Options',         value: 'ALLOWALL' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors *; base-uri 'self'; form-action 'self';" },
+        ],
+      },
     ]
   },
 };

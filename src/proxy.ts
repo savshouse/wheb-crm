@@ -11,6 +11,7 @@ const PUBLIC_PREFIXES = [
   '/api/rss/',
   '/api/pa/',
   '/api/booking/',  // public booking availability + confirm endpoints
+  '/api/onsite/',   // on-site booking public + management endpoints (management routes check auth internally)
   '/privacy',
   '/outlook',       // covers /outlook and /outlook-addin
   '/book',          // public per-staff booking pages
