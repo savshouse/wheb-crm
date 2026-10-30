@@ -31,7 +31,7 @@ export default async function BookingsPage() {
         profile:profiles(id, full_name),
         onsite_slots(
           id, start_time, end_time, label, max_capacity, is_active,
-          onsite_bookings(id, attendee_name, attendee_email, attendee_phone, status, created_at)
+          onsite_bookings(id, attendee_name, attendee_email, attendee_phone, status, created_at, person_id)
         )
       `)
       .eq('is_active', true)

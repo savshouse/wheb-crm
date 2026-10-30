@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Building2, Plus, ChevronDown, ChevronRight, Copy, Check, Trash2,
-  UserX, Users, MapPin, Clock, Code, X, Loader2, Pencil, Save, CalendarPlus,
+  UserX, Users, MapPin, Clock, Code, X, Loader2, Pencil, Save, CalendarPlus, AlertCircle,
 } from 'lucide-react'
 
 type OnsiteBooking = {
@@ -14,6 +14,7 @@ type OnsiteBooking = {
   attendee_phone: string | null
   status: string
   created_at: string
+  person_id?: string | null
 }
 
 type OnsiteSlot = {
@@ -604,6 +605,143 @@ function BookForModal({
   )
 }
 
+// ── Review CRM modal (for public self-bookings with no person_id) ──────────────
+function ReviewCrmModal({
+  booking, clientId, onClose, onLinked,
+}: {
+  booking: OnsiteBooking
+  clientId: string
+  onClose: () => void
+  onLinked: (bookingId: string, personId: string) => void
+}) {
+  const [crmResult, setCrmResult] = useState<CrmResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [linking, setLinking] = useState(false)
+  const [linkedMsg, setLinkedMsg] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams({ email: booking.attendee_email, name: booking.attendee_name })
+    fetch(`/api/onsite/people-lookup?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCrmResult(d) })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function doLink(payload: { personId?: string; create?: true }) {
+    setLinking(true)
+    const body = payload.personId
+      ? { personId: payload.personId }
+      : { create: { name: booking.attendee_name, email: booking.attendee_email, phone: booking.attendee_phone ?? '', companyId: clientId } }
+    const res = await fetch(`/api/onsite/bookings/${booking.id}/link-person`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = res.ok ? await res.json() : {}
+    setLinking(false)
+    return (data.personId ?? payload.personId ?? '') as string
+  }
+
+  async function handleLinkExisting(personId: string, personName: string) {
+    const pid = await doLink({ personId })
+    setLinkedMsg(`Linked to ${personName}`)
+    onLinked(booking.id, pid)
+  }
+
+  async function handleCreate() {
+    const pid = await doLink({ create: true })
+    setLinkedMsg(`Created as prospect: ${booking.attendee_name}`)
+    if (pid) onLinked(booking.id, pid)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={linkedMsg ? onClose : undefined}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <div>
+            <h3 className="font-semibold text-slate-900">CRM review</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{booking.attendee_name} · {booking.attendee_email}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {linkedMsg ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Check size={16} className="text-green-600 shrink-0" />
+                <p className="text-sm text-slate-700">{linkedMsg}</p>
+              </div>
+              <button onClick={onClose} className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50">Close</button>
+            </>
+          ) : loading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 size={14} className="animate-spin" /> Searching CRM…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {crmResult?.exact ? (
+                <>
+                  <p className="text-xs text-slate-500">Exact email match found:</p>
+                  <div className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{crmResult.exact.name}</p>
+                      <p className="text-xs text-slate-400 capitalize">{crmResult.exact.status}</p>
+                    </div>
+                    <button
+                      onClick={() => handleLinkExisting(crmResult!.exact!.id, crmResult!.exact!.name)}
+                      disabled={linking}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium disabled:opacity-50"
+                    >
+                      {linking ? <Loader2 size={10} className="animate-spin inline" /> : 'Link'}
+                    </button>
+                  </div>
+                </>
+              ) : crmResult?.similar && crmResult.similar.length > 0 ? (
+                <>
+                  <p className="text-xs text-slate-500">Possible match{crmResult.similar.length > 1 ? 'es' : ''} — same person?</p>
+                  <div className="space-y-2">
+                    {crmResult.similar.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg border border-slate-200 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{p.email} · <span className="capitalize">{p.status}</span></p>
+                        </div>
+                        <button
+                          onClick={() => handleLinkExisting(p.id, p.name)}
+                          disabled={linking}
+                          className="shrink-0 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium disabled:opacity-50"
+                        >
+                          {linking ? <Loader2 size={10} className="animate-spin inline" /> : 'Link'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={handleCreate} disabled={linking} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium disabled:opacity-50">
+                      {linking ? <Loader2 size={10} className="animate-spin" /> : <Plus size={11} />} Create separate prospect
+                    </button>
+                    <button onClick={onClose} className="text-xs px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-600">Skip</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">No existing record for <strong>{booking.attendee_email}</strong>.</p>
+                  <div className="flex gap-2">
+                    <button onClick={handleCreate} disabled={linking} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                      {linking ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Create as prospect
+                    </button>
+                    <button onClick={onClose} className="px-3 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm hover:bg-slate-50">Skip</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: OnsiteDay[]; clients: Client[] }) {
   const [days, setDays] = useState<OnsiteDay[]>(initialDays)
@@ -633,6 +771,20 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
 
   // Book for someone
   const [bookingFor, setBookingFor] = useState<{ slot: OnsiteSlot; day: OnsiteDay } | null>(null)
+
+  // Review CRM for self-booked attendees
+  const [reviewingBooking, setReviewingBooking] = useState<{ booking: OnsiteBooking; clientId: string } | null>(null)
+
+  function handlePersonLinked(bookingId: string, personId: string) {
+    setDays(ds => ds.map(d => ({
+      ...d,
+      onsite_slots: d.onsite_slots.map(s => ({
+        ...s,
+        onsite_bookings: s.onsite_bookings.map(b => b.id === bookingId ? { ...b, person_id: personId } : b),
+      })),
+    })))
+    setReviewingBooking(null)
+  }
 
   function handleOnBooked(booking: OnsiteBooking) {
     if (!bookingFor) return
@@ -946,6 +1098,15 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
                                           <p className="text-sm font-medium text-slate-800 truncate">{b.attendee_name}</p>
                                           <p className="text-xs text-slate-400 truncate">{b.attendee_email}{b.attendee_phone ? ` · ${b.attendee_phone}` : ''}</p>
                                         </div>
+                                        {!b.person_id && (
+                                          <button
+                                            onClick={() => setReviewingBooking({ booking: b, clientId: day.client.id })}
+                                            className="flex items-center gap-1 text-xs text-amber-600 hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors"
+                                            title="Link to CRM person"
+                                          >
+                                            <AlertCircle size={11} /> Review CRM
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => handleCancelBooking(b.id)}
                                           disabled={cancellingBooking === b.id}
@@ -1004,6 +1165,14 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
           company={bookingFor.day.client}
           onClose={() => setBookingFor(null)}
           onBooked={handleOnBooked}
+        />
+      )}
+      {reviewingBooking && (
+        <ReviewCrmModal
+          booking={reviewingBooking.booking}
+          clientId={reviewingBooking.clientId}
+          onClose={() => setReviewingBooking(null)}
+          onLinked={handlePersonLinked}
         />
       )}
     </div>
