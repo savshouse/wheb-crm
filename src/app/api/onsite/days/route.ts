@@ -22,12 +22,13 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  const { clientId, date, address, meetingRoom, notes, slots } = await req.json() as {
+  const { clientId, date, address, meetingRoom, notes, shortName, slots } = await req.json() as {
     clientId: string
     date: string
     address: string
     meetingRoom?: string
     notes?: string
+    shortName?: string
     slots: SlotInput[]
   }
 
@@ -45,6 +46,11 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!clientRecord) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+
+  // Save short name on the client record if provided
+  if (shortName) {
+    await db.from('clients').update({ short_name: shortName }).eq('id', clientId)
+  }
 
   // Insert day
   const { data: day, error: dayErr } = await db

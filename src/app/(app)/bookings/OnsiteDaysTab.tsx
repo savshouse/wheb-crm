@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Building2, Plus, ChevronDown, ChevronRight, Copy, Check, Trash2,
@@ -37,7 +37,7 @@ type OnsiteDay = {
   onsite_slots: OnsiteSlot[]
 }
 
-type Client = { id: string; name: string }
+type Client = { id: string; name: string; short_name: string | null }
 type SlotRow = { start_time: string; end_time: string; label: string; max_capacity: number }
 
 function fmtTime(t: string): string {
@@ -162,12 +162,18 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
   const [date, setDate] = useState('')
   const [address, setAddress] = useState('')
   const [meetingRoom, setMeetingRoom] = useState('')
+  const [shortName, setShortName] = useState('')
   const [slots, setSlots] = useState<SlotRow[]>(() => loadSavedTemplate() ?? PRESETS.full.slots)
   const [meetingType, setMeetingType] = useState('1:1 Advice Meeting')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [templateSaved, setTemplateSaved] = useState(false)
   const hasSavedTemplate = typeof window !== 'undefined' && !!localStorage.getItem(TEMPLATE_KEY)
+
+  useEffect(() => {
+    const client = clients.find(c => c.id === clientId)
+    setShortName(client?.short_name ?? '')
+  }, [clientId])
 
   function applyMeetingType() {
     setSlots(s => s.map(slot => ({ ...slot, label: meetingType })))
@@ -199,7 +205,7 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
       const res = await fetch('/api/onsite/days', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, date, address, meetingRoom: meetingRoom || undefined, slots }),
+        body: JSON.stringify({ clientId, date, address, meetingRoom: meetingRoom || undefined, shortName: shortName || undefined, slots }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Failed to create day'); return }
@@ -238,7 +244,7 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
             </div>
           </div>
 
-          {/* Meeting type */}
+          {/* Meeting type + short name */}
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 space-y-2.5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Meeting type</label>
@@ -258,8 +264,22 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
                 </button>
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Short name for calendar titles <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                value={shortName}
+                onChange={e => setShortName(e.target.value)}
+                placeholder={clients.find(c => c.id === clientId)?.name ?? 'e.g. Mercedes, BT, HMRC'}
+                className={inputMd}
+              />
+              <p className="text-xs text-slate-400 mt-1">Saved per company — auto-fills next time you add a day for this client.</p>
+            </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Outlook title preview: <span className="text-slate-600 font-medium">Attendee Name (Company) and You - {meetingType || '…'}</span>
+              Outlook title preview: <span className="text-slate-600 font-medium">
+                Attendee Name ({shortName || clients.find(c => c.id === clientId)?.name || 'Company'}) and You - {meetingType || '…'}
+              </span>
             </p>
           </div>
 

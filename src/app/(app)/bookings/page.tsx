@@ -21,7 +21,7 @@ export default async function BookingsPage() {
       .limit(500),
     supabase
       .from('clients')
-      .select('id, name, onsite_booking_token')
+      .select('id, name, short_name, onsite_booking_token')
       .order('name'),
     supabase
       .from('onsite_days')
