@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Building2, Plus, ChevronDown, ChevronRight, Copy, Check, Trash2,
-  UserX, Users, MapPin, Clock, Code, X, Loader2, Pencil, Save,
+  UserX, Users, MapPin, Clock, Code, X, Loader2, Pencil, Save, CalendarPlus,
 } from 'lucide-react'
 
 type OnsiteBooking = {
@@ -385,6 +385,225 @@ function SlotEditor({ slots, onAdd, onUpdate, onRemove }: {
   )
 }
 
+// ── Book for someone modal ─────────────────────────────────────────────────────
+type CrmPerson = { id: string; name: string; email: string; status: string }
+type CrmResult = { exact: CrmPerson | null; similar: CrmPerson[] }
+
+function BookForModal({
+  slot, day, company, onClose, onBooked,
+}: {
+  slot: OnsiteSlot
+  day: OnsiteDay
+  company: { id: string; name: string; short_name?: string | null }
+  onClose: () => void
+  onBooked: (booking: OnsiteBooking) => void
+}) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState<'form' | 'crm' | 'done'>('form')
+  const [bookedId, setBookedId] = useState<string | null>(null)
+  const [crmResult, setCrmResult] = useState<CrmResult | null>(null)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [linking, setLinking] = useState(false)
+  const [linkedMsg, setLinkedMsg] = useState('')
+
+  useEffect(() => {
+    if (!email.includes('@')) { setCrmResult(null); return }
+    const t = setTimeout(async () => {
+      setLookupLoading(true)
+      try {
+        const res = await fetch(`/api/onsite/people-lookup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`)
+        if (res.ok) setCrmResult(await res.json())
+      } finally { setLookupLoading(false) }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [email, name])
+
+  async function doLink(bookingId: string, payload: { personId?: string; create?: true }) {
+    const body = payload.personId
+      ? { personId: payload.personId }
+      : { create: { name, email, phone, companyId: company.id } }
+    await fetch(`/api/onsite/bookings/${bookingId}/link-person`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  async function handleBook(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name || !email || !phone) { setError('Name, email and mobile are required'); return }
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch('/api/onsite/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotId: slot.id, name, email, phone, notes }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Booking failed'); return }
+      onBooked({ id: data.bookingId, attendee_name: name, attendee_email: email, attendee_phone: phone, status: 'confirmed', created_at: new Date().toISOString() })
+      setBookedId(data.bookingId)
+      if (crmResult?.exact) {
+        setLinking(true)
+        await doLink(data.bookingId, { personId: crmResult.exact.id })
+        setLinkedMsg(`Linked to ${crmResult.exact.name}`)
+        setLinking(false)
+        setStep('done')
+      } else {
+        setStep('crm')
+      }
+    } finally { setSaving(false) }
+  }
+
+  async function handleLinkExisting(personId: string, personName: string) {
+    if (!bookedId) return
+    setLinking(true)
+    await doLink(bookedId, { personId })
+    setLinkedMsg(`Linked to ${personName}`)
+    setLinking(false)
+    setStep('done')
+  }
+
+  async function handleCreatePerson() {
+    if (!bookedId) return
+    setLinking(true)
+    await doLink(bookedId, { create: true })
+    setLinkedMsg(`Created as prospect: ${name}`)
+    setLinking(false)
+    setStep('done')
+  }
+
+  const dateStr = format(parseISO(day.date), 'EEEE d MMMM')
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={step === 'done' ? onClose : undefined}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <div>
+            <h3 className="font-semibold text-slate-900">Book appointment</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {dateStr} · {fmtTime(slot.start_time)}–{fmtTime(slot.end_time)}{slot.label ? ` · ${slot.label}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16} /></button>
+        </div>
+
+        {step === 'form' && (
+          <form onSubmit={handleBook} className="p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Full name <span className="text-red-500">*</span></label>
+              <input required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Jane Smith" className={inputMd} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Email <span className="text-red-500">*</span></label>
+              <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com" className={inputMd} />
+            </div>
+            {email.includes('@') && (
+              <div className="rounded-xl border border-slate-200 px-3 py-2 bg-slate-50 text-xs flex items-center gap-2">
+                <span className="font-semibold text-slate-400 uppercase tracking-wide text-[10px]">CRM</span>
+                {lookupLoading && <span className="text-slate-400">Checking…</span>}
+                {!lookupLoading && crmResult?.exact && (
+                  <span className="text-green-700">✓ Existing person: <strong>{crmResult.exact.name}</strong> <span className="text-green-500 capitalize">({crmResult.exact.status})</span></span>
+                )}
+                {!lookupLoading && !crmResult?.exact && crmResult?.similar && crmResult.similar.length > 0 && (
+                  <span className="text-amber-700">⚠ Possible match: {crmResult.similar.map(p => p.name).join(', ')}</span>
+                )}
+                {!lookupLoading && crmResult && !crmResult.exact && (!crmResult.similar || crmResult.similar.length === 0) && (
+                  <span className="text-blue-700">+ Will be created as new prospect</span>
+                )}
+                {!lookupLoading && !crmResult && <span className="text-slate-400">—</span>}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Mobile <span className="text-red-500">*</span></label>
+              <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="07700 000000" className={inputMd} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Notes <span className="text-slate-400 font-normal">(optional)</span></label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputMd + ' resize-none'} />
+            </div>
+            {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <CalendarPlus size={15} />}
+                {saving ? 'Booking…' : 'Book'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'crm' && (
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Check size={16} className="text-green-600 shrink-0" />
+              <p className="text-sm font-medium text-slate-800">Appointment booked for {name.split(' ')[0]}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Add to CRM</p>
+              {crmResult?.similar && crmResult.similar.length > 0 ? (
+                <>
+                  <p className="text-xs text-slate-500">Possible match — is this the same person?</p>
+                  <div className="space-y-2">
+                    {crmResult.similar.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 bg-white rounded-lg border border-slate-200 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{p.email} · <span className="capitalize">{p.status}</span></p>
+                        </div>
+                        <button
+                          onClick={() => handleLinkExisting(p.id, p.name)}
+                          disabled={linking}
+                          className="shrink-0 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium disabled:opacity-50"
+                        >
+                          {linking ? <Loader2 size={10} className="animate-spin" /> : 'Link'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={handleCreatePerson} disabled={linking} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium disabled:opacity-50">
+                      {linking ? <Loader2 size={10} className="animate-spin" /> : <Plus size={11} />} Create separate prospect
+                    </button>
+                    <button onClick={() => setStep('done')} className="text-xs px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-600">Skip</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">No existing record found for <strong>{email}</strong>.</p>
+                  <div className="flex gap-2">
+                    <button onClick={handleCreatePerson} disabled={linking} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                      {linking ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      Create as prospect
+                    </button>
+                    <button onClick={() => setStep('done')} className="px-3 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm hover:bg-slate-50">Skip</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Check size={16} className="text-green-600 shrink-0" />
+              <p className="text-sm font-medium text-slate-800">Done</p>
+            </div>
+            {linkedMsg && <p className="text-sm text-slate-600">{linkedMsg}</p>}
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50">Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: OnsiteDay[]; clients: Client[] }) {
   const [days, setDays] = useState<OnsiteDay[]>(initialDays)
@@ -411,6 +630,20 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
 
   // Booking cancel
   const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
+
+  // Book for someone
+  const [bookingFor, setBookingFor] = useState<{ slot: OnsiteSlot; day: OnsiteDay } | null>(null)
+
+  function handleOnBooked(booking: OnsiteBooking) {
+    if (!bookingFor) return
+    setDays(ds => ds.map(d => d.id !== bookingFor.day.id ? d : {
+      ...d,
+      onsite_slots: d.onsite_slots.map(s => s.id !== bookingFor.slot.id ? s : {
+        ...s,
+        onsite_bookings: [...s.onsite_bookings, booking],
+      }),
+    }))
+  }
 
   // Group by company
   const byCompany = new Map<string, { company: { id: string; name: string; onsite_booking_token: string }; days: OnsiteDay[] }>()
@@ -679,6 +912,15 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
                                         <span className={`text-xs font-medium ${available > 0 ? 'text-green-600' : 'text-slate-400'}`}>
                                           {available}/{slot.max_capacity} available
                                         </span>
+                                        {available > 0 && (
+                                          <button
+                                            onClick={() => setBookingFor({ slot, day })}
+                                            className="p-1 rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                            title="Book for someone"
+                                          >
+                                            <CalendarPlus size={12} />
+                                          </button>
+                                        )}
                                         <button onClick={() => startEditSlot(slot)} className="p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-200 transition-colors" title="Edit slot">
                                           <Pencil size={12} />
                                         </button>
@@ -755,6 +997,15 @@ export default function OnsiteDaysTab({ initialDays, clients }: { initialDays: O
 
       {showCreate && <CreateDayModal clients={clients} onClose={() => setShowCreate(false)} onCreated={onCreated} />}
       {embedToken && <EmbedModal token={embedToken} companyName={embedCompany} onClose={() => { setEmbedToken(null); setEmbedCompany('') }} />}
+      {bookingFor && (
+        <BookForModal
+          slot={bookingFor.slot}
+          day={bookingFor.day}
+          company={bookingFor.day.client}
+          onClose={() => setBookingFor(null)}
+          onBooked={handleOnBooked}
+        />
+      )}
     </div>
   )
 }
