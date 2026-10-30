@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (token) {
     try {
       const result = await createCalendarEvent(token, {
-        subject: `${slot.label || 'Appointment'} — ${company.name}`,
+        subject: `${name} (${company.name}) and ${profile.full_name} - ${slot.label || '1:1 Advice Meeting'}`,
         start: `${day.date}T${slot.start_time}`,
         end: `${day.date}T${slot.end_time}`,
         attendeeEmails: [email],

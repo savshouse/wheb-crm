@@ -163,10 +163,15 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
   const [address, setAddress] = useState('')
   const [meetingRoom, setMeetingRoom] = useState('')
   const [slots, setSlots] = useState<SlotRow[]>(() => loadSavedTemplate() ?? PRESETS.full.slots)
+  const [meetingType, setMeetingType] = useState('1:1 Advice Meeting')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [templateSaved, setTemplateSaved] = useState(false)
   const hasSavedTemplate = typeof window !== 'undefined' && !!localStorage.getItem(TEMPLATE_KEY)
+
+  function applyMeetingType() {
+    setSlots(s => s.map(slot => ({ ...slot, label: meetingType })))
+  }
 
   function addSlot() {
     const last = slots[slots.length - 1]
@@ -231,6 +236,31 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Meeting room <span className="text-slate-400 font-normal">(optional)</span></label>
               <input value={meetingRoom} onChange={e => setMeetingRoom(e.target.value)} placeholder="e.g. Board Room, Reception, Suite 4" className={inputMd} />
             </div>
+          </div>
+
+          {/* Meeting type */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 space-y-2.5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Meeting type</label>
+              <div className="flex gap-2">
+                <input
+                  value={meetingType}
+                  onChange={e => setMeetingType(e.target.value)}
+                  placeholder="e.g. 1:1 Advice Meeting"
+                  className={inputMd + ' flex-1'}
+                />
+                <button
+                  type="button"
+                  onClick={applyMeetingType}
+                  className="px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-700 hover:bg-white whitespace-nowrap"
+                >
+                  Apply to all slots
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Outlook title preview: <span className="text-slate-600 font-medium">Attendee Name (Company) and You - {meetingType || '…'}</span>
+            </p>
           </div>
 
           {/* Template toolbar */}
