@@ -196,7 +196,7 @@ function RescheduleView({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type View = 'detail' | 'reschedule' | 'confirm-cancel' | 'rescheduled' | 'cancelled'
+type View = 'detail' | 'reschedule' | 'rescheduled' | 'cancelled'
 
 export default function ManageBookingClient({
   token,
@@ -209,6 +209,7 @@ export default function ManageBookingClient({
   const [view, setView] = useState<View>(() =>
     initial.status === 'cancelled' ? 'cancelled' : 'detail'
   )
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [cancelBusy, setCancelBusy] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
 
@@ -366,9 +367,9 @@ export default function ManageBookingClient({
                   Reschedule
                 </button>
 
-                {view !== 'confirm-cancel' ? (
+                {!confirmingCancel ? (
                   <button
-                    onClick={() => setView('confirm-cancel')}
+                    onClick={() => setConfirmingCancel(true)}
                     className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
                   >
                     Cancel this meeting
@@ -386,7 +387,7 @@ export default function ManageBookingClient({
                         {cancelBusy ? <><Loader2 size={13} className="animate-spin" />Cancelling…</> : 'Yes, cancel'}
                       </button>
                       <button
-                        onClick={() => setView('detail')}
+                        onClick={() => setConfirmingCancel(false)}
                         className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-white"
                       >
                         Keep it

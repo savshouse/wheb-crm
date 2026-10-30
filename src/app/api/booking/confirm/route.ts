@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Load booking profile
   const { data: profile } = await db
     .from('booking_profiles')
-    .select('id, user_id, display_name, title, timezone, office_address, office_maps_url')
+    .select('id, user_id, slug, display_name, title, timezone, office_address, office_maps_url')
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
