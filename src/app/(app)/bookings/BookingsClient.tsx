@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { format, parseISO, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isSameMonth, isToday } from 'date-fns'
-import { Video, Building2, Car, ExternalLink, Settings, X, ChevronLeft, ChevronRight, Loader2, Ban, CalendarClock } from 'lucide-react'
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday } from 'date-fns'
+import { Video, Building2, Car, ExternalLink, Settings, X, ChevronLeft, ChevronRight, Loader2, Ban, CalendarClock, UserCheck, UserX } from 'lucide-react'
 import Link from 'next/link'
 
 type Booking = {
@@ -17,9 +17,13 @@ type Booking = {
   status: string
   teams_meeting_url: string | null
   created_at: string
+  client_id: string | null
   booking_profile: { display_name: string; slug: string } | null
   event_type: { name: string; duration_minutes: number } | null
+  crm_client: { id: string; name: string } | null
 }
+
+type Client = { id: string; name: string }
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-green-50 text-green-700 border-green-200',
@@ -248,13 +252,16 @@ function RescheduleModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function BookingsClient({ bookings: initial }: { bookings: Booking[] }) {
+export default function BookingsClient({ bookings: initial, clients }: { bookings: Booking[]; clients: Client[] }) {
   const [bookings, setBookings] = useState(initial)
   const [filter, setFilter] = useState<'all' | 'confirmed' | 'cancelled'>('all')
   const [search, setSearch] = useState('')
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
   const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null)
+  const [linkingId, setLinkingId] = useState<string | null>(null)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [savingLinkId, setSavingLinkId] = useState<string | null>(null)
 
   const filtered = bookings.filter(b => {
     if (filter !== 'all' && b.status !== filter) return false
@@ -294,6 +301,26 @@ export default function BookingsClient({ bookings: initial }: { bookings: Bookin
       (bookings.find(b => b.id === id)?.event_type?.duration_minutes ?? 60) * 60000
     ).toISOString()
     setBookings(bs => bs.map(b => b.id === id ? { ...b, start_at: newStartAt, end_at: newEnd } : b))
+  }
+
+  const handleLinkClient = async (bookingId: string, clientId: string | null) => {
+    setSavingLinkId(bookingId)
+    try {
+      await fetch('/api/booking/link-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, clientId }),
+      })
+      const client = clientId ? clients.find(c => c.id === clientId) ?? null : null
+      setBookings(bs => bs.map(b => b.id === bookingId
+        ? { ...b, client_id: clientId, crm_client: client }
+        : b
+      ))
+    } finally {
+      setSavingLinkId(null)
+      setLinkingId(null)
+      setLinkSearch('')
+    }
   }
 
   return (
@@ -401,6 +428,60 @@ export default function BookingsClient({ bookings: initial }: { bookings: Bookin
                   <div className="text-xs text-slate-500">{b.client_email}</div>
                   {b.client_phone && <div className="text-xs text-slate-400">{b.client_phone}</div>}
                 </div>
+
+                {/* CRM client link */}
+                {b.crm_client ? (
+                  <div className="flex items-center gap-1.5">
+                    <Link href={`/clients/${b.crm_client.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                      <UserCheck size={12} />{b.crm_client.name}
+                    </Link>
+                    <button
+                      onClick={() => handleLinkClient(b.id, null)}
+                      disabled={savingLinkId === b.id}
+                      className="text-slate-300 hover:text-slate-500"
+                      title="Unlink client"
+                    >
+                      <UserX size={12} />
+                    </button>
+                  </div>
+                ) : linkingId === b.id ? (
+                  <div className="flex flex-col gap-1 w-44">
+                    <input
+                      autoFocus
+                      value={linkSearch}
+                      onChange={e => setLinkSearch(e.target.value)}
+                      placeholder="Search clients…"
+                      className="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 w-full"
+                    />
+                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm max-h-32 overflow-y-auto">
+                      {clients
+                        .filter(c => c.name.toLowerCase().includes(linkSearch.toLowerCase()))
+                        .slice(0, 8)
+                        .map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => handleLinkClient(b.id, c.id)}
+                            className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-blue-50 text-slate-700"
+                          >
+                            {c.name}
+                          </button>
+                        ))
+                      }
+                      {clients.filter(c => c.name.toLowerCase().includes(linkSearch.toLowerCase())).length === 0 && (
+                        <p className="px-2.5 py-1.5 text-xs text-slate-400">No match</p>
+                      )}
+                    </div>
+                    <button onClick={() => { setLinkingId(null); setLinkSearch('') }} className="text-xs text-slate-400 hover:text-slate-600 text-right">Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setLinkingId(b.id)}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600"
+                    title="Link to CRM client"
+                  >
+                    <UserCheck size={12} />Link client
+                  </button>
+                )}
 
                 {b.status === 'confirmed' && (
                   <div className="flex items-center gap-1.5">

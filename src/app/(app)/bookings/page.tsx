@@ -4,17 +4,24 @@ import BookingsClient from './BookingsClient'
 export default async function BookingsPage() {
   const supabase = await createClient()
 
-  const { data: bookings } = await supabase
-    .from('bookings')
-    .select(`
-      id, client_name, client_email, client_phone, client_company,
-      start_at, end_at, location_type, status, teams_meeting_url,
-      created_at,
-      booking_profile:booking_profiles(display_name, slug),
-      event_type:booking_event_types(name, duration_minutes)
-    `)
-    .order('start_at', { ascending: false })
-    .limit(500)
+  const [{ data: bookings }, { data: clients }] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select(`
+        id, client_name, client_email, client_phone, client_company,
+        start_at, end_at, location_type, status, teams_meeting_url,
+        created_at, client_id,
+        booking_profile:booking_profiles(display_name, slug),
+        event_type:booking_event_types(name, duration_minutes),
+        crm_client:clients(id, name)
+      `)
+      .order('start_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('clients')
+      .select('id, name')
+      .order('name'),
+  ])
 
   return (
     <div className="h-full flex flex-col">
@@ -25,7 +32,7 @@ export default async function BookingsPage() {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-6">
-        <BookingsClient bookings={(bookings ?? []) as any[]} />
+        <BookingsClient bookings={(bookings ?? []) as any[]} clients={(clients ?? []) as any[]} />
       </div>
     </div>
   )

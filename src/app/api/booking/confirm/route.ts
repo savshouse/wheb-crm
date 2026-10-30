@@ -156,12 +156,29 @@ export async function POST(req: NextRequest) {
       teams_meeting_url: teamsMeetingUrl,
       status: 'confirmed',
     })
-    .select('id')
+    .select('id, booking_token')
     .single()
 
   if (bookingErr || !booking) {
     console.error('[booking/confirm] insert failed', bookingErr)
     return NextResponse.json({ error: 'Failed to save booking' }, { status: 500 })
+  }
+
+  // Auto-match to CRM client by email
+  let matchedClientId: string | null = null
+  try {
+    const { data: emailRow } = await db
+      .from('client_emails')
+      .select('client_id')
+      .ilike('email', clientEmail)
+      .limit(1)
+      .single()
+    if (emailRow?.client_id) {
+      matchedClientId = emailRow.client_id
+      await db.from('bookings').update({ client_id: matchedClientId }).eq('id', booking.id)
+    }
+  } catch {
+    // No match — fine
   }
 
   // Create CRM meeting record
@@ -180,7 +197,7 @@ export async function POST(req: NextRequest) {
           meeting_date: format(startDate, 'yyyy-MM-dd'),
           start_time: startDate.toISOString(),
           end_time: endDate.toISOString(),
-          client_id: null, // client may not be in CRM yet
+          client_id: matchedClientId,
           calendar_event_id: calendarEventId,
           teams_meeting_url: teamsMeetingUrl,
           created_by: profile.user_id,
@@ -200,6 +217,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Send confirmation emails
+  const manageUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wheb-crm.vercel.app'}/book/${profile.slug}/manage/${(booking as any).booking_token}`
   const formattedDateTime = formatLocalDT(startAt, tz)
   const officeAddress = (profile as any).office_address as string | null
   const officeMapsUrl = (profile as any).office_maps_url as string | null
@@ -221,7 +239,8 @@ export async function POST(req: NextRequest) {
         <p style="margin:0 0 8px"><strong>Duration:</strong> ${duration} minutes</p>
         <p style="margin:0">${locationLine}</p>
       </div>
-      <p>You should receive a calendar invitation shortly. If you need to rearrange, please reply to this email.</p>
+      <p>You should receive a calendar invitation shortly.</p>
+      <p><a href="${manageUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:0.9em">Reschedule or cancel this meeting</a></p>
       <p style="color:#666;font-size:0.9em">WHEB Financial Planning</p>
     </div>
   `
@@ -263,7 +282,7 @@ export async function POST(req: NextRequest) {
     // Non-fatal: booking is confirmed even if email fails
   }
 
-  return NextResponse.json({ bookingId: booking.id, teamsUrl: teamsMeetingUrl })
+  return NextResponse.json({ bookingId: booking.id, teamsUrl: teamsMeetingUrl, manageUrl })
 }
 
 async function getAdvisorEmail(db: ReturnType<typeof adminClient>, userId: string): Promise<string> {
