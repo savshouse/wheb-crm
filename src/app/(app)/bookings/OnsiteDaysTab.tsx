@@ -53,6 +53,31 @@ function bookingLink(token: string) { return `${SITE}/book/onsite/${token}` }
 const inputSm = 'px-2 py-1 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
 const inputMd = 'w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
 
+// ── Slot templates ─────────────────────────────────────────────────────────────
+const TEMPLATE_KEY = 'wheb_onsite_slot_template'
+
+function makeHalfHourSlots(startH: number, endH: number): SlotRow[] {
+  const slots: SlotRow[] = []
+  for (let h = startH; h < endH; h++) {
+    slots.push({ start_time: `${String(h).padStart(2,'0')}:00`, end_time: `${String(h).padStart(2,'0')}:30`, label: '', max_capacity: 1 })
+    slots.push({ start_time: `${String(h).padStart(2,'0')}:30`, end_time: `${String(h+1).padStart(2,'0')}:00`, label: '', max_capacity: 1 })
+  }
+  return slots
+}
+
+const PRESETS: Record<string, { label: string; slots: SlotRow[] }> = {
+  full:    { label: 'Full day (9–5, lunch 12–1)', slots: [...makeHalfHourSlots(9,12), ...makeHalfHourSlots(13,17)] },
+  half_am: { label: 'Half day AM (9–1)',           slots: makeHalfHourSlots(9,13) },
+  half_pm: { label: 'Half day PM (1–5)',           slots: makeHalfHourSlots(13,17) },
+}
+
+function loadSavedTemplate(): SlotRow[] | null {
+  try { const s = localStorage.getItem(TEMPLATE_KEY); return s ? JSON.parse(s) : null } catch { return null }
+}
+function saveTemplateToStorage(slots: SlotRow[]) {
+  try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(slots)) } catch {}
+}
+
 // ── Copy button ────────────────────────────────────────────────────────────────
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
@@ -137,9 +162,11 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
   const [date, setDate] = useState('')
   const [address, setAddress] = useState('')
   const [meetingRoom, setMeetingRoom] = useState('')
-  const [slots, setSlots] = useState<SlotRow[]>([{ start_time: '09:00', end_time: '09:30', label: '', max_capacity: 1 }])
+  const [slots, setSlots] = useState<SlotRow[]>(() => loadSavedTemplate() ?? PRESETS.full.slots)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [templateSaved, setTemplateSaved] = useState(false)
+  const hasSavedTemplate = typeof window !== 'undefined' && !!localStorage.getItem(TEMPLATE_KEY)
 
   function addSlot() {
     const last = slots[slots.length - 1]
@@ -148,6 +175,12 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
 
   function updateSlot(i: number, field: keyof SlotRow, value: string | number) {
     setSlots(s => s.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  }
+
+  function handleSaveTemplate() {
+    saveTemplateToStorage(slots)
+    setTemplateSaved(true)
+    setTimeout(() => setTemplateSaved(false), 2000)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -200,7 +233,44 @@ function CreateDayModal({ clients, onClose, onCreated }: { clients: Client[]; on
             </div>
           </div>
 
+          {/* Template toolbar */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-500 font-medium">Quick load:</span>
+            {Object.entries(PRESETS).map(([key, preset]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSlots(preset.slots.map(s => ({ ...s })))}
+                className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                {preset.label}
+              </button>
+            ))}
+            {hasSavedTemplate && (
+              <button
+                type="button"
+                onClick={() => { const t = loadSavedTemplate(); if (t) setSlots(t) }}
+                className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+              >
+                My template
+              </button>
+            )}
+          </div>
+
           <SlotEditor slots={slots} onChange={setSlots} onAdd={addSlot} onUpdate={updateSlot} onRemove={i => setSlots(s => s.filter((_, idx) => idx !== i))} />
+
+          {/* Save as template */}
+          <div className="flex items-center justify-between pt-0">
+            <button
+              type="button"
+              onClick={handleSaveTemplate}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700"
+            >
+              {templateSaved ? <Check size={12} className="text-green-500" /> : <Save size={12} />}
+              {templateSaved ? 'Saved as my template' : 'Save current slots as my template'}
+            </button>
+            <span className="text-xs text-slate-400">Loads automatically next time</span>
+          </div>
 
           {error && <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
           <div className="flex gap-3 pt-2">
