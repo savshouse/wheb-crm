@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, newStartAt, newEndAt })
 }
 
-async function getAdvisorEmail(db: ReturnType<typeof adminSupabase>, userId: string): Promise<string> {
+async function getAdvisorEmail(db: ReturnType<typeof adminClient>, userId: string): Promise<string> {
   const { data } = await db.from('profiles').select('email').eq('id', userId).single()
   return data?.email ?? ''
 }
