@@ -37,7 +37,7 @@ type OnsiteDay = {
   onsite_slots: OnsiteSlot[]
 }
 
-type Client = { id: string; name: string; short_name: string | null }
+type Client = { id: string; name: string; short_name?: string | null }
 type SlotRow = { start_time: string; end_time: string; label: string; max_capacity: number }
 
 function fmtTime(t: string): string {
