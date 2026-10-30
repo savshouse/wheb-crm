@@ -18,7 +18,7 @@ const PUBLIC_PREFIXES = [
 
 // Routes that require a session but are exempt from the device trust check
 // (e.g. the device registration flow itself).
-const DEVICE_EXEMPT_PREFIXES = ['/api/auth/device/']
+const DEVICE_EXEMPT_PREFIXES = ['/api/auth/device/', '/auth/device-required']
 
 // /api/calendar/{uuid} — iCal feed, token-protected at the route level.
 // Other /api/calendar/* routes (schedule, search, outlook-search) are protected.
@@ -75,7 +75,7 @@ export async function proxy(request: NextRequest) {
 
   // Redirect already-authenticated users away from auth pages,
   // EXCEPT /auth/mfa-challenge which is the AAL1→AAL2 step-up screen.
-  if (user && pathname.startsWith('/auth/') && pathname !== '/auth/mfa-challenge') {
+  if (user && pathname.startsWith('/auth/') && pathname !== '/auth/mfa-challenge' && pathname !== '/auth/device-required') {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
@@ -83,7 +83,7 @@ export async function proxy(request: NextRequest) {
 
   // MFA enforcement: if the user has a verified TOTP factor but the current session
   // is only AAL1 (not yet verified this session), gate all app routes.
-  if (user && !isPublic && pathname !== '/auth/mfa-challenge') {
+  if (user && !isPublic && pathname !== '/auth/mfa-challenge' && pathname !== '/auth/device-required') {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
       if (pathname.startsWith('/api/')) {
