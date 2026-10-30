@@ -12,6 +12,10 @@ const adminClient = () =>
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'WHEB <no-reply@warren-house.co.uk>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wheb-crm.vercel.app'
 
+function stripTitle(name: string): string {
+  return name.replace(/^(Mr\.?|Mrs\.?|Ms\.?|Miss\.?|Dr\.?|Prof\.?|Sir)\s+/i, '').trim()
+}
+
 function fmtTime(t: string): string {
   const [h, m] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'pm' : 'am'
@@ -73,11 +77,13 @@ export async function POST(req: NextRequest) {
 
   if (token) {
     try {
+      const locationStr = [day.meeting_room, day.address].filter(Boolean).join(' — ')
       const result = await createCalendarEvent(token, {
-        subject: `${name} (${company.short_name || company.name}) and ${profile.full_name} - ${slot.label || '1:1 Advice Meeting'}`,
+        subject: `${stripTitle(name)} (${company.short_name || company.name}) and ${profile.full_name} - ${slot.label || '1:1 Advice Meeting'}`,
         start: `${day.date}T${slot.start_time}`,
         end: `${day.date}T${slot.end_time}`,
         attendeeEmails: [email],
+        location: locationStr,
         bodyText: [
           `Meeting: ${slot.label || 'Appointment'}`,
           `Client: ${name}`,

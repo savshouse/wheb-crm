@@ -578,6 +578,7 @@ export type NewCalendarEvent = {
   end: string
   attendeeEmails: string[]
   bodyText?: string
+  location?: string
   withTeams: boolean
 }
 
@@ -598,6 +599,9 @@ export async function createCalendarEvent(
   }
   if (e.bodyText) {
     body.body = { contentType: 'text', content: e.bodyText }
+  }
+  if (e.location) {
+    body.location = { displayName: e.location }
   }
   const result = await graph(token, 'POST', '/me/events', body)
   return {
