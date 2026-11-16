@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as userClient } from '@/lib/supabase/server'
+import { encryptPii, hashPii } from '@/lib/pii-crypto'
 
 const adminClient = () =>
   createClient(
@@ -30,15 +31,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     personId = body.personId
   } else {
     const { name, email, phone, companyId } = body.create
+    const rawEmail = email || null
+    const rawPhone = phone || null
     const { data: person, error } = await db
       .from('clients')
       .insert({
         name,
-        email: email || null,
-        phone: phone || null,
-        type: 'individual',
-        status: 'prospect',
-        employer_id: companyId || null,
+        email:         null,
+        email_enc:     encryptPii(rawEmail),
+        email_hash:    hashPii(rawEmail),
+        phone:         null,
+        phone_enc:     encryptPii(rawPhone),
+        ni_number:     null,
+        type:          'individual',
+        status:        'prospect',
+        employer_id:   companyId || null,
         account_manager_id: user.id,
       })
       .select('id')

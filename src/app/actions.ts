@@ -7,6 +7,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { performBackup } from '@/lib/backup'
 import { syncTaskOnSave, getValidAccessToken, deleteTodoTask } from '@/lib/microsoft-graph'
 import { checkJourneyStepAdvance } from './journey-actions'
+import { encryptPii, hashPii, decryptClient } from '@/lib/pii-crypto'
 
 // ─── Clients ─────────────────────────────────────────────────
 
@@ -16,19 +17,29 @@ export async function createClient_action(formData: FormData) {
   if (!user) throw new Error('Unauthorized')
 
   const type = (formData.get('type') as string) || 'corporate'
+  const rawPhone = (formData.get('phone') as string) || null
+  const rawEmail = type === 'individual' ? ((formData.get('email') as string) || null) : null
+  const rawNi    = type === 'individual' ? ((formData.get('ni_number') as string) || null) : null
 
   const { data, error } = await supabase.from('clients').insert({
     name: formData.get('name') as string,
     type,
     industry:    type === 'corporate' ? ((formData.get('industry') as string) || null) : null,
     status:      (formData.get('status') as string) || 'active',
-    phone:       (formData.get('phone') as string) || null,
+    // phone kept plaintext for companies (shown client-side); encrypted for individuals
+    phone:       type === 'corporate' ? rawPhone : null,
+    phone_enc:   type === 'individual' ? encryptPii(rawPhone) : null,
     website:     type === 'corporate' ? ((formData.get('website') as string) || null) : null,
     address:     (formData.get('address') as string) || null,
     notes:       (formData.get('notes') as string) || null,
     employer_id: type === 'individual' ? ((formData.get('employer_id') as string) || null) : null,
     date_of_birth: type === 'individual' ? ((formData.get('date_of_birth') as string) || null) : null,
-    ni_number:   type === 'individual' ? ((formData.get('ni_number') as string) || null) : null,
+    // email and ni_number always encrypted for individuals
+    email:         null,
+    email_enc:     encryptPii(rawEmail),
+    email_hash:    hashPii(rawEmail),
+    ni_number:     null,
+    ni_number_enc: encryptPii(rawNi),
     created_by:  user.id,
     account_manager_id: user.id,
   }).select().single()
@@ -48,11 +59,15 @@ export async function updateClient(
 
   const { data: existing } = await supabase.from('clients').select('*').eq('id', clientId).single()
   const type = existing?.type ?? 'corporate'
+  const decryptedExisting = existing ? decryptClient(existing) : null
+
+  const rawPhone = (formData.get('phone') as string) || null
+  const rawEmail = (formData.get('email') as string) || null
+  const rawNi    = (formData.get('ni_number') as string) || null
 
   const updates: Record<string, unknown> = {
     name:    formData.get('name') as string,
     status:  formData.get('status') as string,
-    phone:   (formData.get('phone') as string) || null,
     address: (formData.get('address') as string) || null,
     notes:   (formData.get('notes') as string) || null,
   }
@@ -63,11 +78,18 @@ export async function updateClient(
   if (type === 'corporate') {
     updates.industry = (formData.get('industry') as string) || null
     updates.website  = (formData.get('website') as string) || null
+    updates.phone    = rawPhone
   } else {
-    updates.email         = (formData.get('email') as string) || null
+    // Individual: encrypt PII fields
+    updates.phone         = null
+    updates.phone_enc     = encryptPii(rawPhone)
+    updates.email         = null
+    updates.email_enc     = encryptPii(rawEmail)
+    updates.email_hash    = hashPii(rawEmail)
+    updates.ni_number     = null
+    updates.ni_number_enc = encryptPii(rawNi)
     updates.employer_id   = (formData.get('employer_id') as string) || null
     updates.date_of_birth = (formData.get('date_of_birth') as string) || null
-    updates.ni_number     = (formData.get('ni_number') as string) || null
     const salaryRaw = formData.get('salary') as string
     updates.salary = salaryRaw ? parseFloat(salaryRaw) : null
     updates.payroll_id = (formData.get('payroll_id') as string) || null
@@ -76,7 +98,7 @@ export async function updateClient(
   const { error } = await supabase.from('clients').update(updates).eq('id', clientId)
   if (error) return { error: error.message }
 
-  // Build audit log rows for every changed field
+  // Build audit log — compare plaintext values (decrypt old, new comes in as plaintext)
   const LABELS: Record<string, string> = {
     name: 'Name', status: 'Status', phone: 'Phone', address: 'Address',
     notes: 'Notes', industry: 'Industry', website: 'Website',
@@ -85,9 +107,21 @@ export async function updateClient(
   }
   const activityRows: any[] = []
 
-  for (const [field, newVal] of Object.entries(updates)) {
-    if (field === 'employer_id') continue  // handled separately below
-    const oldVal = existing?.[field] ?? null
+  // For non-encrypted fields: compare via updates map
+  const auditableUpdates: Record<string, unknown> = { ...updates }
+  // Replace encrypted keys with their plaintext equivalents for auditing
+  if (type !== 'corporate') {
+    delete auditableUpdates.phone_enc; delete auditableUpdates.phone
+    delete auditableUpdates.email_enc; delete auditableUpdates.email_hash; delete auditableUpdates.email
+    delete auditableUpdates.ni_number_enc; delete auditableUpdates.ni_number
+    auditableUpdates.phone     = rawPhone
+    auditableUpdates.email     = rawEmail
+    auditableUpdates.ni_number = rawNi
+  }
+
+  for (const [field, newVal] of Object.entries(auditableUpdates)) {
+    if (field === 'employer_id') continue
+    const oldVal = decryptedExisting?.[field] ?? null
     if (String(oldVal ?? '') !== String(newVal ?? '')) {
       activityRows.push({
         entity_type: 'client', entity_id: clientId,

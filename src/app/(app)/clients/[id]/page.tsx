@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { decryptClient } from '@/lib/pii-crypto'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import {
   ArrowLeft, Plus, Calendar, CheckSquare, Clock,
@@ -131,6 +132,10 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
   ])
 
   if (!client) notFound()
+
+  // Decrypt PII fields in-place so all downstream references stay the same
+  Object.assign(client, decryptClient(client))
+  const decryptedLinkedIndividuals = (linkedIndividuals ?? []).map(decryptClient)
 
   // Fetch task history filtered to this client's tasks
   const taskIds = (tasks ?? []).map((t: any) => t.id)
@@ -362,7 +367,7 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
                 clientName={client.name}
                 employer={employer as { id: string; name: string } | null}
                 relationships={(relationships ?? []) as any[]}
-                linkedIndividuals={(linkedIndividuals ?? []) as any[]}
+                linkedIndividuals={decryptedLinkedIndividuals as any[]}
                 allIndividuals={(allIndividuals ?? []) as any[]}
                 allCorporates={(allCorporates ?? []) as any[]}
               />
@@ -545,7 +550,7 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
                 clientName={client.name}
                 employer={employer as { id: string; name: string } | null}
                 relationships={(relationships ?? []) as any[]}
-                linkedIndividuals={(linkedIndividuals ?? []) as any[]}
+                linkedIndividuals={decryptedLinkedIndividuals as any[]}
                 allIndividuals={(allIndividuals ?? []) as any[]}
                 allCorporates={(allCorporates ?? []) as any[]}
               />
@@ -553,7 +558,7 @@ export default async function ClientDetailPage({ params, searchParams }: PagePro
               {/* Benefits Schemes */}
               <EmployerBenefits
                 employerId={id}
-                linkedIndividuals={(linkedIndividuals ?? []).map((p: any) => ({ id: p.id, name: p.name }))}
+                linkedIndividuals={decryptedLinkedIndividuals.map((p: any) => ({ id: p.id, name: p.name }))}
               />
             </>
           )}

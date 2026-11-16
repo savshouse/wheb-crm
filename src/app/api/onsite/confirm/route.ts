@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getValidAccessToken, createCalendarEvent } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
+import { encryptPii } from '@/lib/pii-crypto'
 
 const adminClient = () =>
   createClient(
@@ -103,13 +104,15 @@ export async function POST(req: NextRequest) {
   const { data: booking, error: bookingErr } = await db
     .from('onsite_bookings')
     .insert({
-      onsite_slot_id: slotId,
-      attendee_name: name,
-      attendee_email: email,
-      attendee_phone: phone,
-      notes: body.notes ?? null,
-      calendar_event_id: calendarEventId,
-      status: 'confirmed',
+      onsite_slot_id:     slotId,
+      attendee_name:      name,
+      attendee_email:     null,
+      attendee_email_enc: encryptPii(email),
+      attendee_phone:     null,
+      attendee_phone_enc: encryptPii(phone),
+      notes:              body.notes ?? null,
+      calendar_event_id:  calendarEventId,
+      status:             'confirmed',
     })
     .select('id, booking_token')
     .single()

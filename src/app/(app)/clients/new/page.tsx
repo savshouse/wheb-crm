@@ -8,6 +8,7 @@ import { ArrowLeft, Building2, User, Plus, X } from 'lucide-react'
 import SearchableSelect from '@/components/SearchableSelect'
 import { addRelationship } from '@/app/actions'
 
+
 const RELATIONSHIP_TYPES = [
   'Spouse', 'Partner', 'Civil Partner',
   'Parent', 'Child', 'Sibling',
@@ -65,36 +66,35 @@ export default function NewClientPage() {
     e.preventDefault()
     setError(null)
     const formData = new FormData(e.currentTarget)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
     startTransition(async () => {
-      const { data, error: insertErr } = await supabase.from('clients').insert({
-        name:          formData.get('name') as string,
-        type,
-        industry:      type === 'corporate' ? ((formData.get('industry') as string) || null) : null,
-        status:        (formData.get('status') as string) || 'active',
-        phone:         (formData.get('phone') as string) || null,
-        website:       type === 'corporate' ? ((formData.get('website') as string) || null) : null,
-        address:       (formData.get('address') as string) || null,
-        notes:         (formData.get('notes') as string) || null,
-        email:         type === 'individual' ? ((formData.get('email') as string) || null) : null,
-        employer_id:   type === 'individual' ? (employerId || null) : null,
-        date_of_birth: type === 'individual' ? ((formData.get('date_of_birth') as string) || null) : null,
-        ni_number:     type === 'individual' ? ((formData.get('ni_number') as string) || null) : null,
-        created_by:    user.id,
-        account_manager_id: user.id,
-      }).select().single()
-
-      if (insertErr) { setError(insertErr.message); return }
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:          formData.get('name') as string,
+          type,
+          industry:      type === 'corporate' ? ((formData.get('industry') as string) || null) : null,
+          status:        (formData.get('status') as string) || 'active',
+          phone:         (formData.get('phone') as string) || null,
+          website:       type === 'corporate' ? ((formData.get('website') as string) || null) : null,
+          address:       (formData.get('address') as string) || null,
+          notes:         (formData.get('notes') as string) || null,
+          email:         type === 'individual' ? ((formData.get('email') as string) || null) : null,
+          employer_id:   type === 'individual' ? (employerId || null) : null,
+          date_of_birth: type === 'individual' ? ((formData.get('date_of_birth') as string) || null) : null,
+          ni_number:     type === 'individual' ? ((formData.get('ni_number') as string) || null) : null,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) { setError(result.error ?? 'Failed to create client'); return }
 
       // Create any pending relationships
       for (const rel of pendingRels) {
-        await addRelationship(data.id, rel.relatedId, rel.relType)
+        await addRelationship(result.id, rel.relatedId, rel.relType)
       }
 
-      router.push(`/clients/${data.id}`)
+      router.push(`/clients/${result.id}`)
       router.refresh()
     })
   }

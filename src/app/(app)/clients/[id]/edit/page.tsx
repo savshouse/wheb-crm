@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import EditClientForm from './EditClientForm'
+import { decryptClient } from '@/lib/pii-crypto'
 
 export default async function EditClientPage({ params }: PageProps<'/clients/[id]/edit'>) {
   const { id } = await params
@@ -14,5 +15,5 @@ export default async function EditClientPage({ params }: PageProps<'/clients/[id
 
   if (!client) notFound()
 
-  return <EditClientForm client={client} corporates={corporates ?? []} clientEmails={clientEmails ?? []} />
+  return <EditClientForm client={decryptClient(client)} corporates={corporates ?? []} clientEmails={clientEmails ?? []} />
 }
