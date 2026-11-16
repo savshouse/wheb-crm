@@ -51,9 +51,11 @@ export function hashPii(value: string | null | undefined): string | null {
 export function decryptClient<T extends Record<string, any>>(row: T): T {
   return {
     ...row,
-    email:     row.email_enc     ? decryptPii(row.email_enc)     : (row.email     ?? null),
-    phone:     row.phone_enc     ? decryptPii(row.phone_enc)     : (row.phone     ?? null),
-    ni_number: row.ni_number_enc ? decryptPii(row.ni_number_enc) : (row.ni_number ?? null),
+    email:          row.email_enc          ? decryptPii(row.email_enc)          : (row.email          ?? null),
+    phone:          row.phone_enc          ? decryptPii(row.phone_enc)          : (row.phone          ?? null),
+    ni_number:      row.ni_number_enc      ? decryptPii(row.ni_number_enc)      : (row.ni_number      ?? null),
+    date_of_birth:  row.date_of_birth_enc  ? decryptPii(row.date_of_birth_enc)  : (row.date_of_birth  ?? null),
+    notes:          row.notes_enc          ? decryptPii(row.notes_enc)          : (row.notes          ?? null),
   }
 }
 

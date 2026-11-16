@@ -17,29 +17,31 @@ export async function POST(req: NextRequest) {
 
   const isIndividual = type === 'individual'
   const rawPhone = phone || null
+  const rawNotes = notes || null
   const rawEmail = isIndividual ? (email || null) : null
   const rawNi    = isIndividual ? (ni_number || null) : null
+  const rawDob   = isIndividual ? (date_of_birth || null) : null
 
   const { data, error } = await supabase.from('clients').insert({
     name,
     type,
-    status:        status || 'active',
-    industry:      !isIndividual ? (industry || null) : null,
-    website:       !isIndividual ? (website || null) : null,
-    address:       address || null,
-    notes:         notes || null,
-    // phone: plaintext for companies, encrypted for individuals
-    phone:         !isIndividual ? rawPhone : null,
-    phone_enc:     isIndividual  ? encryptPii(rawPhone) : null,
-    // email + ni always encrypted for individuals
-    email:         null,
-    email_enc:     encryptPii(rawEmail),
-    email_hash:    hashPii(rawEmail),
-    ni_number:     null,
-    ni_number_enc: encryptPii(rawNi),
-    employer_id:   isIndividual ? (employer_id || null) : null,
-    date_of_birth: isIndividual ? (date_of_birth || null) : null,
-    created_by:    user.id,
+    status:            status || 'active',
+    industry:          !isIndividual ? (industry || null) : null,
+    website:           !isIndividual ? (website || null) : null,
+    address:           address || null,
+    notes:             null,
+    notes_enc:         encryptPii(rawNotes),
+    phone:             !isIndividual ? rawPhone : null,
+    phone_enc:         isIndividual  ? encryptPii(rawPhone) : null,
+    email:             null,
+    email_enc:         encryptPii(rawEmail),
+    email_hash:        hashPii(rawEmail),
+    ni_number:         null,
+    ni_number_enc:     encryptPii(rawNi),
+    date_of_birth:     null,
+    date_of_birth_enc: encryptPii(rawDob),
+    employer_id:       isIndividual ? (employer_id || null) : null,
+    created_by:        user.id,
     account_manager_id: user.id,
   }).select('id').single()
 

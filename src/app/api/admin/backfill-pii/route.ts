@@ -25,19 +25,18 @@ export async function POST(req: NextRequest) {
   const db = adminClient()
   const results: Record<string, number> = {}
 
-  // ── clients: email, phone (individuals), ni_number ──────────────────────────
+  // ── clients ──────────────────────────────────────────────────────────────────
   const { data: clients } = await db
     .from('clients')
-    .select('id, type, email, phone, ni_number')
-    .or('email.not.is.null,phone.not.is.null,ni_number.not.is.null')
-    .is('email_enc', null)  // skip already-encrypted rows
+    .select('id, type, email, phone, ni_number, notes, date_of_birth')
+    .or('email.not.is.null,phone.not.is.null,ni_number.not.is.null,notes.not.is.null,date_of_birth.not.is.null')
 
   let clientsDone = 0
   for (const c of clients ?? []) {
     const isIndividual = c.type === 'individual'
     const updates: Record<string, any> = {}
 
-    if (c.email) {
+    if (c.email && !c.email.startsWith('eyJ')) {  // skip already-encrypted (base64 heuristic)
       updates.email_enc  = encryptPii(c.email)
       updates.email_hash = hashPii(c.email)
       updates.email      = null
@@ -49,6 +48,14 @@ export async function POST(req: NextRequest) {
     if (c.ni_number) {
       updates.ni_number_enc = encryptPii(c.ni_number)
       updates.ni_number     = null
+    }
+    if (c.notes) {
+      updates.notes_enc = encryptPii(c.notes)
+      updates.notes     = null
+    }
+    if (c.date_of_birth) {
+      updates.date_of_birth_enc = encryptPii(c.date_of_birth)
+      updates.date_of_birth     = null
     }
 
     if (Object.keys(updates).length > 0) {

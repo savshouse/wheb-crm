@@ -18,29 +18,31 @@ export async function createClient_action(formData: FormData) {
 
   const type = (formData.get('type') as string) || 'corporate'
   const rawPhone = (formData.get('phone') as string) || null
+  const rawNotes = (formData.get('notes') as string) || null
   const rawEmail = type === 'individual' ? ((formData.get('email') as string) || null) : null
   const rawNi    = type === 'individual' ? ((formData.get('ni_number') as string) || null) : null
+  const rawDob   = type === 'individual' ? ((formData.get('date_of_birth') as string) || null) : null
 
   const { data, error } = await supabase.from('clients').insert({
     name: formData.get('name') as string,
     type,
-    industry:    type === 'corporate' ? ((formData.get('industry') as string) || null) : null,
-    status:      (formData.get('status') as string) || 'active',
-    // phone kept plaintext for companies (shown client-side); encrypted for individuals
-    phone:       type === 'corporate' ? rawPhone : null,
-    phone_enc:   type === 'individual' ? encryptPii(rawPhone) : null,
-    website:     type === 'corporate' ? ((formData.get('website') as string) || null) : null,
-    address:     (formData.get('address') as string) || null,
-    notes:       (formData.get('notes') as string) || null,
-    employer_id: type === 'individual' ? ((formData.get('employer_id') as string) || null) : null,
-    date_of_birth: type === 'individual' ? ((formData.get('date_of_birth') as string) || null) : null,
-    // email and ni_number always encrypted for individuals
-    email:         null,
-    email_enc:     encryptPii(rawEmail),
-    email_hash:    hashPii(rawEmail),
-    ni_number:     null,
-    ni_number_enc: encryptPii(rawNi),
-    created_by:  user.id,
+    industry:         type === 'corporate' ? ((formData.get('industry') as string) || null) : null,
+    status:           (formData.get('status') as string) || 'active',
+    phone:            type === 'corporate' ? rawPhone : null,
+    phone_enc:        type === 'individual' ? encryptPii(rawPhone) : null,
+    website:          type === 'corporate' ? ((formData.get('website') as string) || null) : null,
+    address:          (formData.get('address') as string) || null,
+    notes:            null,
+    notes_enc:        encryptPii(rawNotes),
+    employer_id:      type === 'individual' ? ((formData.get('employer_id') as string) || null) : null,
+    date_of_birth:    null,
+    date_of_birth_enc: encryptPii(rawDob),
+    email:            null,
+    email_enc:        encryptPii(rawEmail),
+    email_hash:       hashPii(rawEmail),
+    ni_number:        null,
+    ni_number_enc:    encryptPii(rawNi),
+    created_by:       user.id,
     account_manager_id: user.id,
   }).select().single()
 
@@ -64,12 +66,16 @@ export async function updateClient(
   const rawPhone = (formData.get('phone') as string) || null
   const rawEmail = (formData.get('email') as string) || null
   const rawNi    = (formData.get('ni_number') as string) || null
+  const rawNotes = (formData.get('notes') as string) || null
+  const rawDob   = (formData.get('date_of_birth') as string) || null
 
   const updates: Record<string, unknown> = {
-    name:    formData.get('name') as string,
-    status:  formData.get('status') as string,
-    address: (formData.get('address') as string) || null,
-    notes:   (formData.get('notes') as string) || null,
+    name:      formData.get('name') as string,
+    status:    formData.get('status') as string,
+    address:   (formData.get('address') as string) || null,
+    // notes encrypted for all client types
+    notes:     null,
+    notes_enc: encryptPii(rawNotes),
   }
 
   updates.papercloud_id = (formData.get('papercloud_id') as string) || null
@@ -81,17 +87,18 @@ export async function updateClient(
     updates.phone    = rawPhone
   } else {
     // Individual: encrypt PII fields
-    updates.phone         = null
-    updates.phone_enc     = encryptPii(rawPhone)
-    updates.email         = null
-    updates.email_enc     = encryptPii(rawEmail)
-    updates.email_hash    = hashPii(rawEmail)
-    updates.ni_number     = null
-    updates.ni_number_enc = encryptPii(rawNi)
-    updates.employer_id   = (formData.get('employer_id') as string) || null
-    updates.date_of_birth = (formData.get('date_of_birth') as string) || null
+    updates.phone             = null
+    updates.phone_enc         = encryptPii(rawPhone)
+    updates.email             = null
+    updates.email_enc         = encryptPii(rawEmail)
+    updates.email_hash        = hashPii(rawEmail)
+    updates.ni_number         = null
+    updates.ni_number_enc     = encryptPii(rawNi)
+    updates.date_of_birth     = null
+    updates.date_of_birth_enc = encryptPii(rawDob)
+    updates.employer_id       = (formData.get('employer_id') as string) || null
     const salaryRaw = formData.get('salary') as string
-    updates.salary = salaryRaw ? parseFloat(salaryRaw) : null
+    updates.salary     = salaryRaw ? parseFloat(salaryRaw) : null
     updates.payroll_id = (formData.get('payroll_id') as string) || null
   }
 
@@ -107,16 +114,19 @@ export async function updateClient(
   }
   const activityRows: any[] = []
 
-  // For non-encrypted fields: compare via updates map
+  // Strip encrypted keys and restore plaintext equivalents for auditing
   const auditableUpdates: Record<string, unknown> = { ...updates }
-  // Replace encrypted keys with their plaintext equivalents for auditing
+  delete auditableUpdates.notes_enc; delete auditableUpdates.notes
+  auditableUpdates.notes = rawNotes
   if (type !== 'corporate') {
     delete auditableUpdates.phone_enc; delete auditableUpdates.phone
     delete auditableUpdates.email_enc; delete auditableUpdates.email_hash; delete auditableUpdates.email
     delete auditableUpdates.ni_number_enc; delete auditableUpdates.ni_number
-    auditableUpdates.phone     = rawPhone
-    auditableUpdates.email     = rawEmail
-    auditableUpdates.ni_number = rawNi
+    delete auditableUpdates.date_of_birth_enc; delete auditableUpdates.date_of_birth
+    auditableUpdates.phone         = rawPhone
+    auditableUpdates.email         = rawEmail
+    auditableUpdates.ni_number     = rawNi
+    auditableUpdates.date_of_birth = rawDob
   }
 
   for (const [field, newVal] of Object.entries(auditableUpdates)) {
