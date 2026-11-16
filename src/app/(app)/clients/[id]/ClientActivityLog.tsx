@@ -27,6 +27,9 @@ function entryLine(entry: Entry): string {
   const actor = entry.performer?.full_name ?? entry.performer?.email ?? 'Someone'
   switch (entry.action) {
     case 'field_updated':
+      if (entry.old_value == null && entry.new_value == null) {
+        return `${actor} updated ${entry.field}`
+      }
       return entry.old_value
         ? `${actor} changed ${entry.field} from "${entry.old_value}" to "${entry.new_value}"`
         : `${actor} set ${entry.field} to "${entry.new_value}"`

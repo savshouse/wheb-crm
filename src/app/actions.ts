@@ -129,16 +129,19 @@ export async function updateClient(
     auditableUpdates.date_of_birth = rawDob
   }
 
+  const PII_AUDIT_FIELDS = new Set(['email', 'phone', 'ni_number', 'date_of_birth', 'notes'])
+
   for (const [field, newVal] of Object.entries(auditableUpdates)) {
     if (field === 'employer_id') continue
     const oldVal = decryptedExisting?.[field] ?? null
     if (String(oldVal ?? '') !== String(newVal ?? '')) {
+      const isPii = PII_AUDIT_FIELDS.has(field)
       activityRows.push({
         entity_type: 'client', entity_id: clientId,
         action: 'field_updated',
         field: LABELS[field] ?? field,
-        old_value: oldVal != null ? String(oldVal) : null,
-        new_value: newVal != null ? String(newVal) : null,
+        old_value: isPii ? null : (oldVal != null ? String(oldVal) : null),
+        new_value: isPii ? null : (newVal != null ? String(newVal) : null),
         performed_by: user.id,
       })
     }
