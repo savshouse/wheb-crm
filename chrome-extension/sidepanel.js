@@ -10,6 +10,17 @@ let currentTaskId   = null
 let parentTaskId    = null
 let selectedClientId = null
 
+// Navigate the current browser tab (side panel can't load CRM due to X-Frame-Options)
+function openUrl(url) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id != null) {
+      chrome.tabs.update(tabs[0].id, { url })
+    } else {
+      chrome.tabs.create({ url })
+    }
+  })
+}
+
 const PRIO_LABEL   = { high: 'High', medium: 'Medium', low: 'Low' }
 const STATUS_LABEL = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }
 const STATUS_NEXT  = { open: 'in_progress', in_progress: 'completed', completed: 'open', cancelled: 'open' }
@@ -172,11 +183,11 @@ function renderRecentClients(clients) {
   row.innerHTML = ''
 
   clients.forEach(c => {
-    const chip = document.createElement('a')
-    chip.href = `${CRM_URL}/clients/${c.id}`
+    const chip = document.createElement('button')
     chip.className = 'rc-chip'
     chip.textContent = c.name
     chip.title = c.type === 'individual' ? 'Person' : 'Company'
+    chip.addEventListener('click', () => openUrl(`${CRM_URL}/clients/${c.id}`))
     row.appendChild(chip)
   })
 
@@ -356,7 +367,9 @@ function renderSearchResults(data, resultsEl) {
       item.className = 'search-result-item'
       item.textContent = `${c.type === 'individual' ? '👤' : '🏢'} ${c.name}`
       item.addEventListener('click', () => {
-        window.location.href = `${CRM_URL}/clients/${c.id}`
+        resultsEl.classList.add('hidden')
+        $('search-input').value = ''
+        openUrl(`${CRM_URL}/clients/${c.id}`)
       })
       resultsEl.appendChild(item)
     })
@@ -828,6 +841,14 @@ async function init() {
 
   // Refresh button
   $('btn-refresh').addEventListener('click', showTaskList)
+
+  // Quick links — navigate current browser tab (sidebar can't load CRM due to X-Frame-Options)
+  document.querySelectorAll('.tl-quick-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      openUrl(link.href)
+    })
+  })
 
   // Retry buttons
   $('tl-retry').addEventListener('click', showTaskList)
