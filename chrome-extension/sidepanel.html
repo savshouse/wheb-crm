@@ -10,10 +10,13 @@
   <div class="header">
     <button id="btn-back" class="back-btn hidden" title="Back to tasks">← Back</button>
     <span class="header-title">WHEB CRM</span>
-    <a id="open-crm" href="https://wheb-crm.vercel.app" target="_blank" class="open-link" title="Open in CRM">Open ↗</a>
+    <div class="header-right">
+      <button id="btn-refresh" class="icon-btn" title="Refresh">↻</button>
+      <a id="open-crm" href="https://wheb-crm.vercel.app" target="_blank" class="open-link" title="Open in CRM">Open ↗</a>
+    </div>
   </div>
 
-  <!-- Loading -->
+  <!-- Loading (task detail) -->
   <div id="loading" class="center-state hidden">
     <div class="spinner"></div>
   </div>
@@ -125,16 +128,66 @@
 
       <!-- Quick links -->
       <div class="tl-quick-links">
-        <a href="https://wheb-crm.vercel.app/clients" target="_blank" class="tl-quick-link">Clients</a>
-        <a href="https://wheb-crm.vercel.app/meetings" target="_blank" class="tl-quick-link">Meetings</a>
-        <a href="https://wheb-crm.vercel.app/reports" target="_blank" class="tl-quick-link">Reports</a>
+        <a href="https://wheb-crm.vercel.app/clients" class="tl-quick-link">Companies</a>
+        <a href="https://wheb-crm.vercel.app/people" class="tl-quick-link">People</a>
+        <a href="https://wheb-crm.vercel.app/calendar" class="tl-quick-link">Calendar</a>
       </div>
 
-      <!-- Task list -->
-      <div class="section-label" style="padding: 10px 16px 4px;">Your tasks</div>
+      <!-- Search bar -->
+      <div class="search-wrap">
+        <input id="search-input" type="text" class="search-input" placeholder="Search clients &amp; tasks…" autocomplete="off" />
+        <div id="search-results" class="search-results hidden"></div>
+      </div>
+
+      <!-- Add task form (hidden by default) -->
+      <div id="add-task-wrap" class="add-task-wrap hidden">
+        <div class="add-task-inner">
+          <div class="section-label" style="margin-bottom:10px">New task</div>
+          <input id="at-title" type="text" class="at-input" placeholder="Task title *" autocomplete="off" />
+          <div class="at-row">
+            <select id="at-priority" class="at-select">
+              <option value="high">High priority</option>
+              <option value="medium" selected>Medium priority</option>
+              <option value="low">Low priority</option>
+            </select>
+            <input id="at-due" type="date" class="at-input at-date" />
+          </div>
+          <div class="at-client-wrap">
+            <input id="at-client-search" type="text" class="at-input" placeholder="Client (optional)" autocomplete="off" />
+            <div id="at-client-results" class="at-dropdown hidden"></div>
+            <div id="at-client-selected" class="at-client-selected hidden">
+              <span id="at-client-name"></span>
+              <button id="at-client-clear" class="at-clear">×</button>
+            </div>
+          </div>
+          <div class="at-actions">
+            <button id="at-save" class="btn-save">Save task</button>
+            <button id="at-cancel" class="btn-cancel">Cancel</button>
+          </div>
+          <p id="at-error" class="at-error hidden"></p>
+        </div>
+      </div>
+
+      <!-- Today's meetings -->
+      <div id="meetings-section" class="tl-section hidden">
+        <div class="section-label">Today's meetings</div>
+        <div id="meetings-list"></div>
+      </div>
+
+      <!-- Recent clients -->
+      <div id="recent-clients-section" class="tl-section hidden">
+        <div class="section-label">Recent clients</div>
+        <div id="recent-clients-list" class="recent-clients-row"></div>
+      </div>
+
+      <!-- Tasks section header -->
+      <div class="tl-tasks-header">
+        <span class="section-label" style="margin-bottom:0">Your tasks</span>
+        <button id="btn-add-task" class="btn-add-task-inline">+ Add</button>
+      </div>
       <div id="tl-items"></div>
 
-      <div id="tl-empty" class="center-state hidden">
+      <div id="tl-empty" class="center-state hidden" style="padding:24px 20px">
         <p class="hint">No open tasks assigned to you.</p>
       </div>
 

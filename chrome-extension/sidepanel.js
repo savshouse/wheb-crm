@@ -2,11 +2,13 @@ const CRM_URL      = 'https://wheb-crm.vercel.app'
 const TASK_API     = `${CRM_URL}/api/extension/task`
 const COMMENTS_API = `${CRM_URL}/api/extension/comments`
 const SUMMARY_API  = `${CRM_URL}/api/extension/summary`
+const SEARCH_API   = `${CRM_URL}/api/extension/search`
 
 const $ = id => document.getElementById(id)
 
-let currentTaskId = null
-let parentTaskId  = null
+let currentTaskId   = null
+let parentTaskId    = null
+let selectedClientId = null
 
 const PRIO_LABEL   = { high: 'High', medium: 'Medium', low: 'Low' }
 const STATUS_LABEL = { open: 'Open', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }
@@ -114,6 +116,73 @@ function renderActions(status) {
   btns.forEach(b => container.appendChild(b))
 }
 
+// ─── Today's meetings ────────────────────────────────────────────
+function renderMeetings(meetings) {
+  if (!meetings?.length) return
+  const list = $('meetings-list')
+  list.innerHTML = ''
+
+  meetings.forEach(m => {
+    const item = document.createElement('div')
+    item.className = 'meeting-item'
+
+    const time = document.createElement('span')
+    time.className = 'meeting-time'
+    time.textContent = m.start_time ? m.start_time.slice(0, 5) : '—'
+
+    const info = document.createElement('div')
+    info.className = 'meeting-info'
+
+    const title = document.createElement('div')
+    title.className = 'meeting-title'
+    title.textContent = m.title
+
+    info.appendChild(title)
+
+    if (m.client?.name) {
+      const client = document.createElement('div')
+      client.className = 'meeting-client'
+      client.textContent = m.client.name
+      info.appendChild(client)
+    }
+
+    item.appendChild(time)
+    item.appendChild(info)
+
+    if (m.teams_meeting_url) {
+      const link = document.createElement('a')
+      link.href = m.teams_meeting_url
+      link.target = '_blank'
+      link.className = 'meeting-teams'
+      link.title = 'Join Teams meeting'
+      link.textContent = 'Teams'
+      item.appendChild(link)
+    }
+
+    list.appendChild(item)
+  })
+
+  $('meetings-section').classList.remove('hidden')
+}
+
+// ─── Recent clients ──────────────────────────────────────────────
+function renderRecentClients(clients) {
+  if (!clients?.length) return
+  const row = $('recent-clients-list')
+  row.innerHTML = ''
+
+  clients.forEach(c => {
+    const chip = document.createElement('a')
+    chip.href = `${CRM_URL}/clients/${c.id}`
+    chip.className = 'rc-chip'
+    chip.textContent = c.name
+    chip.title = c.type === 'individual' ? 'Person' : 'Company'
+    row.appendChild(chip)
+  })
+
+  $('recent-clients-section').classList.remove('hidden')
+}
+
 // ─── Home screen (task list) ─────────────────────────────────────
 async function showTaskList() {
   $('detail').classList.add('hidden')
@@ -123,6 +192,9 @@ async function showTaskList() {
   $('task-list-content').classList.add('hidden')
   $('task-list-error').classList.add('hidden')
   $('tl-not-logged-in').classList.add('hidden')
+  $('meetings-section').classList.add('hidden')
+  $('recent-clients-section').classList.add('hidden')
+  $('add-task-wrap').classList.add('hidden')
   setBackBtn(false)
 
   $('open-crm').href = `${CRM_URL}/tasks`
@@ -157,6 +229,10 @@ async function showTaskList() {
     chrome.action.setBadgeBackgroundColor({ color: '#dc2626' })
     chrome.action.setBadgeText({ text: (overdue + dueToday) > 0 ? String(overdue + dueToday) : '' })
 
+    // Meetings + recent clients
+    renderMeetings(data.meetings_today)
+    renderRecentClients(data.recent_clients)
+
     const items = $('tl-items')
     items.innerHTML = ''
 
@@ -165,6 +241,8 @@ async function showTaskList() {
       $('tl-empty').classList.remove('hidden')
       return
     }
+
+    $('tl-empty').classList.add('hidden')
 
     tasks.forEach(task => {
       const btn = document.createElement('button')
@@ -222,6 +300,209 @@ async function showTaskList() {
     $('task-list-loading').classList.add('hidden')
     $('task-list-error').classList.remove('hidden')
   }
+}
+
+// ─── Search ──────────────────────────────────────────────────────
+function initSearch() {
+  const input   = $('search-input')
+  const results = $('search-results')
+  let debounce  = null
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounce)
+    const q = input.value.trim()
+    if (q.length < 2) { results.classList.add('hidden'); return }
+    debounce = setTimeout(async () => {
+      try {
+        const res = await fetch(`${SEARCH_API}?q=${encodeURIComponent(q)}`, { credentials: 'include' })
+        if (!res.ok) return
+        renderSearchResults(await res.json(), results)
+      } catch {}
+    }, 300)
+  })
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !results.contains(e.target)) {
+      results.classList.add('hidden')
+    }
+  })
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { results.classList.add('hidden'); input.blur() }
+  })
+}
+
+function renderSearchResults(data, resultsEl) {
+  resultsEl.innerHTML = ''
+  const { clients = [], tasks = [] } = data
+
+  if (!clients.length && !tasks.length) {
+    const p = document.createElement('p')
+    p.className = 'search-empty'
+    p.textContent = 'No results'
+    resultsEl.appendChild(p)
+    resultsEl.classList.remove('hidden')
+    return
+  }
+
+  if (clients.length) {
+    const lbl = document.createElement('div')
+    lbl.className = 'search-group-label'
+    lbl.textContent = 'Clients'
+    resultsEl.appendChild(lbl)
+
+    clients.forEach(c => {
+      const item = document.createElement('button')
+      item.className = 'search-result-item'
+      item.textContent = `${c.type === 'individual' ? '👤' : '🏢'} ${c.name}`
+      item.addEventListener('click', () => {
+        window.location.href = `${CRM_URL}/clients/${c.id}`
+      })
+      resultsEl.appendChild(item)
+    })
+  }
+
+  if (tasks.length) {
+    const lbl = document.createElement('div')
+    lbl.className = 'search-group-label'
+    lbl.textContent = 'Tasks'
+    resultsEl.appendChild(lbl)
+
+    tasks.forEach(t => {
+      const item = document.createElement('button')
+      item.className = 'search-result-item'
+      const titleEl = document.createElement('span')
+      titleEl.className = 'sr-task-title'
+      titleEl.textContent = t.title
+      item.appendChild(titleEl)
+      if (t.client?.name) {
+        const clientEl = document.createElement('span')
+        clientEl.className = 'sr-task-client'
+        clientEl.textContent = t.client.name
+        item.appendChild(clientEl)
+      }
+      item.addEventListener('click', () => {
+        resultsEl.classList.add('hidden')
+        $('search-input').value = ''
+        $('task-list-view').classList.add('hidden')
+        $('loading').classList.remove('hidden')
+        resetDetail()
+        loadTask(t.id)
+      })
+      resultsEl.appendChild(item)
+    })
+  }
+
+  resultsEl.classList.remove('hidden')
+}
+
+// ─── Add task form ───────────────────────────────────────────────
+function initAddTaskForm() {
+  const wrap         = $('add-task-wrap')
+  const titleInput   = $('at-title')
+  const clientSearch = $('at-client-search')
+  const clientResults = $('at-client-results')
+  const clientSelected = $('at-client-selected')
+  const clientName   = $('at-client-name')
+  const clientClear  = $('at-client-clear')
+  const saveBtn      = $('at-save')
+  const cancelBtn    = $('at-cancel')
+  const errorEl      = $('at-error')
+  const addBtn       = $('btn-add-task')
+
+  addBtn.addEventListener('click', () => {
+    wrap.classList.remove('hidden')
+    titleInput.focus()
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  })
+
+  cancelBtn.addEventListener('click', () => {
+    resetAddTaskForm()
+    wrap.classList.add('hidden')
+  })
+
+  // Client search within form
+  let clientDebounce = null
+  clientSearch.addEventListener('input', () => {
+    clearTimeout(clientDebounce)
+    const q = clientSearch.value.trim()
+    if (q.length < 2) { clientResults.classList.add('hidden'); return }
+    clientDebounce = setTimeout(async () => {
+      try {
+        const res = await fetch(`${SEARCH_API}?q=${encodeURIComponent(q)}`, { credentials: 'include' })
+        if (!res.ok) return
+        const { clients } = await res.json()
+        clientResults.innerHTML = ''
+        if (!clients.length) { clientResults.classList.add('hidden'); return }
+        clients.forEach(c => {
+          const btn2 = document.createElement('button')
+          btn2.className = 'at-dropdown-item'
+          btn2.textContent = c.name
+          btn2.addEventListener('click', () => {
+            selectedClientId = c.id
+            clientName.textContent = c.name
+            clientSelected.classList.remove('hidden')
+            clientSearch.classList.add('hidden')
+            clientResults.classList.add('hidden')
+          })
+          clientResults.appendChild(btn2)
+        })
+        clientResults.classList.remove('hidden')
+      } catch {}
+    }, 300)
+  })
+
+  clientClear.addEventListener('click', () => {
+    selectedClientId = null
+    clientSelected.classList.add('hidden')
+    clientSearch.classList.remove('hidden')
+    clientSearch.value = ''
+  })
+
+  saveBtn.addEventListener('click', async () => {
+    const title = titleInput.value.trim()
+    if (!title) {
+      errorEl.textContent = 'Task title is required'
+      errorEl.classList.remove('hidden')
+      return
+    }
+    errorEl.classList.add('hidden')
+    saveBtn.disabled = true
+
+    try {
+      const res = await fetch(TASK_API, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          priority: $('at-priority').value,
+          due_date: $('at-due').value || null,
+          client_id: selectedClientId || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      resetAddTaskForm()
+      wrap.classList.add('hidden')
+      showTaskList()
+    } catch {
+      errorEl.textContent = 'Failed to save — please try again'
+      errorEl.classList.remove('hidden')
+    }
+    saveBtn.disabled = false
+  })
+}
+
+function resetAddTaskForm() {
+  $('at-title').value = ''
+  $('at-priority').value = 'medium'
+  $('at-due').value = ''
+  $('at-client-search').value = ''
+  $('at-client-search').classList.remove('hidden')
+  $('at-client-results').classList.add('hidden')
+  $('at-client-selected').classList.add('hidden')
+  $('at-error').classList.add('hidden')
+  selectedClientId = null
 }
 
 // ─── Navigation ──────────────────────────────────────────────────
@@ -545,9 +826,16 @@ async function init() {
     }
   })
 
+  // Refresh button
+  $('btn-refresh').addEventListener('click', showTaskList)
+
   // Retry buttons
   $('tl-retry').addEventListener('click', showTaskList)
   $('tl-retry-err').addEventListener('click', showTaskList)
+
+  // Search + add task form
+  initSearch()
+  initAddTaskForm()
 
   // Always start at the task list
   showTaskList()

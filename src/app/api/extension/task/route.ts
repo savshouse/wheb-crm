@@ -10,10 +10,37 @@ export async function OPTIONS(req: NextRequest) {
     status: 204,
     headers: {
       ...extensionCorsHeaders(origin),
-      'Access-Control-Allow-Methods': 'GET, PATCH',
+      'Access-Control-Allow-Methods': 'GET, PATCH, POST',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
   })
+}
+
+export async function POST(req: NextRequest) {
+  const origin = req.headers.get('origin') ?? ''
+  const headers = extensionCorsHeaders(origin)
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
+
+  const body = await req.json()
+  const { title, priority, due_date, client_id } = body
+  if (!title?.trim()) return NextResponse.json({ error: 'Title required' }, { status: 400, headers })
+
+  const { data, error } = await supabase.from('tasks').insert({
+    title: title.trim(),
+    priority: priority ?? 'medium',
+    due_date: due_date || null,
+    client_id: client_id || null,
+    assigned_to: user.id,
+    status: 'open',
+    created_by: user.id,
+  }).select('id').single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers })
+  syncTaskOnSave(data.id).catch(console.error)
+  return NextResponse.json({ id: data.id }, { headers })
 }
 
 export async function PATCH(req: NextRequest) {

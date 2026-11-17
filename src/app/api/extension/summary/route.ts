@@ -25,7 +25,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
   }
 
-  const [{ data: tasks }, { data: profile }] = await Promise.all([
+  const todayISO   = new Date().toISOString().split('T')[0]
+  const todayStart = `${todayISO}T00:00:00Z`
+  const todayEnd   = `${todayISO}T23:59:59Z`
+
+  const [{ data: tasks }, { data: profile }, { data: todayMeetings }, { data: recentTaskRows }] = await Promise.all([
     supabase
       .from('tasks')
       .select('id, title, priority, status, due_date, client:clients(id, name)')
@@ -39,10 +43,38 @@ export async function GET(req: NextRequest) {
       .select('full_name, email')
       .eq('id', user.id)
       .single(),
+    supabase
+      .from('meetings')
+      .select('id, title, start_time, end_time, teams_meeting_url, client:clients(id, name)')
+      .gte('meeting_date', todayStart)
+      .lte('meeting_date', todayEnd)
+      .order('start_time', { ascending: true })
+      .limit(5),
+    supabase
+      .from('tasks')
+      .select('client_id, client:clients(id, name, type)')
+      .eq('assigned_to', user.id)
+      .not('client_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(20),
   ])
 
-  return NextResponse.json(
-    { user: { full_name: profile?.full_name, email: profile?.email }, tasks: tasks ?? [] },
-    { headers },
-  )
+  // Deduplicate recent clients from recent tasks
+  const seenIds = new Set<string>()
+  const recentClients: Array<{ id: string; name: string; type: string }> = []
+  for (const row of recentTaskRows ?? []) {
+    const c = (row as any).client
+    if (c?.id && !seenIds.has(c.id)) {
+      seenIds.add(c.id)
+      recentClients.push({ id: c.id, name: c.name, type: c.type })
+    }
+    if (recentClients.length >= 5) break
+  }
+
+  return NextResponse.json({
+    user:           { full_name: profile?.full_name, email: profile?.email },
+    tasks:          tasks ?? [],
+    meetings_today: todayMeetings ?? [],
+    recent_clients: recentClients,
+  }, { headers })
 }
