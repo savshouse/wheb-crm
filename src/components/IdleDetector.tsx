@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Clock } from 'lucide-react'
 
-const IDLE_MS  = 8 * 60 * 60 * 1000  // 8 hours of inactivity → sign out
-const WARN_MS  = 5 * 60 * 1000        // show warning 5 min before
-const CHECK_MS = 30_000                // check every 30 s
-const LS_KEY   = 'wheb_last_activity'
+const IDLE_MS        = 8 * 60 * 60 * 1000   // 8 hours of inactivity → sign out
+const WARN_MS        = 5 * 60 * 1000         // show warning 5 min before
+const CHECK_MS       = 30_000                 // check every 30 s
+const LS_KEY         = 'wheb_last_activity'
+const MAX_LOGIN_AGE  = 12 * 60 * 60 * 1000   // 12 hours since last explicit sign-in → force re-auth
 
 function stampActivity() {
   try { localStorage.setItem(LS_KEY, String(Date.now())) } catch {}
@@ -46,6 +47,14 @@ export default function IdleDetector() {
   }
 
   useEffect(() => {
+    // Force re-auth if the last explicit sign-in was too long ago
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (!user?.last_sign_in_at) return
+      if (Date.now() - new Date(user.last_sign_in_at).getTime() > MAX_LOGIN_AGE) {
+        doSignOut()
+      }
+    })
+
     stampActivity()
 
     // Any user interaction resets the idle clock
